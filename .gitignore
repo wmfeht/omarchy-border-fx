@@ -1,0 +1,35 @@
+# mise local overrides
+mise.local.toml
+.mise.local.toml
+
+# Editors / OS
+.cache/
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Hyprland plugin build (never commit a .so; never leave obj/ in a plugin clone)
+*.so
+*.o
+*.a
+/obj/
+/hypr/obj/
+/hypr/hypr-shiny-border.so
+/compile_flags.txt
+/hypr/compile_flags.txt
+/compile_commands.json
+/hypr/compile_commands.json
+
+# Built test binaries (sources are hypr/tests/test_*.cpp)
+/hypr/tests/test_teardown
+/hypr/tests/test_runtime
+/hypr/tests/test_reload
+/hypr/tests/test_visual
+
+# clangd / ccache
+.clangd/
+.cccaches/

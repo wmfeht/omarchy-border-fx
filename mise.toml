@@ -1,0 +1,97 @@
+# Unified shiny-border: Omarchy / Quickshell chrome + Hyprland window ring.
+# qsb is system Qt 6 (/usr/lib/qt6/bin/qsb); do not mise-install a second Qt.
+# Hyprland plugins must be built with the same GCC that built the compositor.
+
+min_version = "2025.8.0"
+
+[tools]
+node = "26.7.0"
+
+[tasks.bake]
+description = "Bake shaders/shiny.frag into shaders/shiny.frag.qsb"
+run = "bash scripts/bake.sh"
+
+[tasks.reflect]
+description = "Bake, then dump qsb reflection (UBO layout)"
+run = "bash scripts/bake.sh --dump"
+
+[tasks.test]
+description = "Compositor-free tests (shimmer, gradient, shared look adapter)"
+run = "node tests/run.js && node tests/look.js && node tests/audit-unified-plan.js"
+
+[tasks.lint]
+description = "qmllint ShinyBorder.qml"
+run = "/usr/lib/qt6/bin/qmllint qml/ShinyBorder.qml"
+
+[tasks.check]
+description = "Bake the shader, lint QML, and run JS logic tests"
+depends = ["bake", "lint", "test"]
+run = "echo ok"
+
+[tasks.preview]
+description = "Standalone qs window with ShinyBorder on mock cards. Does not touch omarchy-shell."
+depends = ["bake"]
+run = "bash scripts/preview.sh"
+
+[tasks.smoke]
+description = "Load ShinyBorder in a short-lived qs window; fail only if the shader errors"
+depends = ["bake"]
+env = { SHINY_SMOKE = "1" }
+run = "bash scripts/preview.sh"
+
+[tasks.test-full]
+description = "JS tests, qs smoke, and Hyprland logic tests"
+depends = ["check"]
+run = "make -C hypr test"
+
+[tasks.install]
+description = "Dev copy into ~/.config/omarchy/plugins/qs.shiny-border and enable"
+depends = ["bake"]
+run = "bash scripts/install.sh"
+
+[tasks.uninstall]
+description = "Disable qs.shiny-border, purge the login-session .so, remove the copy"
+run = "bash scripts/uninstall.sh"
+
+[tasks.hypr-build]
+description = "Compile hypr-shiny-border.so against system Hyprland headers"
+run = "make -C hypr -j$(nproc)"
+
+[tasks.hypr-test]
+description = "Compositor-free Hyprland plugin logic tests"
+run = "make -C hypr test"
+
+[tasks.hypr-clean]
+description = "Remove hypr objects and the .so"
+run = "make -C hypr clean"
+
+[tasks.headers]
+description = "Compare running compositor hash vs plugin headers"
+run = """
+echo '=== hyprctl version ==='
+hyprctl version
+echo
+echo '=== headers ==='
+grep -E 'GIT_COMMIT_HASH|GIT_TAG|GIT_BRANCH' /usr/include/hyprland/src/version.h
+"""
+
+[tasks.load]
+description = "Load the .so into the nest (last instance). Refuses the live session unless SHINY_LIVE=1"
+run = "hypr/scripts/pluginctl.sh load"
+depends = ["hypr-build"]
+
+[tasks.unload]
+description = "Unload from $SHINY_INSTANCE"
+run = "hypr/scripts/pluginctl.sh unload"
+
+[tasks.reload]
+description = "Rebuild, copy to a fresh path, unload+load (dodges dlopen cache)"
+run = "hypr/scripts/pluginctl.sh reload"
+depends = ["hypr-build"]
+
+[tasks.nest]
+description = "Nested Hyprland with hypr/nest/hyprland.lua — crash sandbox"
+run = """
+export SHINY_HYPR_ROOT="$MISE_PROJECT_ROOT/hypr"
+Hyprland --config "$MISE_PROJECT_ROOT/hypr/nest/hyprland.lua"
+"""

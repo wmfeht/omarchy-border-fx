@@ -1,0 +1,185 @@
+#version 440
+
+// Directional-light ring: rounded-rect SDF, piecewise-linear ramp with a
+// clockwise-half override, dim shoulder, blow-to-white core, outside glow.
+//
+// `angle` is a light direction (same pin_deg convention as the sibling:
+// 0 = from the right, 90 = from above). The gradient is the pattern of
+// that light. Application is a parallel projection onto the light axis,
+// not a conic sweep around the center — a wide panel and a tall one with
+// the same heading share a direction. Iso-lines are perpendicular to the
+// light; 0 is the facing support of this rounded rect, 1 is the far side.
+// The two halves of the light axis still pick primary vs clockwise ramps.
+//
+// Wrapper: Qt 6 ShaderEffect UBO, item-local Y-down coords.
+//   p = (qt_TexCoord0 - 0.5) * vec2(widthPx, heightPx)
+// Light math uses Y-up (pUp.y = -p.y) so heading 90 still faces up.
+//
+// Gradient colors are packed as mat4 columns (std140-safe; ShaderEffect
+// array uniforms are a footgun). Positions are packed into two vec4s.
+// Nominal branch only for v1 (brightness <= 0); shimmer writes angle /
+// range / thick on the CPU.
+
+layout(location = 0) in vec2 qt_TexCoord0;
+layout(location = 0) out vec4 fragColor;
+
+layout(std140, binding = 0) uniform buf {
+    mat4  qt_Matrix;
+    float qt_Opacity;
+    float widthPx;
+    float heightPx;
+    float radiusOuter;
+    float roundingPower;
+    float thick;
+    float time;
+    float brightness;
+    float range;
+    float angle;
+    int   gradCount;
+    int   gradCountCW;
+    vec4  color;             // colA, highlight head (straight rgba)
+    vec4  colorSRGB;         // colB, shoulder
+    mat4  gradColors0;       // primary stops 0..3 as columns
+    mat4  gradColors1;       // primary stops 4..7 as columns
+    vec4  gradPos0;          // primary positions 0..3
+    vec4  gradPos1;          // primary positions 4..7
+    mat4  gradColorsCW0;
+    mat4  gradColorsCW1;
+    vec4  gradPosCW0;
+    vec4  gradPosCW1;
+};
+
+const float TAU = 6.28318530718;
+const float AA  = 1.25;
+const int   MAX_STEPS = 8;
+
+vec4 shinyColAt(mat4 m0, mat4 m1, int i) {
+    if (i == 0) return m0[0];
+    if (i == 1) return m0[1];
+    if (i == 2) return m0[2];
+    if (i == 3) return m0[3];
+    if (i == 4) return m1[0];
+    if (i == 5) return m1[1];
+    if (i == 6) return m1[2];
+    return m1[3];
+}
+
+float shinyPosAt(vec4 p0, vec4 p1, int i) {
+    if (i == 0) return p0.x;
+    if (i == 1) return p0.y;
+    if (i == 2) return p0.z;
+    if (i == 3) return p0.w;
+    if (i == 4) return p1.x;
+    if (i == 5) return p1.y;
+    if (i == 6) return p1.z;
+    return p1.w;
+}
+
+// Piecewise-linear chain over one half of the light axis: u 0 at the
+// facing support, 1 at the far side. The 1e-4 guard turns coincident
+// stops into a hard step instead of a divide by zero.
+vec3 shinyRampColor(bool cw, float u) {
+    mat4 m0 = cw ? gradColorsCW0 : gradColors0;
+    mat4 m1 = cw ? gradColorsCW1 : gradColors1;
+    vec4 p0 = cw ? gradPosCW0 : gradPos0;
+    vec4 p1 = cw ? gradPosCW1 : gradPos1;
+    int  n  = cw ? gradCountCW : gradCount;
+    vec3 g  = shinyColAt(m0, m1, 0).rgb;
+    for (int i = 1; i < MAX_STEPS; i++) {
+        if (i >= n)
+            break;
+        float t0 = shinyPosAt(p0, p1, i - 1);
+        float t1 = shinyPosAt(p0, p1, i);
+        vec3  c  = shinyColAt(m0, m1, i).rgb;
+        g = mix(g, c, clamp((u - t0) / max(t1 - t0, 1.0e-4), 0.0, 1.0));
+    }
+    return g;
+}
+
+float sdRoundBox(vec2 p, vec2 b, float r, float power) {
+    vec2 q = abs(p) - b + vec2(r);
+    vec2 qp = max(q, 0.0);
+    float outside;
+    if (power < 2.01)
+        outside = length(qp);
+    else
+        outside = pow(pow(max(qp.x, 0.0), power) + pow(max(qp.y, 0.0), power), 1.0 / power);
+    return outside + min(max(q.x, q.y), 0.0) - r;
+}
+
+void main() {
+    vec2 p = (qt_TexCoord0 - vec2(0.5)) * vec2(widthPx, heightPx);
+
+    float heading = angle;
+    // Unit light direction, Y-up. Parallel rays: the window's width and
+    // height set how far those rays travel across this panel.
+    vec2 light = vec2(cos(heading), sin(heading));
+    vec2 pUp   = vec2(p.x, -p.y);
+
+    float rOut   = max(radiusOuter, 0.0);
+    vec2  bOut   = vec2(widthPx, heightPx) * 0.5;
+    vec2  innerB = max(bOut - vec2(rOut), vec2(0.0));
+    // Support of the rounded rect in the light direction — the facing
+    // corner (or the whole facing edge, when the light is axis-aligned).
+    float extent = innerB.x * abs(light.x) + innerB.y * abs(light.y) + rOut;
+    extent = max(extent, 1.0);
+
+    // 0 at the lit support, 1 at the far side. Same 0..1 as the stop list.
+    float u  = clamp(0.5 - 0.5 * dot(pUp, light) / extent, 0.0, 1.0);
+    float d0 = u * 0.5;
+    // Negative cross = clockwise of the light axis (old t > 0.5 half).
+    bool  cw = (light.x * pUp.y - light.y * pUp.x) < 0.0;
+
+    float pulse, spread, thickNow;
+    if (brightness <= 0.0) {
+        spread   = max(range, 0.04);
+        thickNow = thick;
+    } else {
+        pulse    = 0.5 + 0.5 * sin(time * brightness * TAU);
+        spread   = max(mix(range * 0.45, range * 1.35, pulse), 0.04);
+        thickNow = thick * mix(0.78, 1.18, pulse);
+    }
+
+    float cone = 1.0 - smoothstep(0.0, spread, d0);
+    cone       = pow(max(cone, 0.0), 1.65);
+
+    // Thickness breathes, and the lit side is locally thicker than the rest of the ring.
+    float localT = mix(thickNow * 0.38, thickNow, mix(0.15, 1.0, cone));
+    localT       = max(localT, 1.0);
+
+    float rIn = max(rOut - localT, 0.0);
+    vec2  bIn = max(bOut - vec2(localT), vec2(0.5));
+
+    float dOut = sdRoundBox(p, bOut, rOut, roundingPower);
+    float dIn  = sdRoundBox(p, bIn, rIn, roundingPower);
+
+    // Interior: inside the inner contour. Never paint the host contents.
+    if (dIn < -AA)
+        discard;
+
+    // Ring: inside the outer contour, outside the inner contour.
+    float ring = smoothstep(AA, -AA, dOut) * smoothstep(-AA, AA, dIn);
+    // Halo strictly outside the rounded rect. dOut > 0 is outside.
+    float glow = (1.0 - smoothstep(0.0, localT * 1.35, dOut)) * smoothstep(0.0, AA, dOut) * cone;
+
+    float cov = max(ring, glow * 0.65);
+    if (cov < 0.002)
+        discard;
+
+    // Dim far side is a dark edge; the facing core blows toward white.
+    float hot = pow(cone, 2.6);
+    vec3  rgb;
+    if (gradCount >= 2) {
+        // Stop 0 at the lit support, last stop at the far side. Each half
+        // of the light axis runs facing → far, so the geometry itself is
+        // seamless; only mismatched endpoint colors between the halves
+        // can show a seam. Same brightness profile as the classic branch.
+        vec3 g = shinyRampColor(cw, u);
+        rgb = mix(g * mix(0.22, 1.0, pow(cone, 0.9)), vec3(1.0), hot * 0.95);
+    } else {
+        vec3 dim = colorSRGB.rgb * 0.22;
+        rgb      = mix(mix(dim, color.rgb, pow(cone, 0.9)), vec3(1.0), hot * 0.95);
+    }
+    float a = cov * mix(0.055, 1.0, mix(pow(cone, 1.15), hot, 0.45)) * qt_Opacity;
+    fragColor = vec4(rgb * a, a);
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "qs.shiny-border",
+  "name": "Shiny border",
+  "version": "1.1.0",
+  "author": "wmfeht",
+  "description": "Conic comet ring on Omarchy shell chrome and Hyprland windows. This plugin is the control plane for both.",
+  "kinds": [
+    "service"
+  ],
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}

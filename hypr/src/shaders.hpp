@@ -1,0 +1,173 @@
+#pragma once
+
+#include <string>
+
+// Hyprland tex300.vert — unit quad, proj maps it onto the decoration box.
+inline const std::string SHINY_VERT = R"#(#version 300 es
+
+uniform mat3 proj;
+uniform vec4 color;
+
+in vec2 pos;
+in vec2 texcoord;
+in vec2 texcoordMatte;
+
+out vec4 v_color;
+out vec2 v_texcoord;
+out vec2 v_texcoordMatte;
+
+void main() {
+    gl_Position = vec4(proj * vec3(pos, 1.0), 1.0);
+    v_color = color;
+    v_texcoord = texcoord;
+    v_texcoordMatte = texcoordMatte;
+}
+)#";
+
+// Directional-light ring on a rounded-rect SDF. Same fragment math as
+// qs-shiny-border shaders/shiny.frag; this file is the GLES 3 wrapper
+// (CShader uniforms, gl_FragCoord, alpha) instead of a Qt ShaderEffect UBO.
+inline const std::string SHINY_FRAG = R"#(#version 300 es
+precision highp float;
+
+in vec2 v_texcoord;
+layout(location = 0) out vec4 fragColor;
+
+uniform vec4  color;             // col.a, highlight head (straight alpha)
+uniform vec4  colorSRGB;         // col.b, shoulder
+uniform vec2  topLeft;
+uniform vec2  fullSize;
+uniform float radius;
+uniform float radiusOuter;
+uniform float roundingPower;
+uniform float thick;
+uniform float time;
+uniform float alpha;
+uniform float range;             // lit-band half-width along the light axis (0.04–0.5)
+uniform float brightness;        // pulse Hz; <= 0 is the nominal ring
+uniform float angle;             // light direction, radians: 0 = right, 90 = up
+
+// Multi-step ramp (plugin:shiny-border:gradient / gradient_positions,
+// plus the gradient_cw / gradient_positions_cw clockwise-half override).
+// Not in CShader's uniform table — pass.cpp uploads these with raw
+// glUniform* calls. Positions are normalized, non-decreasing (deco
+// resolves even spacing or the custom spec CPU-side). The CW set is a
+// mirror of the primary set unless overridden; whenever gradCount >= 2
+// the deco guarantees gradCountCW >= 2 too.
+const int MAX_STEPS = 8;
+uniform vec4  gradColors[MAX_STEPS];
+uniform float gradPos[MAX_STEPS];
+uniform int   gradCount;         // < 2 keeps the classic color / colorSRGB branch
+uniform vec4  gradColorsCW[MAX_STEPS];
+uniform float gradPosCW[MAX_STEPS];
+uniform int   gradCountCW;
+
+const float TAU = 6.28318530718;
+const float AA  = 1.25;
+
+// Piecewise-linear chain over one half of the light axis: u 0 at the
+// facing support, 1 at the far side. The 1e-4 guard turns coincident
+// stops into a hard step instead of a divide by zero.
+vec3 shinyRampColor(bool cw, float u) {
+    vec3 g = cw ? gradColorsCW[0].rgb : gradColors[0].rgb;
+    int  n = cw ? gradCountCW : gradCount;
+    for (int i = 1; i < MAX_STEPS; i++) {
+        if (i >= n)
+            break;
+        float t0 = cw ? gradPosCW[i - 1] : gradPos[i - 1];
+        float t1 = cw ? gradPosCW[i] : gradPos[i];
+        vec3  c  = cw ? gradColorsCW[i].rgb : gradColors[i].rgb;
+        g = mix(g, c, clamp((u - t0) / max(t1 - t0, 1.0e-4), 0.0, 1.0));
+    }
+    return g;
+}
+
+float sdRoundBox(vec2 p, vec2 b, float r, float power) {
+    vec2 q = abs(p) - b + vec2(r);
+    vec2 qp = max(q, 0.0);
+    float outside;
+    if (power < 2.01)
+        outside = length(qp);
+    else
+        outside = pow(pow(max(qp.x, 0.0), power) + pow(max(qp.y, 0.0), power), 1.0 / power);
+    return outside + min(max(q.x, q.y), 0.0) - r;
+}
+
+void main() {
+    vec2 center = topLeft + fullSize * 0.5;
+    vec2 p      = gl_FragCoord.xy - center;
+
+    float heading = angle;
+    // Unit light direction, Y-up. Parallel rays: the window's width and
+    // height set how far those rays travel across this deco.
+    vec2 light = vec2(cos(heading), sin(heading));
+    vec2 pUp   = vec2(p.x, -p.y);
+
+    float rOut   = max(radiusOuter, 0.0);
+    vec2  bOut   = fullSize * 0.5;
+    vec2  innerB = max(bOut - vec2(rOut), vec2(0.0));
+    // Support of the rounded rect in the light direction — the facing
+    // corner (or the whole facing edge, when the light is axis-aligned).
+    float extent = innerB.x * abs(light.x) + innerB.y * abs(light.y) + rOut;
+    extent = max(extent, 1.0);
+
+    // 0 at the lit support, 1 at the far side. Same 0..1 as the stop list.
+    float u  = clamp(0.5 - 0.5 * dot(pUp, light) / extent, 0.0, 1.0);
+    float d0 = u * 0.5;
+    // Negative cross = clockwise of the light axis (old t > 0.5 half).
+    bool  cw = (light.x * pUp.y - light.y * pUp.x) < 0.0;
+
+    float pulse, spread, thickNow;
+    if (brightness <= 0.0) {
+        spread   = max(range, 0.04);
+        thickNow = thick;
+    } else {
+        pulse    = 0.5 + 0.5 * sin(time * brightness * TAU);
+        spread   = max(mix(range * 0.45, range * 1.35, pulse), 0.04);
+        thickNow = thick * mix(0.78, 1.18, pulse);
+    }
+
+    float cone = 1.0 - smoothstep(0.0, spread, d0);
+    cone       = pow(max(cone, 0.0), 1.65);
+
+    // Thickness breathes, and the lit side is locally thicker than the rest of the ring.
+    float localT = mix(thickNow * 0.38, thickNow, mix(0.15, 1.0, cone));
+    localT       = max(localT, 1.0);
+
+    float rIn = max(rOut - localT, 0.0);
+    vec2  bIn = max(bOut - vec2(localT), vec2(0.5));
+
+    float dOut = sdRoundBox(p, bOut, rOut, roundingPower);
+    float dIn  = sdRoundBox(p, bIn, rIn, roundingPower);
+
+    // Client area: inside the inner contour. Never paint window contents.
+    if (dIn < -AA)
+        discard;
+
+    // Ring: inside the outer contour, outside the inner contour.
+    float ring = smoothstep(AA, -AA, dOut) * smoothstep(-AA, AA, dIn);
+    // Halo strictly outside the rounded rect. dOut > 0 is outside.
+    float glow = (1.0 - smoothstep(0.0, localT * 1.35, dOut)) * smoothstep(0.0, AA, dOut) * cone;
+
+    float cov = max(ring, glow * 0.65);
+    if (cov < 0.002)
+        discard;
+
+    // Dim far side is a dark edge; the facing core blows toward white.
+    float hot = pow(cone, 2.6);
+    vec3  rgb;
+    if (gradCount >= 2) {
+        // Stop 0 at the lit support, last stop at the far side. Each half
+        // of the light axis runs facing → far, so the geometry itself is
+        // seamless; only mismatched endpoint colors between the halves
+        // can show a seam. Same brightness profile as the classic branch.
+        vec3 g = shinyRampColor(cw, u);
+        rgb = mix(g * mix(0.22, 1.0, pow(cone, 0.9)), vec3(1.0), hot * 0.95);
+    } else {
+        vec3 dim = colorSRGB.rgb * 0.22;
+        rgb      = mix(mix(dim, color.rgb, pow(cone, 0.9)), vec3(1.0), hot * 0.95);
+    }
+    float a = cov * mix(0.055, 1.0, mix(pow(cone, 1.15), hot, 0.45)) * alpha;
+    fragColor = vec4(rgb * a, a);
+}
+)#";
