@@ -27,6 +27,9 @@ struct SShinyConfig {
     SP<Config::Values::CFloatValue> lobe;
     SP<Config::Values::CColorValue> colA;
     SP<Config::Values::CColorValue> colB;
+    // Wrapping ring stroke under the highlight. Transparent (a=0) = off.
+    // Packed ARGB; default matches the shared look rgba(00687855).
+    SP<Config::Values::CColorValue> baseColor;
     // Optional multi-step ramp. Fewer than two colors (the single-color
     // default) keeps the classic col.a/col.b comet; two or more colors
     // replace it, first color at the head. The gradient's own angle is

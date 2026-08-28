@@ -60,6 +60,13 @@ that light, projected along the axis using this window's width and height.
   not enforced — mismatched first/last colors seam at the head / far side
   (documented in the README). The fallback linear gradient cannot express
   asymmetry and keeps drawing the primary side.
+- wrapping `baseColor` stroke: `plugin:shiny-border:base_color` (default
+  `rgba(00687855)` / ARGB `0x55006878`) rides in `ShinyDrawShared::baseColor`
+  and a raw `glUniform4f` of `baseColor` — CShader has no third color slot.
+  Both fragments run `shinyWrapComposite` (premultiplied highlight over a
+  border-thickness ring; glow excluded; `a <= 0` is off). The wrap does
+  not use `decoration:shadow` and is not the last gradient stop. CPU twin
+  is `shinyWrapComposite` in `runtime.cpp`.
 
 `active_only` (default on) means only the focused window tracks the cursor and
 pulses. Unfocused windows have **no** ring, but they still reserve the same

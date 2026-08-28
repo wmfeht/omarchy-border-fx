@@ -118,9 +118,10 @@ Canonical colors are Hyprland `rgba(RRGGBBAA)`. Save `shell.json`: chrome
 hot-reloads; `look-apply.sh` writes `~/.config/hypr/border-fx.lua` and
 `hyprctl eval`s it if the shiny `.so` is loaded.
 
-`baseColor` is Quickshell-only (layer-shell chrome has no drop-shadow).
-`activeOnly` / `pulse` / `quantizeDeg` are Hyprland-only. `pin: false` is
-ignored on chrome in v1 (always pinned).
+`baseColor` is the wrapping ring stroke on both hosts (transparent = off).
+It is not Hyprland `decoration:shadow`. `activeOnly` / `pulse` /
+`quantizeDeg` are Hyprland-only. `pin: false` is ignored on chrome in v1
+(always pinned).
 
 A generated `~/.config/hypr/border-fx.lua` is an **output**, not an input.
 `omarchy refresh hyprland` can drop the one-line

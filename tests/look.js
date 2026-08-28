@@ -40,7 +40,7 @@ function checkDefaults() {
   check(d.gradient.length === 4, "default 4-stop ramp")
   check(d.gradient[0] === "rgba(33ccffee)", "head rgba")
   check(d.gradientPositions === "0 1 3 100", "positions")
-  check(d.baseColor === "rgba(00687855)", "qs-only baseColor")
+  check(d.baseColor === "rgba(00687855)", "default baseColor")
   check(d.activeOnly === true, "hypr-only activeOnly")
 }
 
@@ -124,7 +124,7 @@ function checkLookApply() {
   check(/pulse\s*=\s*false/.test(lua), "lua pulse = false")
   check(/shimmer\s*=\s*true/.test(lua), "lua shimmer = true")
   check(lua.indexOf("rgba(33ccffee)") !== -1, "lua keeps hypr rgba")
-  check(lua.indexOf("baseColor") === -1 && lua.indexOf("base_color") === -1, "baseColor is QS-only")
+  check(/base_color\s*=\s*"rgba\(00687855\)"/.test(lua), "lua includes Hyprland adapter base_color")
   check(lua.indexOf("hl.plugin.load") !== -1, "login load of session .so")
   check(lua.indexOf("hyprland.start") !== -1, "load on hyprland.start, not during parse")
   check(lua.indexOf("__qs_border_fx_start") !== -1, "start guard uses border-fx name")
@@ -147,6 +147,22 @@ function checkLookApply() {
   check(custom.status === 0, "custom look-apply")
   check(/pin_deg\s*=\s*0/.test(custom.stdout), "custom pin_deg")
   check(/border_size\s*=\s*1/.test(custom.stdout), "custom border_size")
+
+  const customBase = spawnSync(
+    "bash",
+    [script, "--stdout", "--look-json", JSON.stringify({ baseColor: "rgba(ff000080)" })],
+    { encoding: "utf8", env: env }
+  )
+  check(customBase.status === 0, "custom baseColor look-apply")
+  check(/base_color\s*=\s*"rgba\(ff000080\)"/.test(customBase.stdout), "custom baseColor fans out")
+
+  const transBase = spawnSync(
+    "bash",
+    [script, "--stdout", "--look-json", JSON.stringify({ baseColor: "rgba(00000000)" })],
+    { encoding: "utf8", env: env }
+  )
+  check(transBase.status === 0, "transparent baseColor look-apply")
+  check(/base_color\s*=\s*"rgba\(00000000\)"/.test(transBase.stdout), "transparent baseColor is accepted as off")
 
   const nestedLua = spawnSync(
     "bash",

@@ -285,6 +285,7 @@ lines = [
     "          a = " + lua_str(to_hypr(look["colA"])) + ",",
     "          b = " + lua_str(to_hypr(look["colB"])) + ",",
     "        },",
+    "        base_color            = " + lua_str(to_hypr(look["baseColor"])) + ",",
     "        gradient              = " + grad_lua + ",",
     "        gradient_positions    = " + lua_str(look["gradientPositions"]) + ",",
     "        gradient_cw           = " + cw_lua + ",",

@@ -39,6 +39,7 @@ layout(std140, binding = 0) uniform buf {
     int   gradCountCW;
     vec4  color;             // colA, highlight head (straight rgba)
     vec4  colorSRGB;         // colB, shoulder
+    vec4  baseColor;         // wrapping ring stroke (straight rgba); a=0 off
     mat4  gradColors0;       // primary stops 0..3 as columns
     mat4  gradColors1;       // primary stops 4..7 as columns
     vec4  gradPos0;          // primary positions 0..3
@@ -94,6 +95,16 @@ vec3 shinyRampColor(bool cw, float u) {
         g = mix(g, c, clamp((u - t0) / max(t1 - t0, 1.0e-4), 0.0, 1.0));
     }
     return g;
+}
+
+// Premultiplied highlight over a straight-alpha wrap. Glow is not part of
+// coverage; base.a <= 0 skips (same as CPU shinyWrapComposite).
+vec4 shinyWrapComposite(vec4 highlight, vec4 base, float ringCoverage) {
+    if (base.a <= 0.0)
+        return highlight;
+    float wrapA = base.a * clamp(ringCoverage, 0.0, 1.0);
+    vec4  wrap  = vec4(base.rgb * wrapA, wrapA);
+    return highlight + wrap * (1.0 - highlight.a);
 }
 
 float sdRoundBox(vec2 p, vec2 b, float r, float power) {
@@ -153,8 +164,17 @@ void main() {
     float dOut = sdRoundBox(p, bOut, rOut, roundingPower);
     float dIn  = sdRoundBox(p, bIn, rIn, roundingPower);
 
-    // Interior: inside the inner contour. Never paint the host contents.
-    if (dIn < -AA)
+    // Hard border-thickness wrap (Quickshell's old Rectangle stroke), not
+    // the variable-width highlight ring and not the outside glow.
+    float wrapT    = max(thick, 1.0);
+    float rWrap    = max(rOut - wrapT, 0.0);
+    vec2  bWrap    = max(bOut - vec2(wrapT), vec2(0.5));
+    float dWrap    = sdRoundBox(p, bWrap, rWrap, roundingPower);
+    float wrapRing = smoothstep(AA, -AA, dOut) * smoothstep(-AA, AA, dWrap);
+
+    // Client area: inside the highlight inner, and inside the wrap inner
+    // when the wrap is on. Never paint the host contents.
+    if (dIn < -AA && (baseColor.a <= 0.0 || dWrap < -AA))
         discard;
 
     // Ring: inside the outer contour, outside the inner contour.
@@ -163,7 +183,7 @@ void main() {
     float glow = (1.0 - smoothstep(0.0, localT * 1.35, dOut)) * smoothstep(0.0, AA, dOut) * cone;
 
     float cov = max(ring, glow * 0.65);
-    if (cov < 0.002)
+    if (cov < 0.002 && (baseColor.a <= 0.0 || wrapRing < 0.002))
         discard;
 
     // Dim far side is a dark edge; the facing core blows toward white.
@@ -180,6 +200,8 @@ void main() {
         vec3 dim = colorSRGB.rgb * 0.22;
         rgb      = mix(mix(dim, color.rgb, pow(cone, 0.9)), vec3(1.0), hot * 0.95);
     }
-    float a = cov * mix(0.055, 1.0, mix(pow(cone, 1.15), hot, 0.45)) * qt_Opacity;
-    fragColor = vec4(rgb * a, a);
+    float a            = cov * mix(0.055, 1.0, mix(pow(cone, 1.15), hot, 0.45));
+    vec4  highlight    = vec4(rgb * a, a);
+    fragColor          = shinyWrapComposite(highlight, baseColor, wrapRing);
+    fragColor         *= qt_Opacity;
 }

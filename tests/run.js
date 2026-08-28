@@ -344,6 +344,17 @@ function checkLightProjection() {
   check(sample(0, 50, 100, 100, r, 0).cw, "pin 0 bottom is the CW half")
 }
 
+function checkWrapSource() {
+  const frag = fs.readFileSync(path.join(root, "shaders/shiny.frag"), "utf8")
+  const qml = fs.readFileSync(path.join(root, "qml/ShinyBorder.qml"), "utf8")
+  check(frag.indexOf("vec4 shinyWrapComposite") !== -1, "qs frag wrap composite")
+  check(frag.indexOf("shinyWrapComposite(highlight, baseColor, wrapRing)") !== -1, "qs frag wrap uses wrapRing")
+  check(frag.indexOf("vec4  baseColor;") !== -1, "qs frag baseColor UBO")
+  check(frag.indexOf("decoration:shadow") === -1, "qs frag does not consult decoration:shadow")
+  check(qml.indexOf("border.color: root.baseColor") === -1, "QML does not paint a doubled wrap stroke")
+  check(qml.indexOf("property vector4d baseColor") !== -1, "ShaderEffect uploads baseColor")
+}
+
 checkPinnedHeading()
 checkTickMs()
 checkShimmer()
@@ -351,6 +362,7 @@ checkGradient()
 checkGradientPositions()
 checkGradientCwSide()
 checkLightProjection()
+checkWrapSource()
 
 if (fails) {
   console.error(fails + " checks failed")

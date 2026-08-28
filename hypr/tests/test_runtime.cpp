@@ -481,6 +481,42 @@ static void checkGradientCwSide() {
     CHECK(cw.count == SHINY_MAX_GRADIENT_STEPS);
 }
 
+static void checkWrapComposite() {
+    // Far-side crushed highlight: ~5.5% alpha, premultiplied. Drive the
+    // shipped helper — do not hard-code the mix result.
+    const float hiA        = 0.055f;
+    const float highlight[4] = {0.2f * hiA, 0.4f * hiA, 0.1f * hiA, hiA};
+    float       out[4];
+
+    // Zero-alpha base is a no-op even with full ring coverage.
+    const float off[4] = {0.f, 104.f / 255.f, 120.f / 255.f, 0.f};
+    shinyWrapComposite(highlight, off, 1.f, out);
+    CHECK(out[0] == highlight[0] && out[1] == highlight[1] && out[2] == highlight[2] && out[3] == highlight[3]);
+
+    // Null / missing base is the same no-op.
+    shinyWrapComposite(highlight, nullptr, 1.f, out);
+    CHECK(out[0] == highlight[0] && out[1] == highlight[1] && out[2] == highlight[2] && out[3] == highlight[3]);
+
+    // Ring coverage 0 with a live base: glow is excluded, wrap does not paint.
+    const float teal[4] = {0.f, 104.f / 255.f, 120.f / 255.f, 85.f / 255.f};
+    shinyWrapComposite(highlight, teal, 0.f, out);
+    CHECK(out[0] == highlight[0] && out[1] == highlight[1] && out[2] == highlight[2] && out[3] == highlight[3]);
+
+    // Full ring + crushed highlight: wrap hue/alpha must show through.
+    // rgba(00687855) / Qt #55006878 — output is not the crushed highlight alone.
+    shinyWrapComposite(highlight, teal, 1.f, out);
+    CHECK(out[0] != highlight[0] || out[1] != highlight[1] || out[2] != highlight[2] || out[3] != highlight[3]);
+    CHECK(out[1] > highlight[1]);
+    CHECK(out[2] > highlight[2]);
+    CHECK(out[3] > highlight[3]);
+    CHECK(out[3] < 1.f);
+
+    // Opaque highlight covers the wrap completely.
+    const float opaque[4] = {1.f, 1.f, 1.f, 1.f};
+    shinyWrapComposite(opaque, teal, 1.f, out);
+    CHECK(out[0] == 1.f && out[1] == 1.f && out[2] == 1.f && out[3] == 1.f);
+}
+
 static void checkEffectiveBorderSize() {
     CHECK(shinyEffectiveBorderSize(3, false) == 0);
     CHECK(shinyEffectiveBorderSize(3, true) == 3);
@@ -538,6 +574,7 @@ int main() {
     checkGradient();
     checkGradientPositions();
     checkGradientCwSide();
+    checkWrapComposite();
     checkEffectiveBorderSize();
     checkUpdateWindowActions();
 

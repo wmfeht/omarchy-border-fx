@@ -229,6 +229,7 @@ void CShinyBorder::draw(PHLMONITOR pMonitor, float const& a) {
         .borderSize    = BORDERSIZE,
         .colA          = sc<uint64_t>(g_cfg.colA->value()),
         .colB          = sc<uint64_t>(g_cfg.colB->value()),
+        .baseColor     = sc<uint64_t>(g_cfg.baseColor->value()),
     };
     // Multi-step ramp is opt-in: the single-color default (and any lone
     // color) keeps stopCount at 0 → the classic col.a/col.b comet.

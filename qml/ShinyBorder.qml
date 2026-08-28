@@ -34,10 +34,9 @@ Item {
   property real shimmerScaleMax: 1.35
   property real roundingPower: 2
 
-  // Hyprland's focused decoration:shadow (rgba(00687855), range 2). The
-  // shader crushes the far side to ~5.5% alpha on both halves, so stuffing
-  // this hue into the last gradient stop never wrapped the ring. Layer-shell
-  // chrome has no drop-shadow; this stroke is that ring. Transparent = off.
+  // Wrapping ring stroke under the directional highlight. Both hosts
+  // composite this in the fragment (far-side highlight alpha stays crushed).
+  // Transparent = off. Not Hyprland decoration:shadow, not a gradient stop.
   property color baseColor: "#55006878"
 
   // Multi-step ramp, facing support first. Fewer than two colors keeps
@@ -159,17 +158,6 @@ Item {
     rebuildRamp()
   }
 
-  Rectangle {
-    anchors.fill: parent
-    visible: root.baseColor.a > 0 && effect.status !== ShaderEffect.Error
-    color: "transparent"
-    radius: root.radius
-    border.width: Math.max(root.borderSize, 1)
-    border.color: root.baseColor
-    antialiasing: true
-    enabled: false
-  }
-
   ShaderEffect {
     id: effect
     anchors.fill: parent
@@ -190,6 +178,7 @@ Item {
     property int gradCountCW: 0
     property vector4d color
     property vector4d colorSRGB
+    property vector4d baseColor: Qt.vector4d(root.baseColor.r, root.baseColor.g, root.baseColor.b, root.baseColor.a)
     property matrix4x4 gradColors0
     property matrix4x4 gradColors1
     property vector4d gradPos0

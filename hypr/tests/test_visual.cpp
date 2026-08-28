@@ -26,6 +26,7 @@ static void checkDrawAgreement() {
         .borderSize    = 3,
         .colA          = 0xFF112233ULL,
         .colB          = 0xFF445566ULL,
+        .baseColor     = 0x55006878ULL,
         .stops         = {0xFF111111ULL, 0xFF222222ULL, 0xFF333333ULL},
         .stopPos       = {0.f, 0.7f, 1.f},
         .stopCount     = 3,
@@ -44,6 +45,9 @@ static void checkDrawAgreement() {
         CHECK(mapped.shader.a == mapped.fallback.shared.a);
         CHECK(mapped.shader.colA == mapped.fallback.shared.colA);
         CHECK(mapped.shader.colB == mapped.fallback.shared.colB);
+        CHECK(mapped.shader.baseColor == mapped.fallback.shared.baseColor);
+        CHECK(mapped.shader.baseColor == p.baseColor);
+        CHECK(mapped.fallback.shared.baseColor == p.baseColor);
 
         // The gradient stop list and positions feed both backends unchanged:
         // the shader uploads them as uniforms, the fallback resamples them
@@ -224,6 +228,21 @@ static void checkShaderSource() {
     CHECK(frag.find("uniform int   gradCountCW;") != std::string::npos);
     CHECK(frag.find("shinyRampColor(cw, u)") != std::string::npos);
     CHECK(frag.find("shinyRampColor(t > 0.5, u)") == std::string::npos);
+
+    // Wrapping baseColor stroke: same composite as shaders/shiny.frag, glow
+    // excluded, not stuffed into the last gradient stop, not decoration:shadow.
+    CHECK(frag.find("uniform vec4  baseColor;") != std::string::npos);
+    CHECK(frag.find("vec4 shinyWrapComposite") != std::string::npos);
+    CHECK(frag.find("shinyWrapComposite(highlight, baseColor, wrapRing)") != std::string::npos);
+    CHECK(frag.find("shinyWrapComposite(highlight, baseColor, glow") == std::string::npos);
+    CHECK(frag.find("shinyWrapComposite(highlight, baseColor, cov") == std::string::npos);
+    CHECK(frag.find("decoration:shadow") == std::string::npos);
+
+    const std::string qsFrag = readFile(sourceDir() + "/../../shaders/shiny.frag");
+    CHECK(!qsFrag.empty());
+    CHECK(qsFrag.find("vec4  baseColor;") != std::string::npos);
+    CHECK(qsFrag.find("vec4 shinyWrapComposite") != std::string::npos);
+    CHECK(qsFrag.find("shinyWrapComposite(highlight, baseColor, wrapRing)") != std::string::npos);
 }
 
 static void checkProductionWiring() {
@@ -282,6 +301,17 @@ static void checkProductionWiring() {
     CHECK(deco.find("shinyGradientResolveCwSide") != std::string::npos);
     CHECK(pass.find("gradColorsCW") != std::string::npos);
     CHECK(pass.find("m_data.shared.stopsCW") != std::string::npos);
+
+    // baseColor: config key + draw payload + raw glUniform (no CShader slot).
+    CHECK(plug.find("plugin:shiny-border:base_color") != std::string::npos);
+    CHECK(plug.find("0x55006878") != std::string::npos);
+    CHECK(deco.find("shared.baseColor") != std::string::npos || deco.find(".baseColor") != std::string::npos);
+    CHECK(deco.find("g_cfg.baseColor->value()") != std::string::npos);
+    CHECK(pass.find("m_data.shared.baseColor") != std::string::npos);
+    CHECK(pass.find("glUniform4f") != std::string::npos);
+    CHECK(pass.find("\"baseColor\"") != std::string::npos);
+    CHECK(pass.find("decoration:shadow") == std::string::npos);
+    CHECK(plug.find("decoration:shadow") == std::string::npos);
 }
 
 static void checkLightProjection() {

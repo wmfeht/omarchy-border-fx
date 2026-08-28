@@ -133,6 +133,30 @@ static void shinyUnpackArgb(uint64_t argb, float rgba[4]) {
     rgba[3] = static_cast<float>((argb >> 24) & 0xFF) / 255.f;
 }
 
+void shinyWrapComposite(const float highlightPremul[4], const float baseStraight[4], float ringCoverage,
+                        float outPremul[4]) {
+    if (!outPremul)
+        return;
+    if (!highlightPremul) {
+        outPremul[0] = outPremul[1] = outPremul[2] = outPremul[3] = 0.f;
+        return;
+    }
+    if (!baseStraight || baseStraight[3] <= 0.f) {
+        outPremul[0] = highlightPremul[0];
+        outPremul[1] = highlightPremul[1];
+        outPremul[2] = highlightPremul[2];
+        outPremul[3] = highlightPremul[3];
+        return;
+    }
+    const float ring  = std::clamp(ringCoverage, 0.f, 1.f);
+    const float wrapA = baseStraight[3] * ring;
+    const float inv   = 1.f - highlightPremul[3];
+    outPremul[0]      = highlightPremul[0] + baseStraight[0] * wrapA * inv;
+    outPremul[1]      = highlightPremul[1] + baseStraight[1] * wrapA * inv;
+    outPremul[2]      = highlightPremul[2] + baseStraight[2] * wrapA * inv;
+    outPremul[3]      = highlightPremul[3] + wrapA * inv;
+}
+
 void shinyGradientSample(const uint64_t* stops, const float* pos, int count, float u, float rgba[4]) {
     rgba[0] = rgba[1] = rgba[2] = rgba[3] = 0.f;
     if (!stops || count <= 0)

@@ -105,6 +105,13 @@ bool shinyGradientResolvePositions(const char* spec, int count, float out[SHINY_
 // count < 2 samples stop 0 (or transparent black when count <= 0).
 void shinyGradientSample(const uint64_t* stops, const float* pos, int count, float u, float rgba[4]);
 
+// Premultiplied "highlight over wrap": out = highlight + (base * ring) * (1 - highlight.a).
+// `base` is straight RGBA (0..1). `ringCoverage` is the border-thickness wrap
+// ring only (glow excluded). base.a <= 0 is a no-op so a transparent wrap is
+// off. Twin of shinyWrapComposite in SHINY_FRAG / shaders/shiny.frag.
+void shinyWrapComposite(const float highlightPremul[4], const float baseStraight[4], float ringCoverage,
+                        float outPremul[4]);
+
 // Clockwise-half override (plugin:shiny-border:gradient_cw /
 // gradient_positions_cw), resolved against the already-resolved primary
 // side. Rules:
@@ -148,6 +155,7 @@ struct ShinyDrawShared {
     int      borderSize    = 3; // logical (unscaled) px. Scale once (phase 4).
     uint64_t colA          = 0;
     uint64_t colB          = 0;
+    uint64_t baseColor     = 0; // wrapping stroke, packed ARGB; a=0 off
     uint64_t stops[SHINY_MAX_GRADIENT_STEPS] = {};
     float    stopPos[SHINY_MAX_GRADIENT_STEPS] = {};
     int      stopCount     = 0;

@@ -95,9 +95,10 @@ plan does **not** invent a third renderer, patch Omarchy `BorderSurface` /
 - **Hyprland-only keys:** `active_only`, `pulse` / `pulse_hz`,
   `quantize_deg`, mouse tracking (`pin = false`). Quickshell cannot see
   the pointer over other windows and does not drive pulse in v1.
-- **Quickshell-only key:** `baseColor`, a wrapping teal stroke standing
-  in for Hyprland’s focused `decoration:shadow` (layer-shell chrome has
-  no drop-shadow; the shader crushes the far-side stop to ~5.5% alpha).
+- **Wrapping stroke:** `baseColor`, a border-thickness ring under the
+  directional highlight on both hosts. Transparent = off. Not Hyprland
+  `decoration:shadow` (the shader crushes far-side highlight alpha to
+  ~5.5%, so stuffing this hue into the last gradient stop never wrapped).
 
 ### Omarchy plugin contract (constraints)
 
@@ -416,7 +417,7 @@ Small shared set, per-host adapters. No third renderer.
 | `gradientCw` | `gradient_cw` | `gradientCw` | both |
 | `gradientPositionsCw` | `gradient_positions_cw` | `gradientPositionsCw` | both |
 | `colA` / `colB` | `col.a` / `col.b` | `colA` / `colB` | both (used when gradient &lt; 2) |
-| `baseColor` | — | `baseColor` | Quickshell only (window side uses `decoration:shadow`) |
+| `baseColor` | `base_color` | `baseColor` | both (wrap under the highlight; transparent = off) |
 | `activeOnly` | `active_only` | — | Hyprland only |
 | `pulse` / `pulseHz` | `pulse` / `pulse_hz` | — | Hyprland only (QS fragment keeps brightness ≤ 0) |
 | `quantizeDeg` | `quantize_deg` | — | Hyprland only |

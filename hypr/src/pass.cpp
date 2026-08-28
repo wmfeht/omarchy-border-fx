@@ -19,15 +19,16 @@ using namespace Render::GL;
 
 static SP<CShader> g_shinyShader;
 
-// The grad* uniforms are not in CShader's uniform lookup table, so they
-// are uploaded with raw glUniform* against cached locations. -1 is a
-// valid "absent" location: glUniform* silently ignores it.
+// The grad* and baseColor uniforms are not in CShader's uniform lookup
+// table, so they are uploaded with raw glUniform* against cached
+// locations. -1 is a valid "absent" location: glUniform* silently ignores it.
 static GLint g_gradColorsLoc   = -1;
 static GLint g_gradPosLoc      = -1;
 static GLint g_gradCountLoc    = -1;
 static GLint g_gradColorsCwLoc = -1;
 static GLint g_gradPosCwLoc    = -1;
 static GLint g_gradCountCwLoc  = -1;
+static GLint g_baseColorLoc    = -1;
 
 static void resetGradUniformLocations() {
     g_gradColorsLoc   = -1;
@@ -36,6 +37,7 @@ static void resetGradUniformLocations() {
     g_gradColorsCwLoc = -1;
     g_gradPosCwLoc    = -1;
     g_gradCountCwLoc  = -1;
+    g_baseColorLoc    = -1;
 }
 
 static bool hyprGlAlive() {
@@ -68,6 +70,7 @@ static bool hyprCompileShader() {
     g_gradColorsCwLoc = glGetUniformLocation(g_shinyShader->program(), "gradColorsCW");
     g_gradPosCwLoc    = glGetUniformLocation(g_shinyShader->program(), "gradPosCW");
     g_gradCountCwLoc  = glGetUniformLocation(g_shinyShader->program(), "gradCountCW");
+    g_baseColorLoc    = glGetUniformLocation(g_shinyShader->program(), "baseColor");
 
     return true;
 }
@@ -160,6 +163,12 @@ std::vector<UP<IPassElement>> CShinyPassElement::draw() {
     shader->setUniformFloat(SHADER_RANGE, m_data.lobe);
     shader->setUniformFloat(SHADER_BRIGHTNESS, m_data.pulseHz);
     shader->setUniformFloat(SHADER_ANGLE, m_data.angle);
+
+    // CShader has no third color slot; upload like the gradient arrays.
+    {
+        const CHyprColor base{m_data.shared.baseColor};
+        glUniform4f(g_baseColorLoc, sc<float>(base.r), sc<float>(base.g), sc<float>(base.b), sc<float>(base.a));
+    }
 
     // Always upload the counts — uniforms persist per program, so a classic
     // draw must clear a previous gradient draw's counts back to 0.
