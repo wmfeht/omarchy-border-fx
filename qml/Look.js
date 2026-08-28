@@ -1,12 +1,17 @@
 .pragma library
 
-// Shared look: shell.json camelCase + Hyprland rgba() is the source of
-// truth. Missing keys mean the intended shared look (looknfeel / ShinyBorder
-// defaults), not the C++ plugin defaults (pulse on, pin 90, border 3).
+// Shared look: shell.json camelCase + Hyprland rgba() on the qs.border-fx
+// plugins[] entry is the source of truth. `effect` selects the renderer
+// (`shiny` today). Missing look keys mean the intended shared look
+// (looknfeel / ShinyBorder defaults), not the C++ plugin defaults
+// (pulse on, pin 90, border 3).
 
-var PLUGIN_ID = "qs.shiny-border"
+var PLUGIN_ID = "qs.border-fx"
+var LEGACY_PLUGIN_ID = "qs.shiny-border"
+var DEFAULT_EFFECT = "shiny"
 
 var DEFAULTS = {
+  effect: "shiny",
   borderSize: 2,
   shimmer: true,
   shimmerHz: 0.3,
@@ -55,26 +60,70 @@ function asColorList(v) {
   return []
 }
 
+function isPlainObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v)
+}
+
+function normalizeEffect(value) {
+  if (value === undefined || value === null || value === "")
+    return DEFAULT_EFFECT
+  return String(value)
+}
+
+function pickLookFields(src) {
+  var out = {}
+  if (!isPlainObject(src))
+    return out
+  for (var k in DEFAULTS) {
+    if (!Object.prototype.hasOwnProperty.call(DEFAULTS, k))
+      continue
+    if (k === "effect")
+      continue
+    if (Object.prototype.hasOwnProperty.call(src, k) && src[k] !== undefined && src[k] !== null)
+      out[k] = src[k]
+  }
+  return out
+}
+
 function entryFromConfig(config, id) {
   var want = id || PLUGIN_ID
   if (!config || !config.plugins || !config.plugins.length)
     return {}
+  var legacy = null
   for (var i = 0; i < config.plugins.length; i++) {
     var e = config.plugins[i]
-    if (e && e.id === want)
+    if (!e)
+      continue
+    if (e.id === want)
       return e
+    if (e.id === LEGACY_PLUGIN_ID)
+      legacy = e
   }
+  if (want === PLUGIN_ID && legacy)
+    return legacy
   return {}
 }
 
 function merge(entry) {
-  var src = entry && typeof entry === "object" ? entry : {}
-  var out = {}
+  var src = isPlainObject(entry) ? entry : {}
+  var effect = normalizeEffect(src.effect)
+  var picked = pickLookFields(src)
+  var nested = src[effect]
+  if (isPlainObject(nested)) {
+    var overlay = pickLookFields(nested)
+    for (var n in overlay) {
+      if (Object.prototype.hasOwnProperty.call(overlay, n))
+        picked[n] = overlay[n]
+    }
+  }
+  var out = { effect: effect }
   for (var k in DEFAULTS) {
     if (!Object.prototype.hasOwnProperty.call(DEFAULTS, k))
       continue
-    if (Object.prototype.hasOwnProperty.call(src, k) && src[k] !== undefined && src[k] !== null)
-      out[k] = src[k]
+    if (k === "effect")
+      continue
+    if (Object.prototype.hasOwnProperty.call(picked, k))
+      out[k] = picked[k]
     else
       out[k] = cloneValue(DEFAULTS[k])
   }

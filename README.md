@@ -11,11 +11,12 @@ compositor plugin, not a Quickshell plugin — Omarchy never compiles it. After
 enable, `Service.qml` runs `scripts/hypr-ensure.sh` (user-level, no sudo) to
 build/load `~/.local/lib/hypr/hypr-shiny-border.so`.
 
-| Name | Stays | Why |
-|---|---|---|
-| Omarchy id `qs.shiny-border` | yes | `omarchy plugin enable`; `omarchy.*` is reserved |
-| Hyprland plugin `hypr-shiny-border` | yes | `hyprctl plugin list`, hyprpm, `PLUGIN_INIT` |
-| Config keys `plugin:shiny-border:*` / Lua `shiny_border` | yes | hyphen → underscore in Lua |
+| Name | Role |
+|---|---|
+| Omarchy id `qs.border-fx` | Source of truth in `shell.json`; `omarchy plugin enable` |
+| `effect` (`shiny`) | Which renderer to drive; more types later |
+| Hyprland plugin `hypr-shiny-border` | Shiny window adapter (`hyprctl plugin list`, hyprpm, `PLUGIN_INIT`) |
+| Config keys `plugin:shiny-border:*` / Lua `shiny_border` | Shiny Hyprland adapter (hyphen → underscore) |
 
 ## Install
 
@@ -27,28 +28,32 @@ omarchy plugin add <git-url-of-this-repo> --enable --yes
 `--enable` starts the service, which overlays chrome **and** ensures the
 window ring.
 
+The previous Omarchy id was `qs.shiny-border`. Look reading still falls back
+to that entry if `qs.border-fx` is missing. Enable the new id (and disable
+the old one) so `omarchy plugin` commands match the clone directory.
+
 ```sh
-omarchy plugin enable qs.shiny-border    # chrome + window ring on
-omarchy plugin disable qs.shiny-border   # both off; clone kept
-omarchy plugin remove qs.shiny-border --yes
-omarchy plugin update qs.shiny-border --yes
+omarchy plugin enable qs.border-fx    # chrome + window ring on
+omarchy plugin disable qs.border-fx   # both off; clone kept
+omarchy plugin remove qs.border-fx --yes
+omarchy plugin update qs.border-fx --yes
 ```
 
 If the shell was not running during remove, also:
 
 ```sh
-~/.config/omarchy/plugins/qs.shiny-border/scripts/hypr-teardown.sh --purge
+~/.config/omarchy/plugins/qs.border-fx/scripts/hypr-teardown.sh --purge
 # or, from this tree:
 bash scripts/hypr-teardown.sh --purge
 ```
 
 That deletes `~/.local/lib/hypr/hypr-shiny-border.so` and
-`~/.config/hypr/shiny-border.lua`. It does **not** rewrite `looknfeel.lua`.
+`~/.config/hypr/border-fx.lua`. It does **not** rewrite `looknfeel.lua`.
 
 Dev copy (not git-managed, not `omarchy plugin update`):
 
 ```sh
-mise run install     # copies into ~/.config/omarchy/plugins/qs.shiny-border
+mise run install     # copies into ~/.config/omarchy/plugins/qs.border-fx
 mise run uninstall
 ```
 
@@ -61,7 +66,7 @@ hyprpm copy and notify you instead of stacking a second `.so`.
 hyprpm disable hypr-shiny-border
 # drop `hyprpm reload -n` from ~/.config/hypr/autostart.lua if it exists
 # only for this plugin, then:
-omarchy plugin enable qs.shiny-border
+omarchy plugin enable qs.border-fx
 ```
 
 hyprpm remains the Hyprland **development** workflow (`mise run nest`).
@@ -76,13 +81,18 @@ header-hash mismatch.
 
 ## Shared look
 
-Source of truth: the `qs.shiny-border` entry in
-`~/.config/omarchy/shell.json` `plugins[]`. Missing keys mean the intended
-shared look (pinned 120°, shimmer, 4-stop ramp) — **not** the C++ defaults.
+Source of truth: the `qs.border-fx` entry in
+`~/.config/omarchy/shell.json` `plugins[]`. `effect` selects the renderer
+(`shiny` is the only one today). Missing look keys mean the intended shared
+look (pinned 120°, shimmer, 4-stop ramp) — **not** the C++ defaults.
+
+Look keys may sit at the top level or under a nested object named after the
+effect (`"shiny": { … }`). Nested keys win.
 
 ```json
 {
-  "id": "qs.shiny-border",
+  "id": "qs.border-fx",
+  "effect": "shiny",
   "borderSize": 2,
   "shimmer": true,
   "shimmerHz": 0.3,
@@ -105,16 +115,16 @@ shared look (pinned 120°, shimmer, 4-stop ramp) — **not** the C++ defaults.
 ```
 
 Canonical colors are Hyprland `rgba(RRGGBBAA)`. Save `shell.json`: chrome
-hot-reloads; `look-apply.sh` writes `~/.config/hypr/shiny-border.lua` and
-`hyprctl eval`s it if the `.so` is loaded.
+hot-reloads; `look-apply.sh` writes `~/.config/hypr/border-fx.lua` and
+`hyprctl eval`s it if the shiny `.so` is loaded.
 
 `baseColor` is Quickshell-only (layer-shell chrome has no drop-shadow).
 `activeOnly` / `pulse` / `quantizeDeg` are Hyprland-only. `pin: false` is
 ignored on chrome in v1 (always pinned).
 
-A generated `~/.config/hypr/shiny-border.lua` is an **output**, not an input.
+A generated `~/.config/hypr/border-fx.lua` is an **output**, not an input.
 `omarchy refresh hyprland` can drop the one-line
-`pcall(require, "hypr.shiny-border")` from `hyprland.lua`; the next service
+`pcall(require, "hypr.border-fx")` from `hyprland.lua`; the next service
 start still `hyprctl plugin load`s (brief default-look flash).
 
 Until you delete the gated `shiny_border` block from `looknfeel.lua`, that
@@ -124,16 +134,16 @@ looks right, then remove it.
 ## Tree
 
 ```
-manifest.json                 # Omarchy id qs.shiny-border (clone root)
+manifest.json                 # Omarchy id qs.border-fx (clone root)
 Service.qml                   # chrome overlay + hypr-ensure + look fan-out
 qml/                          # ShinyBorder, Shimmer, Gradient, Look
 shaders/                      # shiny.frag + committed .qsb
-hypr/                         # compositor plugin (src, Makefile, nest, tests)
+hypr/                         # shiny compositor plugin (src, Makefile, nest, tests)
 hyprpm.toml                   # clone root, so hyprpm add of this URL works
 scripts/
   hypr-ensure.sh              # build/copy/load ~/.local/lib/hypr/… (no sudo)
   hypr-teardown.sh            # unload session copy; --purge deletes it
-  look-apply.sh               # JSON look → shiny-border.lua + hyprctl eval
+  look-apply.sh               # JSON look → border-fx.lua + hyprctl eval
   install.sh / uninstall.sh   # dev copy helpers
 ```
 

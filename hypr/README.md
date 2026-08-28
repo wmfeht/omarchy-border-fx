@@ -4,7 +4,7 @@ This directory is the Hyprland C++ plugin from the unified **omarchy-border-fx**
 tree. User install and shared look live in the [repo README](../README.md).
 
 Do not put this folder under `~/.config/omarchy/plugins/` by itself. The
-Omarchy plugin at the clone root (`qs.shiny-border`) builds and loads
+Omarchy plugin at the clone root (`qs.border-fx`) builds and loads
 `hypr-shiny-border.so` via `scripts/hypr-ensure.sh`.
 
 **Development** (nested Hyprland, `pluginctl`, header pins) is in

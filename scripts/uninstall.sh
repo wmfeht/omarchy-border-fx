@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
-# Dev helper: disable qs.shiny-border, purge the login-session Hyprland copy,
+# Dev helper: disable qs.border-fx, purge the login-session Hyprland copy,
 # and remove the installed plugin copy. Never deletes this source tree.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
-dest="${OMARCHY_PLUGIN_DIR:-$HOME/.config/omarchy/plugins/qs.shiny-border}"
+# shellcheck source=paths.sh
+source "$root/scripts/paths.sh"
+dest="${OMARCHY_PLUGIN_DIR:-$HOME/.config/omarchy/plugins/$PLUGIN_ID}"
 dest_abs=$(realpath -m "$dest")
 root_abs=$(realpath "$root")
 
 if command -v omarchy >/dev/null 2>&1; then
-  omarchy plugin disable qs.shiny-border 2>/dev/null || true
+  omarchy plugin disable "$PLUGIN_ID" 2>/dev/null || true
+  omarchy plugin disable "$LEGACY_PLUGIN_ID" 2>/dev/null || true
 fi
 
 # Disable already ran hypr-teardown via Service.onDestruction when the shell

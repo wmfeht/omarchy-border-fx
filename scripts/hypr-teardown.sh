@@ -64,8 +64,8 @@ else
 fi
 
 if (( purge )); then
-  rm -f "$SESSION_SO" "$LUA_FILE"
-  echo "hypr-teardown: purged $SESSION_SO and $LUA_FILE"
+  rm -f "$SESSION_SO" "$LUA_FILE" "$LEGACY_LUA_FILE"
+  echo "hypr-teardown: purged $SESSION_SO, $LUA_FILE, and leftover $LEGACY_LUA_FILE"
   echo "hypr-teardown: left hyprland.lua require in place (pcall) and did not edit looknfeel.lua"
 else
   echo "hypr-teardown: kept $SESSION_SO (re-enable is fast)"

@@ -27,8 +27,11 @@ function check(cond, msg) {
 const Look = loadPragmaLibrary("qml/Look.js")
 
 function checkDefaults() {
-  check(Look.PLUGIN_ID === "qs.shiny-border", "plugin id")
+  check(Look.PLUGIN_ID === "qs.border-fx", "plugin id")
+  check(Look.LEGACY_PLUGIN_ID === "qs.shiny-border", "legacy id")
+  check(Look.DEFAULT_EFFECT === "shiny", "default effect")
   const d = Look.merge(null)
+  check(d.effect === "shiny", "merge default effect shiny")
   check(d.borderSize === 2, "default borderSize 2 (not C++ 3)")
   check(d.pin === true, "default pin")
   check(d.pinDeg === 120, "default pinDeg 120 (not C++ 90)")
@@ -42,10 +45,11 @@ function checkDefaults() {
 }
 
 function checkMerge() {
-  const e = Look.merge({ id: "qs.shiny-border", pinDeg: 90, borderSize: 1 })
+  const e = Look.merge({ id: "qs.border-fx", pinDeg: 90, borderSize: 1 })
   check(e.pinDeg === 90, "override pinDeg")
   check(e.borderSize === 1, "override borderSize")
   check(e.shimmer === true, "unmentioned key stays default")
+  check(e.effect === "shiny", "effect stays default")
   check(e.id === undefined, "id is not a look key")
 
   const emptyRamp = Look.merge({ gradient: [] })
@@ -53,19 +57,40 @@ function checkMerge() {
 
   const objRamp = Look.merge({ gradient: { colors: ["rgba(ff0000ff)", "rgba(00ff00ff)"] } })
   check(objRamp.gradient.length === 2 && objRamp.gradient[0] === "rgba(ff0000ff)", "hypr-style {colors}")
+
+  const nested = Look.merge({ pinDeg: 0, shiny: { pinDeg: 45, borderSize: 4 } })
+  check(nested.effect === "shiny", "nested keeps effect shiny")
+  check(nested.pinDeg === 45, "nested shiny.pinDeg wins over top-level")
+  check(nested.borderSize === 4, "nested shiny.borderSize")
+
+  const other = Look.merge({ effect: "other", pinDeg: 10 })
+  check(other.effect === "other", "unknown effect is preserved")
+  check(other.pinDeg === 10, "look keys still merge when effect is not shiny")
 }
 
 function checkEntry() {
   const cfg = {
     plugins: [
       { id: "other.thing", pinDeg: 0 },
-      { id: "qs.shiny-border", pinDeg: 45, shimmer: false }
+      { id: "qs.border-fx", pinDeg: 45, shimmer: false, effect: "shiny" }
     ]
   }
-  const e = Look.entryFromConfig(cfg, "qs.shiny-border")
-  check(e.pinDeg === 45 && e.shimmer === false, "entryFromConfig picks the id")
+  const e = Look.entryFromConfig(cfg)
+  check(e.pinDeg === 45 && e.shimmer === false, "entryFromConfig picks qs.border-fx")
   check(Look.entryFromConfig({ plugins: [] }).id === undefined, "missing entry is empty")
   check(Object.keys(Look.entryFromConfig(null)).length === 0, "null config")
+
+  const legacy = {
+    plugins: [{ id: "qs.shiny-border", pinDeg: 30 }]
+  }
+  check(Look.entryFromConfig(legacy).pinDeg === 30, "falls back to qs.shiny-border")
+  const both = {
+    plugins: [
+      { id: "qs.shiny-border", pinDeg: 1 },
+      { id: "qs.border-fx", pinDeg: 2 }
+    ]
+  }
+  check(Look.entryFromConfig(both).pinDeg === 2, "qs.border-fx wins over legacy")
 }
 
 function checkColors() {
@@ -92,7 +117,8 @@ function checkLookApply() {
   })
   check(r.status === 0, "look-apply --stdout exits 0: " + (r.stderr || ""))
   const lua = r.stdout || ""
-  check(lua.indexOf("shiny_border") !== -1, "emits shiny_border table")
+  check(lua.indexOf("qs.border-fx") !== -1, "lua cites qs.border-fx as source of truth")
+  check(lua.indexOf("shiny_border") !== -1, "emits shiny_border Hyprland adapter table")
   check(/border_size\s*=\s*2/.test(lua), "lua border_size = 2")
   check(/pin_deg\s*=\s*120/.test(lua), "lua pin_deg = 120")
   check(/pulse\s*=\s*false/.test(lua), "lua pulse = false")
@@ -101,6 +127,7 @@ function checkLookApply() {
   check(lua.indexOf("baseColor") === -1 && lua.indexOf("base_color") === -1, "baseColor is QS-only")
   check(lua.indexOf("hl.plugin.load") !== -1, "login load of session .so")
   check(lua.indexOf("hyprland.start") !== -1, "load on hyprland.start, not during parse")
+  check(lua.indexOf("__qs_border_fx_start") !== -1, "start guard uses border-fx name")
   check(lua.indexOf("shinyLoaded") !== -1, "gated on loaded plugins")
   check(lua.indexOf("/tmp/omarchy-border-fx-test.so") !== -1, "session so path")
 
@@ -120,6 +147,23 @@ function checkLookApply() {
   check(custom.status === 0, "custom look-apply")
   check(/pin_deg\s*=\s*0/.test(custom.stdout), "custom pin_deg")
   check(/border_size\s*=\s*1/.test(custom.stdout), "custom border_size")
+
+  const nestedLua = spawnSync(
+    "bash",
+    [script, "--stdout", "--look-json", JSON.stringify({ pinDeg: 0, shiny: { pinDeg: 77 } })],
+    { encoding: "utf8", env: env }
+  )
+  check(nestedLua.status === 0, "nested look-apply")
+  check(/pin_deg\s*=\s*77/.test(nestedLua.stdout), "nested shiny.pinDeg fans out")
+
+  const otherFx = spawnSync(
+    "bash",
+    [script, "--stdout", "--look-json", JSON.stringify({ effect: "other" })],
+    { encoding: "utf8", env: env }
+  )
+  check(otherFx.status === 0, "non-shiny effect look-apply")
+  check(/SHINY_LOAD = false/.test(otherFx.stdout), "non-shiny effect skips shiny plugin.load")
+  check(/enabled\s*=\s*false/.test(otherFx.stdout), "non-shiny effect disables shiny adapter")
 }
 
 checkDefaults()

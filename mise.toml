@@ -1,4 +1,4 @@
-# Unified shiny-border: Omarchy / Quickshell chrome + Hyprland window ring.
+# qs.border-fx: Omarchy control plane for shell chrome + Hyprland window ring.
 # qsb is system Qt 6 (/usr/lib/qt6/bin/qsb); do not mise-install a second Qt.
 # Hyprland plugins must be built with the same GCC that built the compositor.
 
@@ -45,12 +45,12 @@ depends = ["check"]
 run = "make -C hypr test"
 
 [tasks.install]
-description = "Dev copy into ~/.config/omarchy/plugins/qs.shiny-border and enable"
+description = "Dev copy into ~/.config/omarchy/plugins/qs.border-fx and enable"
 depends = ["bake"]
 run = "bash scripts/install.sh"
 
 [tasks.uninstall]
-description = "Disable qs.shiny-border, purge the login-session .so, remove the copy"
+description = "Disable qs.border-fx, purge the login-session .so, remove the copy"
 run = "bash scripts/uninstall.sh"
 
 [tasks.hypr-build]

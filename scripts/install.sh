@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Dev helper: copy this tree into ~/.config/omarchy/plugins/qs.shiny-border
+# Dev helper: copy this tree into ~/.config/omarchy/plugins/qs.border-fx
 # and enable it. User path is `omarchy plugin add <git-url> --enable`.
 # Does not patch /usr/share/omarchy. Does not use sudo.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
-dest="${OMARCHY_PLUGIN_DIR:-$HOME/.config/omarchy/plugins/qs.shiny-border}"
+# shellcheck source=paths.sh
+source "$root/scripts/paths.sh"
+dest="${OMARCHY_PLUGIN_DIR:-$HOME/.config/omarchy/plugins/$PLUGIN_ID}"
 
 if [[ ! -f "$root/shaders/shiny.frag.qsb" ]]; then
   echo "missing shaders/shiny.frag.qsb — run: mise run bake" >&2
@@ -39,6 +41,7 @@ fi
 echo "installed $dest"
 
 if command -v omarchy >/dev/null 2>&1; then
-  omarchy plugin enable qs.shiny-border
+  omarchy plugin disable "$LEGACY_PLUGIN_ID" 2>/dev/null || true
+  omarchy plugin enable "$PLUGIN_ID"
   omarchy restart shell
 fi

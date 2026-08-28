@@ -28,11 +28,11 @@ Item {
   property var manifest: null
   property string omarchyPath: ""
 
-  readonly property string tag: "qs-shiny-border"
+  readonly property string tag: "qs-border-fx"
   // Bump when the overlay's look changes so attach() drops leftovers from a
   // previous plugin load. omarchy-shell caches service instances; copying
   // QML is not enough if an old ShinyBorder is still a child of the card.
-  readonly property int overlayRev: 5
+  readonly property int overlayRev: 6
 
   // shell.json plugins[] entry is the shared look. Services are not injected
   // a settings object — read it off shell.shellConfig ourselves.
@@ -261,6 +261,10 @@ Item {
     }
   }
 
+  function effectIsShiny() {
+    return String(root.look && root.look.effect ? root.look.effect : Look.DEFAULT_EFFECT) === "shiny"
+  }
+
   function runHyprEnsure() {
     if (ensureProc.running)
       return
@@ -376,7 +380,7 @@ Item {
     var toastCount = 0
     for (var i = 0; i < hosts.length; i++) {
       if (isNotificationCard(hosts[i])) toastCount++
-      if (hostShowing(hosts[i])) attach(hosts[i])
+      if (hostShowing(hosts[i]) && root.effectIsShiny()) attach(hosts[i])
       else detach(hosts[i])
     }
     var expected = 0
