@@ -50,10 +50,33 @@ ensure_hyprland_require() {
   if ! grep -q "$LUA_MODULE" "$f"; then
     printf '\n-- %s (Omarchy plugin control plane; pcall if the file is missing)\npcall(require, "%s")\n' "$PLUGIN_ID" "$LUA_MODULE" >> "$f"
   fi
-  if grep -q 'hypr.shiny-border' "$f"; then
-    local tmp
-    tmp=$(mktemp)
-    grep -v 'hypr.shiny-border' "$f" > "$tmp"
+  # Neutralize a live legacy require. Comments, other requires, and user notes
+  # that merely mention hypr.shiny-border are left alone.
+  local tmp
+  tmp=$(mktemp)
+  awk '
+    {
+      raw = $0
+      lead = raw
+      sub(/^[ \t]+/, "", lead)
+      if (lead ~ /^--/) {
+        print raw
+        next
+      }
+      code = raw
+      sub(/[ \t]+--.*$/, "", code)
+      if (code ~ /^[ \t]*pcall[ \t]*\([ \t]*require[ \t]*,[ \t]*["\047]hypr\.shiny-border["\047][ \t]*\)[ \t]*\r?$/ \
+          || code ~ /^[ \t]*require[ \t]*\([ \t]*["\047]hypr\.shiny-border["\047][ \t]*\)[ \t]*\r?$/ \
+          || code ~ /^[ \t]*require[ \t]+["\047]hypr\.shiny-border["\047][ \t]*\r?$/) {
+        print "-- " raw
+        next
+      }
+      print raw
+    }
+  ' "$f" > "$tmp"
+  if cmp -s "$tmp" "$f"; then
+    rm -f "$tmp"
+  else
     mv -f "$tmp" "$f"
   fi
 }

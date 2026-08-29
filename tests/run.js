@@ -1023,6 +1023,63 @@ function checkEnsureStatusReady() {
   )
 }
 
+function extractPluginRootSrc() {
+  const service = fs.readFileSync(path.join(root, "Service.qml"), "utf8")
+  const start = service.indexOf("function pluginRoot()")
+  if (start === -1)
+    return ""
+  const brace = service.indexOf("{", start)
+  let depth = 0
+  for (let i = brace; i < service.length; i++) {
+    const c = service.charAt(i)
+    if (c === "{")
+      depth++
+    else if (c === "}") {
+      depth--
+      if (depth === 0)
+        return service.slice(start, i + 1)
+    }
+  }
+  return ""
+}
+
+function checkPluginRoot() {
+  const src = extractPluginRootSrc()
+  check(src.indexOf("function pluginRoot()") === 0, "extracted shipped pluginRoot from Service.qml")
+  check(src.indexOf("decodeURIComponent") !== -1, "shipped pluginRoot percent-decodes file:// URLs")
+
+  function run(resolvedUrl, manifest) {
+    const ctx = {
+      root: { manifest: manifest || null },
+      Qt: { resolvedUrl: function () { return resolvedUrl } },
+      String: String,
+      decodeURIComponent: decodeURIComponent,
+    }
+    vm.createContext(ctx)
+    vm.runInContext(src + "\nthis.__out = pluginRoot()", ctx)
+    return ctx.__out
+  }
+
+  const spaced = run("file:///tmp/has%20space/plugin/", null)
+  check(typeof spaced === "string" && spaced.indexOf(" ") !== -1, "file:// %20 decodes to a space: " + spaced)
+  check(
+    spaced.indexOf("/tmp/has space/plugin") !== -1,
+    "file:///tmp/has%20space/plugin/ → decoded path with space: " + spaced
+  )
+
+  const localHost = run("file://localhost/tmp/foo", null)
+  check(localHost === "/tmp/foo", "file://localhost/tmp/foo → /tmp/foo (got " + localHost + ")")
+  check(localHost.indexOf("/localhost/") === -1, "file://localhost is not treated as a path")
+
+  const three = run("file:///tmp/foo", null)
+  check(three === "/tmp/foo", "file:///tmp/foo still /tmp/foo (got " + three + ")")
+
+  const injected = run("file:///tmp/has%20space/plugin/", { __sourceDir: "/injected/source/" })
+  check(injected === "/injected/source", "manifest.__sourceDir wins over file:// fallback: " + injected)
+
+  console.log("pluginroot spaced=" + spaced + " localhost=" + localHost + " three=" + three + " injected=" + injected)
+}
+
 checkSharedShaderBake()
 checkShimmerParity()
 checkWrapSource()
@@ -1030,6 +1087,7 @@ checkEnsureStatusReady()
 checkGlowCoverage()
 checkOverlayAttach()
 checkOverlayAttachWiring()
+checkPluginRoot()
 
 if (fails) {
   console.error(fails + " checks failed")

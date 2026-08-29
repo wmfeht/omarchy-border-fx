@@ -104,13 +104,14 @@ mise run nest          # nested Hyprland, hypr/nest/hyprland.lua
                        # ALT+Return = foot, ALT+Q = close, ALT+M = kill nest
 
 # outer terminal, nest already up:
-mise run reload        # make + copy to a fresh /tmp path + unload/load
+mise run reload        # make + copy to a fresh $XDG_RUNTIME_DIR path + unload/load
                        # last hyprctl instance; refuses the login session
 ```
 
-`hypr/scripts/pluginctl.sh` copies the `.so` to a new `/tmp` path on every load so
-`dlopen` cannot keep a stale mapping of the same filename. It refuses instance
-0 (the login session) unless you set both `SHINY_INSTANCE=0` and `SHINY_LIVE=1`.
+`hypr/scripts/pluginctl.sh` copies the `.so` to a new `mktemp` path under
+`$XDG_RUNTIME_DIR` (mode 0700) on every load so `dlopen` cannot keep a stale
+mapping of the same filename. It refuses instance 0 (the login session) unless
+you set both `SHINY_INSTANCE=0` and `SHINY_LIVE=1`.
 
 ```
 edit src/  →  mise run reload  →  watch the ring  →  repeat

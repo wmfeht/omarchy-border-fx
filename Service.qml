@@ -147,8 +147,19 @@ Item {
     if (root.manifest && root.manifest.__sourceDir)
       return String(root.manifest.__sourceDir).replace(/\/$/, "")
     var u = String(Qt.resolvedUrl("."))
-    if (u.indexOf("file://") === 0)
-      u = u.substring(7)
+    if (u.indexOf("file://") === 0) {
+      var rest = u.substring(7)
+      // file:///path -> /path; file://localhost/path -> /path (not /localhost/path)
+      if (rest.charAt(0) !== "/") {
+        var slash = rest.indexOf("/")
+        rest = slash === -1 ? "/" : rest.substring(slash)
+      }
+      try {
+        u = decodeURIComponent(rest)
+      } catch (e) {
+        u = rest
+      }
+    }
     if (u.charAt(0) !== "/")
       u = "/" + u
     return u.replace(/\/$/, "")

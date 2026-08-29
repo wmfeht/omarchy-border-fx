@@ -41,6 +41,23 @@ function checkScriptShape() {
   check(/mktemp .*hypr-shiny-border\.XXXXXX/.test(session), "install writes a sibling temp")
   check(session.indexOf('mv -f "$tmp" "$SESSION_SO"') !== -1, "install renames over SESSION_SO")
 
+  check(
+    !/grep\s+-v\s+['"]hypr\.shiny-border['"]/.test(ensure),
+    "ensure_hyprland_require does not rewrite hyprland.lua with grep -v hypr.shiny-border"
+  )
+
+  const pluginctl = read("hypr/scripts/pluginctl.sh")
+  check(pluginctl.indexOf('dest="/tmp/hypr-shiny-border-$$.so"') === -1, "pluginctl does not load from /tmp/hypr-shiny-border-$$.so")
+  check(
+    pluginctl.indexOf('STATE="/tmp/hypr-shiny-border.lastso"') === -1 &&
+      pluginctl.indexOf("STATE=/tmp/hypr-shiny-border.lastso") === -1,
+    "pluginctl lastso is not /tmp/hypr-shiny-border.lastso"
+  )
+  check(pluginctl.indexOf("rm -f /tmp/hypr-shiny-border-*.so") === -1, "pluginctl does not glob-rm /tmp/hypr-shiny-border-*.so")
+  check(pluginctl.indexOf("mktemp") !== -1, "pluginctl uses mktemp for the load copy")
+  check(pluginctl.indexOf("XDG_RUNTIME_DIR") !== -1, "pluginctl load dest is under XDG_RUNTIME_DIR")
+  check(pluginctl.indexOf("chmod 0700") !== -1, "pluginctl sets runtime dir mode 0700")
+
   check(ensure.indexOf("hypr-session.sh") !== -1, "hypr-ensure sources hypr-session.sh")
   check(ensure.indexOf("unload_session_so") !== -1, "hypr-ensure waits for unload")
   check(ensure.indexOf("plugin_mapped") !== -1, "hypr-ensure refuses a second mapped copy")
@@ -1418,6 +1435,185 @@ function checkMakefileCompilerRebuild() {
   }
 }
 
+function liveLegacyRequire(text) {
+  return String(text || "")
+    .split(/\r?\n/)
+    .some(function (line) {
+      const trimmed = line.replace(/^\s+/, "")
+      if (trimmed.indexOf("--") === 0)
+        return false
+      const code = trimmed.replace(/\s+--.*$/, "")
+      return /pcall\s*\(\s*require\s*,\s*["']hypr\.shiny-border["']\s*\)/.test(code) ||
+        /require\s*\(\s*["']hypr\.shiny-border["']\s*\)/.test(code) ||
+        /require\s+["']hypr\.shiny-border["']/.test(code)
+    })
+}
+
+function checkEnsureHyprlandLua() {
+  const h = createHarness({})
+  try {
+    const luaPath = path.join(h.env.XDG_CONFIG_HOME, "hypr", "hyprland.lua")
+    const fixture = [
+      "-- user hyprland.lua",
+      'require("hypr.binds")',
+      "-- note: we used to mention hypr.shiny-border in comments; keep this",
+      'pcall(require, "hypr.shiny-border")',
+      'hl.bind({ mods = "SUPER", key = "Q", dispatcher = "killactive" })',
+      "",
+    ].join("\n")
+    fs.writeFileSync(luaPath, fixture)
+    h.env.HYPRLAND_LUA = luaPath
+
+    const r = runEnsure(h, JSON.stringify({ effect: "other" }))
+    const rewritten = fs.existsSync(luaPath) ? fs.readFileSync(luaPath, "utf8") : ""
+    const ensureSrc = read("scripts/hypr-ensure.sh")
+
+    check(r.status === 0, "ensure hyprland.lua rewrite exits 0: " + (r.stderr || r.stdout || ""))
+    check(rewritten.indexOf('require("hypr.binds")') !== -1, "unrelated require survives hyprland.lua rewrite")
+    check(
+      rewritten.indexOf("-- note: we used to mention hypr.shiny-border in comments; keep this") !== -1,
+      "user note mentioning hypr.shiny-border survives"
+    )
+    check(!liveLegacyRequire(rewritten), "live legacy hypr.shiny-border require is gone or commented")
+    check(
+      /pcall\(require, "hypr\.border-fx"\)/.test(rewritten),
+      "hypr.border-fx pcall is present after rewrite"
+    )
+    check(
+      !/grep\s+-v\s+['"]hypr\.shiny-border['"]/.test(ensureSrc),
+      "shipped rewrite is not grep -v 'hypr.shiny-border'"
+    )
+    note(
+      "ensure",
+      "hyprland.lua rewrite status=" +
+        r.status +
+        " liveLegacy=" +
+        liveLegacyRequire(rewritten) +
+        " border-fx=" +
+        /pcall\(require, "hypr\.border-fx"\)/.test(rewritten)
+    )
+    console.log("ensure-hyprland-lua stdout:\n" + (r.stdout || ""))
+    console.log("ensure-hyprland-lua stderr:\n" + (r.stderr || ""))
+    console.log("ensure-hyprland-lua rewritten:\n" + rewritten)
+  } finally {
+    stopHarness(h)
+  }
+}
+
+function walkFiles(dir, acc) {
+  acc = acc || []
+  if (!fs.existsSync(dir))
+    return acc
+  fs.readdirSync(dir).forEach(function (name) {
+    const p = path.join(dir, name)
+    let st
+    try {
+      st = fs.statSync(p)
+    } catch (e) {
+      return
+    }
+    if (st.isDirectory())
+      walkFiles(p, acc)
+    else
+      acc.push({ path: p, mode: st.mode, content: fs.readFileSync(p) })
+  })
+  return acc
+}
+
+function checkPluginctlRuntime() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pluginctl-"))
+  const runtime = path.join(dir, "run")
+  const binDir = path.join(dir, "bin")
+  const logPath = path.join(dir, "hyprctl.log")
+  fs.mkdirSync(runtime)
+  fs.chmodSync(runtime, 0o755)
+  fs.mkdirSync(binDir)
+  const so = path.join(dir, "hypr-shiny-border.so")
+  fs.writeFileSync(so, "DUMMY-SO")
+  const stub = [
+    "#!/usr/bin/env bash",
+    "LOG=" + JSON.stringify(logPath),
+    '{',
+    '  echo "BEGIN $*"',
+    '  i=0',
+    '  for a in "$@"; do',
+    '    i=$((i+1))',
+    '    printf "ARG%d=%s\\n" "$i" "$a"',
+    "  done",
+    '} >> "$LOG"',
+    'if [[ $1 == -i && $3 == plugin && $4 == load ]]; then',
+    '  printf "LOAD_DEST=%s\\n" "$5" >> "$LOG"',
+    '  echo loaded',
+    "  exit 0",
+    "fi",
+    'if [[ $1 == -i && $3 == plugin && $4 == list ]]; then',
+    '  echo "plugins:"',
+    "  exit 0",
+    "fi",
+    "exit 0",
+    "",
+  ].join("\n")
+  fs.writeFileSync(path.join(binDir, "hyprctl"), stub)
+  fs.chmodSync(path.join(binDir, "hyprctl"), 0o755)
+  try {
+    const r = spawnSync("bash", [path.join(root, "hypr/scripts/pluginctl.sh"), "load"], {
+      encoding: "utf8",
+      env: Object.assign({}, process.env, {
+        PATH: binDir + ":" + (process.env.PATH || "/usr/bin:/bin"),
+        XDG_RUNTIME_DIR: runtime,
+        SHINY_SO: so,
+        SHINY_INSTANCE: "1",
+      }),
+      timeout: 10000,
+    })
+    const log = readLog(logPath)
+    check(r.status === 0, "pluginctl load exits 0: " + (r.stderr || r.stdout || ""))
+    const destMatch = log.match(/^LOAD_DEST=(.*)$/m)
+    const dest = destMatch ? destMatch[1] : ""
+    check(dest.length > 0, "pluginctl load dest was recorded")
+    check(
+      dest === runtime || dest.indexOf(runtime + path.sep) === 0,
+      "pluginctl load dest is under XDG_RUNTIME_DIR: " + dest
+    )
+    check(
+      dest.indexOf("/tmp/hypr-shiny-border-") !== 0,
+      "pluginctl dest is not /tmp/hypr-shiny-border-$$.so: " + dest
+    )
+    const destBase = path.basename(dest)
+    check(
+      !/^hypr-shiny-border-\d+\.so$/.test(destBase),
+      "pluginctl dest is not a guessable pid name: " + destBase
+    )
+    check(
+      /^hypr-shiny-border\.[A-Za-z0-9]+$/.test(destBase),
+      "pluginctl dest is an mktemp-style unique file: " + destBase
+    )
+    const runtimeSt = fs.statSync(runtime)
+    check((runtimeSt.mode & 0o777) === 0o700, "pluginctl runtime dir mode is 0700")
+    const files = walkFiles(runtime)
+    const lastso = files.find(function (f) {
+      return String(f.content).trim() === dest
+    })
+    check(!!lastso, "pluginctl lastso state records the load dest")
+    if (lastso) {
+      check(
+        lastso.path === runtime || lastso.path.indexOf(runtime + path.sep) === 0,
+        "pluginctl lastso is under XDG_RUNTIME_DIR: " + lastso.path
+      )
+      check(
+        lastso.path !== "/tmp/hypr-shiny-border.lastso",
+        "pluginctl lastso is not /tmp/hypr-shiny-border.lastso"
+      )
+    }
+    check(fs.existsSync(dest) && fs.readFileSync(dest, "utf8") === "DUMMY-SO", "pluginctl copied the .so to dest")
+    note("ensure", "pluginctl dest=" + dest + " lastso=" + (lastso ? lastso.path : "") + " mode=" + (runtimeSt.mode & 0o777).toString(8))
+    console.log("pluginctl-runtime log:\n" + log)
+    console.log("pluginctl dest=" + dest)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+}
+
 function writeEvidence() {
   const dir = process.env.HYPR_SESSION_EVIDENCE_DIR
   if (!dir)
@@ -1436,6 +1632,8 @@ function writeEvidence() {
 checkScriptShape()
 checkInstallSessionSo()
 checkWaitPluginGone()
+checkEnsureHyprlandLua()
+checkPluginctlRuntime()
 checkTeardownPersist()
 checkEnsureTree()
 checkEnsureHotReloadLoadFailed()

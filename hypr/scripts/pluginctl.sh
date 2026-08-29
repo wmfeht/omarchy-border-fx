@@ -10,7 +10,24 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # In-tree build (hyprpm / nest). User enable builds into XDG_CACHE_HOME.
 SO="${SHINY_SO:-$ROOT/hypr-shiny-border.so}"
-STATE="/tmp/hypr-shiny-border.lastso"
+
+# Load copies and lastso live under $XDG_RUNTIME_DIR (0700), not a guessable
+# world-writable /tmp/hypr-shiny-border-$$.so.
+plugin_runtime_dir() {
+  local runtime="${XDG_RUNTIME_DIR:-}"
+  if [[ -z $runtime ]]; then
+    runtime="/run/user/$(id -u)"
+  fi
+  mkdir -p "$runtime"
+  chmod 0700 "$runtime"
+  local dir="$runtime/hypr-shiny-border"
+  mkdir -p "$dir"
+  chmod 0700 "$dir"
+  printf '%s' "$dir"
+}
+
+_plugin_run="$(plugin_runtime_dir)"
+STATE="${SHINY_LASTSO:-$_plugin_run/lastso}"
 
 die() { echo "pluginctl: $*" >&2; exit 1; }
 
@@ -49,8 +66,9 @@ instance() {
 }
 
 # Hyprland getPluginByPath only rejects the same path. We copy to a new
-# /tmp name every load, so a second load without unload would be a second
-# .so / RTTI domain. Refuse by plugin *name* regardless of path.
+# mktemp name under $XDG_RUNTIME_DIR every load, so a second load without
+# unload would be a second .so / RTTI domain. Refuse by plugin *name*
+# regardless of path.
 PLUGIN_NAME="hypr-shiny-border"
 
 already_loaded_by_name() {
@@ -69,10 +87,15 @@ case "$cmd" in
     if already_loaded_by_name "$target"; then
       die "$PLUGIN_NAME already loaded (refusing a second copy; unload first)"
     fi
-    dest="/tmp/hypr-shiny-border-$$.so"
-    # Sweep leftover copies after the refuse and name check, immediately
+    dest=$(mktemp "$_plugin_run/hypr-shiny-border.XXXXXX") || die "mktemp failed"
+    # Drop the previous dest after the refuse and name check, immediately
     # before cp — a refused load must not delete a copy a retry still needs.
-    rm -f /tmp/hypr-shiny-border-*.so
+    if [[ -f $STATE ]]; then
+      old=$(cat "$STATE" || true)
+      if [[ -n ${old:-} && $old != "$dest" ]]; then
+        rm -f -- "$old"
+      fi
+    fi
     cp -f "$SO" "$dest"
     echo "$dest" > "$STATE"
     hyprctl -i "$target" plugin load "$dest"

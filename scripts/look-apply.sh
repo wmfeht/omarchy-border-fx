@@ -392,7 +392,13 @@ if (( do_eval )); then
   fi
   if hyprctl -i "$HYPRCTL_INSTANCE" plugin list -j 2>/dev/null \
       | jq -e 'any(.[]; .name == "hypr-shiny-border")' >/dev/null 2>&1; then
-    hyprctl -i "$HYPRCTL_INSTANCE" eval "dofile([=[${LUA_FILE}]=])"
+    eval_src=$(LUA_FILE="$LUA_FILE" python3 - <<'PY'
+import os
+p = os.environ["LUA_FILE"]
+print("dofile(\"" + p.replace("\\", "\\\\").replace("\"", "\\\"") + "\")")
+PY
+)
+    hyprctl -i "$HYPRCTL_INSTANCE" eval "$eval_src"
   else
     echo "look-apply: hypr-shiny-border not loaded; skipped eval (wrote $LUA_FILE)" >&2
   fi

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Compositor-free tests for the shared look adapter (JSON ↔ QML ↔ Lua).
 const fs = require("fs")
+const os = require("os")
 const path = require("path")
 const vm = require("vm")
 const { spawnSync } = require("child_process")
@@ -681,6 +682,84 @@ function checkLookApplyTyped() {
   check(luaAssign(typedOk.stdout, "lobe") === "0.2", "lua well-typed lobe")
 }
 
+function checkLookApplyEval() {
+  const script = fs.readFileSync(path.join(root, "scripts/look-apply.sh"), "utf8")
+  check(
+    script.indexOf("dofile([=[${LUA_FILE}]=])") === -1,
+    "look-apply eval is not dofile long-bracket concat of LUA_FILE"
+  )
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "look-eval-"))
+  const binDir = path.join(dir, "bin")
+  const luaDir = path.join(dir, "with]=]bracket")
+  const home = path.join(dir, "home")
+  const config = path.join(dir, "config")
+  const logPath = path.join(dir, "hyprctl.log")
+  fs.mkdirSync(binDir)
+  fs.mkdirSync(luaDir, { recursive: true })
+  fs.mkdirSync(home)
+  fs.mkdirSync(path.join(config, "hypr"), { recursive: true })
+  const luaFile = path.join(luaDir, "border-fx.lua")
+  check(luaFile.indexOf("]=]") !== -1, "eval fixture path contains ]=]")
+
+  const stub = [
+    "#!/usr/bin/env bash",
+    "LOG=" + JSON.stringify(logPath),
+    "{",
+    '  echo "BEGIN $*"',
+    "  i=0",
+    '  for a in "$@"; do',
+    '    i=$((i+1))',
+    '    printf "ARG%d=%s\\n" "$i" "$a"',
+    "  done",
+    '} >> "$LOG"',
+    'if [[ $1 == -i && $3 == plugin && $4 == list ]]; then',
+    "  echo '[{\"name\":\"hypr-shiny-border\"}]'",
+    "  exit 0",
+    "fi",
+    'if [[ $1 == -i && $3 == eval ]]; then',
+    '  printf "EVAL_PAYLOAD=%s\\n" "$4" >> "$LOG"',
+    "  echo ok",
+    "  exit 0",
+    "fi",
+    "exit 0",
+    "",
+  ].join("\n")
+  fs.writeFileSync(path.join(binDir, "hyprctl"), stub)
+  fs.chmodSync(path.join(binDir, "hyprctl"), 0o755)
+
+  try {
+    const r = spawnSync(
+      "bash",
+      [path.join(root, "scripts/look-apply.sh"), "--eval", "--lua", luaFile, "--look-json", "{}"],
+      {
+        encoding: "utf8",
+        env: Object.assign({}, process.env, {
+          PATH: binDir + ":" + (process.env.PATH || "/usr/bin:/bin"),
+          HOME: home,
+          XDG_CONFIG_HOME: config,
+          SESSION_SO: path.join(dir, "dummy.so"),
+        }),
+        timeout: 15000,
+      }
+    )
+    const log = fs.existsSync(logPath) ? fs.readFileSync(logPath, "utf8") : ""
+    check(r.status === 0, "look-apply --eval exits 0: " + (r.stderr || r.stdout || ""))
+    const payloadMatch = log.match(/^EVAL_PAYLOAD=(.*)$/m)
+    const payload = payloadMatch ? payloadMatch[1] : ""
+    check(payload.length > 0, "look-apply --eval recorded an eval payload")
+    check(
+      payload.indexOf("dofile([=[" + luaFile + "]=])") === -1,
+      "eval payload is not dofile([=[LUA_FILE]=]) concat: " + payload
+    )
+    check(payload.indexOf(luaFile) !== -1, "eval payload still names the lua file: " + payload)
+    console.log("look-apply-eval log:\n" + log)
+    console.log("look-apply-eval payload: " + payload)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+}
+
 checkDefaults()
 checkPluginInitDefaults()
 checkMerge()
@@ -690,6 +769,7 @@ checkEntry()
 checkColors()
 checkLookApply()
 checkLookApplyTyped()
+checkLookApplyEval()
 
 if (fails) {
   console.error(fails + " checks failed")
