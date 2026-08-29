@@ -7,6 +7,8 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 # shellcheck source=paths.sh
 source "$root/scripts/paths.sh"
+# shellcheck source=hypr-session.sh
+source "$root/scripts/hypr-session.sh"
 # omarchy plugin add/remove always use this directory, not OMARCHY_PLUGIN_DIR.
 plugins_home="$HOME/.config/omarchy/plugins"
 dest="$plugins_home/$PLUGIN_ID"
@@ -113,10 +115,17 @@ fi
 if [[ -e "$legacy_dest" || -L "$legacy_dest" ]]; then
   omarchy plugin disable "$LEGACY_PLUGIN_ID" 2>/dev/null || true
 fi
-sleep 0.4
+wait_plugin_gone 8 || true
 
 echo "reinstall: purging login-session Hyprland copy"
 bash "$root/scripts/hypr-teardown.sh" --purge || true
+
+if ! wait_plugin_gone 8; then
+  echo "reinstall: Hyprland still has hypr-shiny-border mapped." >&2
+  echo "reinstall: aborting before add --enable so we do not replace a live .so." >&2
+  echo "reinstall: retry, or iterate in a nest: mise run nest && mise run reload" >&2
+  exit 1
+fi
 
 remove_if_installed "$PLUGIN_ID" "$dest"
 remove_if_installed "$LEGACY_PLUGIN_ID" "$legacy_dest"
@@ -125,6 +134,12 @@ if command -v omarchy-shell >/dev/null 2>&1; then
   omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
 fi
 
+# Restart *before* add --enable. Restarting after enable races Service
+# onDestruction (hypr-teardown) with the new service's hypr-ensure, which
+# used to cp -f over the mapped session .so and SIGBUS Hyprland.
+echo "reinstall: omarchy restart shell"
+omarchy restart shell
+
 echo "reinstall: omarchy plugin add $root --enable --yes"
 omarchy plugin add "$add_url" --enable --yes
 
@@ -132,8 +147,5 @@ installed="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
 if [[ -d "$installed/.git" ]]; then
   git -C "$installed" remote set-url origin "$root" 2>/dev/null || true
 fi
-
-echo "reinstall: omarchy restart shell"
-omarchy restart shell
 
 echo "reinstalled $PLUGIN_ID from $root"

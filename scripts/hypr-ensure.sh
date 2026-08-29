@@ -7,6 +7,8 @@ set -euo pipefail
 _script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=paths.sh
 source "$_script_dir/paths.sh"
+# shellcheck source=hypr-session.sh
+source "$_script_dir/hypr-session.sh"
 
 look_json="${LOOK_JSON:-}"
 while (( $# > 0 )); do
@@ -40,23 +42,6 @@ apply_look() {
   else
     "$_script_dir/look-apply.sh" --look-json '{}' "${extra[@]}"
   fi
-}
-
-hypr_pid() {
-  hyprctl instances -j 2>/dev/null \
-    | jq -r --argjson i "$HYPRCTL_INSTANCE" '.[$i].pid // .[0].pid // empty'
-}
-
-loaded_so() {
-  local pid
-  pid=$(hypr_pid || true)
-  [[ -n ${pid:-} && -r /proc/$pid/maps ]] || return 0
-  grep -aE -o '/[^ ]*hypr-shiny-border\.so' "/proc/$pid/maps" 2>/dev/null | head -1 || true
-}
-
-plugin_listed() {
-  hyprctl -i "$HYPRCTL_INSTANCE" plugin list -j 2>/dev/null \
-    | jq -e 'any(.[]; .name == "hypr-shiny-border")' >/dev/null 2>&1
 }
 
 ensure_hyprland_require() {
@@ -98,13 +83,18 @@ build_so() {
 }
 
 copy_session_so() {
-  local src="$1"
-  mkdir -p "$(dirname "$SESSION_SO")"
-  cp -f "$src" "$SESSION_SO"
+  install_session_so "$1"
 }
 
 load_session_so() {
   hyprctl -i "$HYPRCTL_INSTANCE" plugin load "$SESSION_SO"
+}
+
+# Unload the session copy. Returns 0 only when Hyprland no longer lists or
+# maps it — copy+load after a failed unload is how CRenderPass::clear SIGBUS'd.
+unload_session_so() {
+  hyprctl -i "$HYPRCTL_INSTANCE" plugin unload "$SESSION_SO" || true
+  wait_plugin_gone 8
 }
 
 if ! command -v hyprctl >/dev/null 2>&1; then
@@ -127,9 +117,15 @@ if plugin_listed; then
   if [[ $path == "$SESSION_SO" ]]; then
     if sources_newer_than "$SESSION_SO"; then
       if build_so; then
-        hyprctl -i "$HYPRCTL_INSTANCE" plugin unload "$SESSION_SO" || true
-        copy_session_so "$BUILD_DIR/hypr-shiny-border.so"
-        load_session_so || true
+        if unload_session_so; then
+          copy_session_so "$BUILD_DIR/hypr-shiny-border.so"
+          load_session_so || true
+        else
+          notify "hypr-shiny-border still mapped after unload; not replacing the live .so. Chrome is on."
+          apply_look --eval
+          status reuse
+          exit 0
+        fi
       fi
     fi
     apply_look --eval
@@ -143,6 +139,13 @@ if plugin_listed; then
     exit 0
   fi
   notify "hypr-shiny-border already loaded from $path; not loading a second copy."
+  apply_look --eval
+  status reuse
+  exit 0
+fi
+
+if plugin_mapped; then
+  notify "hypr-shiny-border is still mapped from $(loaded_so); not loading a second copy."
   apply_look --eval
   status reuse
   exit 0

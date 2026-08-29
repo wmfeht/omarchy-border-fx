@@ -1,4 +1,4 @@
-# Shared paths for hypr-ensure / hypr-teardown / look-apply.
+# Shared paths for hypr-ensure / hypr-teardown / look-apply / reinstall.
 # Sourced, not executed. No sudo. User-level only.
 
 PLUGIN_ID="${PLUGIN_ID:-qs.border-fx}"

@@ -8,7 +8,9 @@
 // that light. Application is a parallel projection onto the light axis,
 // not a conic sweep around the center — a wide panel and a tall one with
 // the same heading share a direction. Iso-lines are perpendicular to the
-// light; 0 is the facing support of this rounded rect, 1 is the far side.
+// light; 0 is the facing support of this rounded rect. Coverage still
+// runs to the far side; the color ramp is scaled onto the lit band
+// (lobe / pulse spread) so stop 100 is the comet edge, not the far side.
 // The two halves of the light axis still pick primary vs clockwise ramps.
 //
 // Wrapper: Qt 6 ShaderEffect UBO, item-local Y-down coords.
@@ -76,8 +78,8 @@ float shinyPosAt(vec4 p0, vec4 p1, int i) {
     return p1.w;
 }
 
-// Piecewise-linear chain over one half of the light axis: u 0 at the
-// facing support, 1 at the far side. The 1e-4 guard turns coincident
+// Piecewise-linear chain over one half of the lit band: u 0 at the
+// facing support, 1 at the lobe edge. The 1e-4 guard turns coincident
 // stops into a hard step instead of a divide by zero.
 vec3 shinyRampColor(bool cw, float u) {
     mat4 m0 = cw ? gradColorsCW0 : gradColors0;
@@ -135,7 +137,7 @@ void main() {
     float extent = innerB.x * abs(light.x) + innerB.y * abs(light.y) + rOut;
     extent = max(extent, 1.0);
 
-    // 0 at the lit support, 1 at the far side. Same 0..1 as the stop list.
+    // 0 at the lit support, 1 at the far side. Coverage / cone use this.
     float u  = clamp(0.5 - 0.5 * dot(pUp, light) / extent, 0.0, 1.0);
     float d0 = u * 0.5;
     // Negative cross = clockwise of the light axis (old t > 0.5 half).
@@ -150,6 +152,9 @@ void main() {
         spread   = max(mix(range * 0.45, range * 1.35, pulse), 0.04);
         thickNow = thick * mix(0.78, 1.18, pulse);
     }
+    // Stop list fills the comet: 0 at the facing support, 1 at spread.
+    // Past the lobe the last stop is held; cone alpha still crushes it.
+    float uRamp = clamp(d0 / max(spread, 1.0e-4), 0.0, 1.0);
 
     float cone = 1.0 - smoothstep(0.0, spread, d0);
     cone       = pow(max(cone, 0.0), 1.65);
@@ -190,11 +195,11 @@ void main() {
     float hot = pow(cone, 2.6);
     vec3  rgb;
     if (gradCount >= 2) {
-        // Stop 0 at the lit support, last stop at the far side. Each half
+        // Stop 0 at the lit support, last stop at the lobe edge. Each half
         // of the light axis runs facing → far, so the geometry itself is
         // seamless; only mismatched endpoint colors between the halves
         // can show a seam. Same brightness profile as the classic branch.
-        vec3 g = shinyRampColor(cw, u);
+        vec3 g = shinyRampColor(cw, uRamp);
         rgb = mix(g * mix(0.22, 1.0, pow(cone, 0.9)), vec3(1.0), hot * 0.95);
     } else {
         vec3 dim = colorSRGB.rgb * 0.22;

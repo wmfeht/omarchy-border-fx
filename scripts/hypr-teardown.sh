@@ -8,6 +8,8 @@ set -euo pipefail
 _script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=paths.sh
 source "$_script_dir/paths.sh"
+# shellcheck source=hypr-session.sh
+source "$_script_dir/hypr-session.sh"
 
 purge=0
 while (( $# > 0 )); do
@@ -21,24 +23,6 @@ while (( $# > 0 )); do
   esac
 done
 
-hypr_pid() {
-  hyprctl instances -j 2>/dev/null \
-    | jq -r --argjson i "$HYPRCTL_INSTANCE" '.[$i].pid // .[0].pid // empty'
-}
-
-loaded_so() {
-  local pid
-  pid=$(hypr_pid || true)
-  [[ -n ${pid:-} && -r /proc/$pid/maps ]] || return 0
-  grep -aE -o '/[^ ]*hypr-shiny-border\.so' "/proc/$pid/maps" 2>/dev/null | head -1 || true
-}
-
-plugin_listed() {
-  command -v hyprctl >/dev/null 2>&1 \
-    && hyprctl -i "$HYPRCTL_INSTANCE" plugin list -j 2>/dev/null \
-      | jq -e 'any(.[]; .name == "hypr-shiny-border")' >/dev/null 2>&1
-}
-
 disable_look() {
   "$_script_dir/look-apply.sh" --disabled --look-json "${LOOK_JSON:-{}}" "$@" || true
 }
@@ -46,7 +30,7 @@ disable_look() {
 if command -v hyprctl >/dev/null 2>&1 && plugin_listed; then
   path=$(loaded_so)
   if [[ ${path:-} == "$SESSION_SO" ]]; then
-    if hyprctl -i "$HYPRCTL_INSTANCE" plugin unload "$SESSION_SO"; then
+    if hyprctl -i "$HYPRCTL_INSTANCE" plugin unload "$SESSION_SO" && wait_plugin_gone 8; then
       echo "hypr-teardown: unloaded $SESSION_SO"
     else
       echo "hypr-teardown: unload refused; setting enabled = false" >&2

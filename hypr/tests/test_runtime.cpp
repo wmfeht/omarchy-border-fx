@@ -484,6 +484,31 @@ static void checkGradientCwSide() {
     CHECK(cw.count == SHINY_MAX_GRADIENT_STEPS);
 }
 
+static void checkGradientLobeU() {
+    // lobe 0.5 covers d0 in [0, 0.5] = the full axis → identity.
+    CHECK(shinyGradientLobeU(0.f, 0.5f) == 0.f);
+    CHECK(std::fabs(shinyGradientLobeU(0.5f, 0.5f) - 0.5f) < 1e-6f);
+    CHECK(shinyGradientLobeU(1.f, 0.5f) == 1.f);
+
+    // Default-ish lobe 0.18: comet edge is uAxis = 2 * 0.18 = 0.36.
+    CHECK(std::fabs(shinyGradientLobeU(0.36f, 0.18f) - 1.f) < 1e-5f);
+    CHECK(std::fabs(shinyGradientLobeU(0.18f, 0.18f) - 0.5f) < 1e-5f);
+
+    // User lobe 0.1: uAxis 0.2 is the comet edge; past that holds 1.
+    CHECK(shinyGradientLobeU(0.f, 0.1f) == 0.f);
+    CHECK(std::fabs(shinyGradientLobeU(0.1f, 0.1f) - 0.5f) < 1e-5f);
+    CHECK(std::fabs(shinyGradientLobeU(0.2f, 0.1f) - 1.f) < 1e-5f);
+    CHECK(shinyGradientLobeU(1.f, 0.1f) == 1.f);
+
+    // Spread below the shader floor (0.04) is floored, not a divide-by-zero.
+    CHECK(shinyGradientLobeU(0.08f, 0.f) == 1.f);   // 0.08 * 0.5 / 0.04 = 1
+    CHECK(std::fabs(shinyGradientLobeU(0.04f, 0.01f) - 0.5f) < 1e-5f);
+
+    // Axis u is clamped before the scale.
+    CHECK(shinyGradientLobeU(-1.f, 0.18f) == 0.f);
+    CHECK(shinyGradientLobeU(2.f, 0.18f) == 1.f);
+}
+
 static void checkWrapComposite() {
     // Far-side crushed highlight: ~5.5% alpha, premultiplied. Drive the
     // shipped helper — do not hard-code the mix result.
@@ -576,6 +601,7 @@ int main() {
     checkShimmer();
     checkGradient();
     checkGradientPositions();
+    checkGradientLobeU();
     checkGradientCwSide();
     checkWrapComposite();
     checkEffectiveBorderSize();

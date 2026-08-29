@@ -79,16 +79,16 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     // Single-color default = off (a ramp needs two stops). The gradient's own
     // angle is ignored: the comet heading is pin_deg + angle_offset.
     g_cfg.gradient     = makeShared<Config::Values::CGradientValue>("plugin:shiny-border:gradient",
-                                                                    "Multi-step comet ramp, head first; fewer than two colors keeps col.a/col.b; angle is ignored",
+                                                                    "Multi-step comet ramp, head first; last stop is the lobe edge; fewer than two colors keeps col.a/col.b; angle is ignored",
                                                                     CHyprColor{0xee33ccff});
     g_cfg.gradientPositions = makeShared<Config::Values::CStringValue>("plugin:shiny-border:gradient_positions",
-                                                                       "Ramp position per gradient color, percent of the total length (\"0 70 100\"); empty = even spacing",
+                                                                       "Ramp position per gradient color, percent of the lit band (\"0 70 100\"); empty = even spacing",
                                                                        "");
     g_cfg.gradientCw        = makeShared<Config::Values::CGradientValue>("plugin:shiny-border:gradient_cw",
                                                                          "Clockwise-half colors; fewer than two mirrors gradient; match first/last colors to avoid seams",
                                                                          CHyprColor{0xee33ccff});
     g_cfg.gradientPositionsCw = makeShared<Config::Values::CStringValue>("plugin:shiny-border:gradient_positions_cw",
-                                                                         "Clockwise-half ramp positions, percent (\"0 30 100\"); empty = mirror / even spacing",
+                                                                         "Clockwise-half ramp positions, percent of the lit band (\"0 30 100\"); empty = mirror / even spacing",
                                                                          "");
 
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.enabled);

@@ -293,6 +293,33 @@ function checkGradientCwSide() {
   check(cw.count === Gradient.MAX_STEPS, "own over-cap clamps")
 }
 
+function checkGradientLobeU() {
+  // Twin of shinyGradientLobeU: d0 = u * 0.5, then / spread (min 0.04).
+  check(Gradient.lobeU(0, 0.5) === 0, "lobe 0.5 head")
+  check(approx(Gradient.lobeU(0.5, 0.5), 0.5), "lobe 0.5 mid is identity")
+  check(Gradient.lobeU(1, 0.5) === 1, "lobe 0.5 far is identity")
+
+  check(approx(Gradient.lobeU(0.36, 0.18), 1), "lobe 0.18 edge at u=0.36")
+  check(approx(Gradient.lobeU(0.18, 0.18), 0.5), "lobe 0.18 half")
+
+  check(Gradient.lobeU(0, 0.1) === 0, "lobe 0.1 head")
+  check(approx(Gradient.lobeU(0.1, 0.1), 0.5), "lobe 0.1 half")
+  check(approx(Gradient.lobeU(0.2, 0.1), 1), "lobe 0.1 edge at u=0.2")
+  check(Gradient.lobeU(1, 0.1) === 1, "lobe 0.1 far holds last stop")
+
+  check(Gradient.lobeU(0.08, 0) === 1, "spread 0 floors to 0.04")
+  check(approx(Gradient.lobeU(0.04, 0.01), 0.5), "tiny spread floors")
+  check(Gradient.lobeU(-1, 0.18) === 0, "axis u clamps low")
+  check(Gradient.lobeU(2, 0.18) === 1, "axis u clamps high")
+
+  const rgb = [rgba(1, 0, 0), rgba(0, 0, 1)]
+  const even = Gradient.resolvePositions("", 2)
+  const head = Gradient.sample(rgb, even.pos, 2, Gradient.lobeU(0, 0.1))
+  const tail = Gradient.sample(rgb, even.pos, 2, Gradient.lobeU(0.2, 0.1))
+  check(approx(head.r, 1) && head.b === 0, "lobe-scaled even: head is stop 0")
+  check(tail.r === 0 && approx(tail.b, 1), "lobe-scaled even: comet edge is last stop")
+}
+
 function checkLightProjection() {
   // Mirrors shaders/shiny.frag: angle is a directional light, u is the
   // parallel projection onto that axis, normalized by this panel's
@@ -353,6 +380,9 @@ function checkWrapSource() {
   check(frag.indexOf("decoration:shadow") === -1, "qs frag does not consult decoration:shadow")
   check(qml.indexOf("border.color: root.baseColor") === -1, "QML does not paint a doubled wrap stroke")
   check(qml.indexOf("property vector4d baseColor") !== -1, "ShaderEffect uploads baseColor")
+  check(frag.indexOf("float uRamp = clamp(d0 / max(spread, 1.0e-4), 0.0, 1.0)") !== -1,
+        "qs ramp scaled onto spread")
+  check(frag.indexOf("shinyRampColor(cw, uRamp)") !== -1, "qs samples uRamp not full-axis u")
 }
 
 checkPinnedHeading()
@@ -360,6 +390,7 @@ checkTickMs()
 checkShimmer()
 checkGradient()
 checkGradientPositions()
+checkGradientLobeU()
 checkGradientCwSide()
 checkLightProjection()
 checkWrapSource()

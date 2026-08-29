@@ -1,10 +1,10 @@
 .pragma library
 
 // Port of shinyGradientStepCount / shinyGradientResolvePositions /
-// shinyGradientResolveCwSide / shinyGradientSample from hypr-shiny-border
-// runtime.cpp (cursor/gradient-steps-bd3a). Stops are {r,g,b,a} in 0..1,
-// not packed ARGB — QML already has colors. Positions are percent of
-// each half of the light axis (0 = facing support, 100 = far side).
+// shinyGradientResolveCwSide / shinyGradientSample / shinyGradientLobeU
+// from hypr-shiny-border runtime.cpp. Stops are {r,g,b,a} in 0..1, not
+// packed ARGB — QML already has colors. Positions are percent of the
+// lit band (0 = facing support, 100 = lobe edge).
 
 var MAX_STEPS = 8
 
@@ -26,6 +26,28 @@ function stopPos(i, count) {
   if (clamped > count - 1)
     clamped = count - 1
   return clamped / (count - 1)
+}
+
+// Full-axis u (0 = facing, 1 = far side) → lit-band u (0 = head, 1 =
+// lobe edge). Twin of shinyGradientLobeU / shader uRamp. spread is the
+// applied lobe (already pulse-modulated in the shader); values below
+// 0.04 floor like max(range, 0.04).
+function lobeU(uAxis, spread) {
+  var u = Number(uAxis) || 0
+  if (u < 0)
+    u = 0
+  if (u > 1)
+    u = 1
+  var d0 = u * 0.5
+  var s = Number(spread)
+  if (!(s >= 0.04))
+    s = 0.04
+  var x = d0 / s
+  if (x < 0)
+    x = 0
+  if (x > 1)
+    x = 1
+  return x
 }
 
 function evenPositions(count) {

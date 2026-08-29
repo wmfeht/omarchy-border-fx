@@ -170,7 +170,8 @@ static void checkShaderSource() {
     CHECK(frag.find("uniform vec4  gradColorsCW[MAX_STEPS];") != std::string::npos);
     CHECK(frag.find("uniform float gradPosCW[MAX_STEPS];") != std::string::npos);
     CHECK(frag.find("uniform int   gradCountCW;") != std::string::npos);
-    CHECK(frag.find("shinyRampColor(cw, u)") != std::string::npos);
+    CHECK(frag.find("shinyRampColor(cw, uRamp)") != std::string::npos);
+    CHECK(frag.find("float uRamp = clamp(d0 / max(spread, 1.0e-4), 0.0, 1.0)") != std::string::npos);
     CHECK(frag.find("shinyRampColor(t > 0.5, u)") == std::string::npos);
 
     // Wrapping baseColor stroke: same composite as shaders/shiny.frag, glow
@@ -187,6 +188,8 @@ static void checkShaderSource() {
     CHECK(qsFrag.find("vec4  baseColor;") != std::string::npos);
     CHECK(qsFrag.find("vec4 shinyWrapComposite") != std::string::npos);
     CHECK(qsFrag.find("shinyWrapComposite(highlight, baseColor, wrapRing)") != std::string::npos);
+    CHECK(qsFrag.find("shinyRampColor(cw, uRamp)") != std::string::npos);
+    CHECK(qsFrag.find("float uRamp = clamp(d0 / max(spread, 1.0e-4), 0.0, 1.0)") != std::string::npos);
 }
 
 static void checkProductionWiring() {
@@ -263,6 +266,7 @@ static void checkProductionWiring() {
     CHECK(plug.find("plugin:shiny-border:gradient_positions") != std::string::npos);
     CHECK(deco.find("shinyGradientResolvePositions") != std::string::npos);
     CHECK(deco.find("shinyGradientSample") != std::string::npos);
+    CHECK(runtime.find("shinyGradientLobeU") != std::string::npos);
     CHECK(pass.find("glUniform1fv") != std::string::npos);
     CHECK(pass.find("m_data.shared.stopPos") != std::string::npos);
 

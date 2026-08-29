@@ -26,6 +26,7 @@ cp -f "$root/manifest.json" "$root/Service.qml" "$dest/"
 cp -f "$root/qml/"*.qml "$root/qml/"*.js "$dest/qml/"
 cp -f "$root/shaders/shiny.frag.qsb" "$dest/shaders/"
 cp -f "$root/scripts/paths.sh" \
+      "$root/scripts/hypr-session.sh" \
       "$root/scripts/look-apply.sh" \
       "$root/scripts/hypr-ensure.sh" \
       "$root/scripts/hypr-teardown.sh" \

@@ -66,8 +66,8 @@ uniform int   gradCountCW;
 const float TAU = 6.28318530718;
 const float AA  = 1.25;
 
-// Piecewise-linear chain over one half of the light axis: u 0 at the
-// facing support, 1 at the far side. The 1e-4 guard turns coincident
+// Piecewise-linear chain over one half of the lit band: u 0 at the
+// facing support, 1 at the lobe edge. The 1e-4 guard turns coincident
 // stops into a hard step instead of a divide by zero.
 vec3 shinyRampColor(bool cw, float u) {
     vec3 g = cw ? gradColorsCW[0].rgb : gradColors[0].rgb;
@@ -122,7 +122,7 @@ void main() {
     float extent = innerB.x * abs(light.x) + innerB.y * abs(light.y) + rOut;
     extent = max(extent, 1.0);
 
-    // 0 at the lit support, 1 at the far side. Same 0..1 as the stop list.
+    // 0 at the lit support, 1 at the far side. Coverage / cone use this.
     float u  = clamp(0.5 - 0.5 * dot(pUp, light) / extent, 0.0, 1.0);
     float d0 = u * 0.5;
     // Negative cross = clockwise of the light axis (old t > 0.5 half).
@@ -137,6 +137,9 @@ void main() {
         spread   = max(mix(range * 0.45, range * 1.35, pulse), 0.04);
         thickNow = thick * mix(0.78, 1.18, pulse);
     }
+    // Stop list fills the comet: 0 at the facing support, 1 at spread.
+    // Past the lobe the last stop is held; cone alpha still crushes it.
+    float uRamp = clamp(d0 / max(spread, 1.0e-4), 0.0, 1.0);
 
     float cone = 1.0 - smoothstep(0.0, spread, d0);
     cone       = pow(max(cone, 0.0), 1.65);
@@ -177,11 +180,11 @@ void main() {
     float hot = pow(cone, 2.6);
     vec3  rgb;
     if (gradCount >= 2) {
-        // Stop 0 at the lit support, last stop at the far side. Each half
+        // Stop 0 at the lit support, last stop at the lobe edge. Each half
         // of the light axis runs facing → far, so the geometry itself is
         // seamless; only mismatched endpoint colors between the halves
         // can show a seam. Same brightness profile as the classic branch.
-        vec3 g = shinyRampColor(cw, u);
+        vec3 g = shinyRampColor(cw, uRamp);
         rgb = mix(g * mix(0.22, 1.0, pow(cone, 0.9)), vec3(1.0), hot * 0.95);
     } else {
         vec3 dim = colorSRGB.rgb * 0.22;

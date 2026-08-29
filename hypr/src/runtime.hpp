@@ -70,15 +70,23 @@ inline constexpr int SHINY_MAX_GRADIENT_STEPS = 8;
 int shinyGradientStepCount(int configured);
 
 // Normalized ramp position of stop i among count stops when spacing is
-// even: 0 at the comet head, 1 at the far side. count < 2 or a lone stop
+// even: 0 at the comet head, 1 at the lobe edge. count < 2 or a lone stop
 // pins to 0.
 float shinyGradientStopPos(int i, int count);
+
+// Map full-axis u (0 = facing support, 1 = far side) onto the lit band.
+// Shader: d0 = u * 0.5, cone occupies d0 in [0, spread]. spread is the
+// applied lobe (config / shimmer-scaled range, pulse-modulated, floored
+// at 0.04). Returns 0 at the head, 1 at the lobe edge, and stays 1 past
+// it. lobe 0.5 is identity (uAxis maps to itself). Twin of uRamp in
+// SHINY_FRAG / shaders/shiny.frag.
+float shinyGradientLobeU(float uAxis, float spread);
 
 // plugin:shiny-border:gradient_positions → per-stop ramp positions.
 // Always fills out[0..SHINY_MAX_GRADIENT_STEPS-1] — even spacing first,
 // then the custom spec on top when it is usable. Returns true only when
 // the spec applied. The spec is one percentage per color (0 = head,
-// 100 = far side), separated by spaces and/or commas, optional trailing
+// 100 = lobe edge), separated by spaces and/or commas, optional trailing
 // '%'. Anything else — empty spec, count mismatch, junk tokens, count < 2
 // — keeps even spacing. Values clamp into [0, 100] and each stop clamps
 // up to its predecessor, so the sequence is non-decreasing.
@@ -112,7 +120,7 @@ void shinyWrapComposite(const float highlightPremul[4], const float baseStraight
 //     cwPosSpec alone can still reshape it; empty / invalid spec is an
 //     exact mirror of the primary positions.
 // Nothing forces the first/last cw colors to match the primary side —
-// mismatched endpoints show a seam at the head / far side (documented).
+// mismatched endpoints show a seam at the head / lobe edge (documented).
 struct ShinyGradientSide {
     uint64_t stops[SHINY_MAX_GRADIENT_STEPS] = {};
     float    pos[SHINY_MAX_GRADIENT_STEPS]   = {};
@@ -129,7 +137,7 @@ void shinyGradientResolveCwSide(const uint64_t primaryStops[SHINY_MAX_GRADIENT_S
 // borderSize is logical (unscaled) px — SHADER_THICK / CBorderPassElement
 // GL scale once. Do not store already-scaled px here.
 // stopCount 0 = classic col.a/col.b comet; 2..SHINY_MAX_GRADIENT_STEPS =
-// multi-step ramp through stops[0..stopCount-1] (head → far side), each
+// multi-step ramp through stops[0..stopCount-1] (head → lobe edge), each
 // stop placed at stopPos (normalized, from shinyGradientResolvePositions).
 // The CW trio is the clockwise half (shinyGradientResolveCwSide) — a
 // mirror of the primary side unless gradient_cw / gradient_positions_cw

@@ -41,8 +41,8 @@ Item {
 
   // Multi-step ramp, facing support first. Fewer than two colors keeps
   // colA/colB. Stops match looknfeel.lua (RRGGBBAA → Qt #AARRGGBB). Last
-  // stop is the far side of the light axis, not the wrapping teal — that
-  // is baseColor.
+  // stop is the lobe edge of the comet, not the wrapping teal — that is
+  // baseColor. The shader scales 0…100 onto the drawn lit band.
   property var gradient: [
     "#ee33ccff",
     "#ee1ad4c0",

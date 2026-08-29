@@ -33,8 +33,9 @@ struct SShinyConfig {
     // replace it, first color at the head. The gradient's own angle is
     // ignored — the heading is pin_deg + angle_offset.
     SP<Config::Values::CGradientValue> gradient;
-    // Per-stop positions, one percentage per gradient color ("0 70 100").
-    // Empty (default), count mismatch, or junk = even spacing.
+    // Per-stop positions, one percentage per gradient color ("0 70 100"),
+    // of the lit band (lobe), not the full window. Empty (default), count
+    // mismatch, or junk = even spacing.
     SP<Config::Values::CStringValue>   gradientPositions;
     // Clockwise-half override. Unset (single-color default / empty spec)
     // mirrors the primary side; gradient_positions_cw alone reshapes the

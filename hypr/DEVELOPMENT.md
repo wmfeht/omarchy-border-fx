@@ -38,7 +38,7 @@ that light, projected along the axis using this window's width and height.
   shader gets `gradColors[8]` / `gradPos[8]` / `gradCount` — raw
   `glUniform*` uploads, since those names are not in `CShader`'s lookup
   table — and ramps piecewise-linearly from the facing support (stop 0) to
-  the far side of the light axis, keeping the classic brightness / alpha shaping;
+  the lobe edge (`uRamp = d0 / spread`), keeping the classic brightness / alpha shaping;
   `gradCount < 2` takes the untouched two-color branch. The fallback builds
   a multi-stop `CGradientValueData` from the same list; custom positions
   are baked in by resampling the ramp at 8 even points, because Hyprland's
@@ -48,14 +48,16 @@ that light, projected along the axis using this window's width and height.
 - per-side gradient: `gradient_cw` / `gradient_positions_cw` override the
   clockwise half of the light axis (negative 2D cross of heading × point).
   `u` is the parallel projection onto that axis, 0 at the facing support
-  and 1 at the far side. `shinyGradientResolveCwSide` resolves the half CPU-side: own
+  and 1 at the far side. The color ramp uses `uRamp = d0 / spread` so 0…1
+  is the lit band, not the full axis (`shinyGradientLobeU` is the CPU
+  twin). `shinyGradientResolveCwSide` resolves the half CPU-side: own
   colors → own positions (empty spec = even); inherited colors → the spec
   alone can reshape, empty spec = exact mirror; primary ramp off = cw off.
   The result rides in `stopsCW` / `stopPosCW` / `stopCountCW` and a second
   uniform trio (`gradColorsCW` / `gradPosCW` / `gradCountCW`); the shared
   `shinyRampColor(bool cw, float u)` GLSL function picks the set per
   fragment. Endpoint-color equivalence between the halves is deliberately
-  not enforced — mismatched first/last colors seam at the head / far side
+  not enforced — mismatched first/last colors seam at the head / lobe edge
   (documented in the README). The fallback linear gradient cannot express
   asymmetry and keeps drawing the primary side.
 - wrapping `baseColor` stroke: `plugin:shiny-border:base_color` (default

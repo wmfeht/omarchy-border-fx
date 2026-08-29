@@ -60,6 +60,12 @@ float shinyGradientStopPos(int i, int count) {
     return static_cast<float>(clamped) / static_cast<float>(count - 1);
 }
 
+float shinyGradientLobeU(float uAxis, float spread) {
+    const float d0 = std::clamp(uAxis, 0.f, 1.f) * 0.5f;
+    const float s  = std::max(spread, 0.04f);
+    return std::clamp(d0 / s, 0.f, 1.f);
+}
+
 bool shinyGradientResolvePositions(const char* spec, int count, float out[SHINY_MAX_GRADIENT_STEPS]) {
     for (int i = 0; i < SHINY_MAX_GRADIENT_STEPS; i++)
         out[i] = shinyGradientStopPos(i, count);
