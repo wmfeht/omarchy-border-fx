@@ -509,7 +509,8 @@ static void checkProductionWiring() {
     // uploaded as gradPos, and baked into the fallback by resampling.
     CHECK(plug.find("plugin:shiny-border:gradient_positions") != std::string::npos);
     CHECK(deco.find("shinyGradientResolvePositions") != std::string::npos);
-    CHECK(deco.find("shinyGradientSample") != std::string::npos);
+    CHECK(deco.find("shinyLinearFallbackElements") != std::string::npos);
+    CHECK(pass.find("shinyGradientSample") != std::string::npos);
     CHECK(runtime.find("shinyGradientLobeU") != std::string::npos);
     CHECK(pass.find("glUniform1fv") != std::string::npos);
     CHECK(pass.find("m_data.shared.stopPos") != std::string::npos);

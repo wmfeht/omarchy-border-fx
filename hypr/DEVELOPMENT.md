@@ -159,10 +159,14 @@ scripts/pluginctl.sh
 - **Hash check** in `PLUGIN_INIT`. Skipping it is how plugins SIGSEGV after the
   next compositor update.
 - **Lua key is `shiny_border`.** Hyphens become underscores.
-- **`PLUGIN_EXIT`** must reset `Event::bus()` listeners, `m_renderPass.clear()`
-  the leftover already-rendered pass, and destroy the shader *before*
-  `dlclose`. Hyprland strips decorations; it does not flush plugin pass
-  elements. Surgical `removeAllOfType("CShinyPassElement")` does not recurse
-  into nested transformer passes. Do not `removeAllOfType("CBorderPassElement")`
+- **`PLUGIN_EXIT`** must reset `Event::bus()` listeners, mark teardown (which
+  bumps the pass-element epoch so leftover `CShinyPassElement::draw` no-ops),
+  recurse-remove leftover `CShinyPassElement` from each owning pass (including
+  nested transformer children recorded at construction), and destroy the
+  shader *before* `dlclose`. Do **not** `m_renderPass.clear()` — that drops
+  stock borders and windows already queued in the frame. Hyprland strips
+  decorations; it does not flush plugin pass elements.
+  `removeAllOfType("CShinyPassElement")` does not recurse, so unload walks the
+  owner-pass registry instead. Do not `removeAllOfType("CBorderPassElement")`
   — that pass is also the stock border.
 - Function hooks are a last resort. This plugin uses `Event::bus()`.

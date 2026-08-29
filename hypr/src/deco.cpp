@@ -288,46 +288,20 @@ void CShinyBorder::draw(PHLMONITOR pMonitor, float const& a) {
         data.lobe         = lobe;
         data.thickScale   = thickScale;
         data.mirror       = g_cfg.mirror->value();
+        data.customPos    = customPos;
+        data.window       = m_window;
         g_pHyprRenderer->addPassElement(makeUnique<CShinyPassElement>(data));
         return;
     }
 
-    CBox windowBox = outerBox.copy().expand(-mapped.fallback.expandPx).round();
-
-    // Same stop list as the shader: the ramp when configured, col.a/col.b
-    // otherwise. CBorderPassElement interpolates multi-stop natively but
-    // only with even spacing, so custom positions are baked in by
-    // resampling the positioned ramp at evenly spaced points.
-    std::vector<CHyprColor> stops;
-    if (mapped.fallback.shared.stopCount >= 2 && customPos) {
-        stops.reserve(SHINY_MAX_GRADIENT_STEPS);
-        for (int i = 0; i < SHINY_MAX_GRADIENT_STEPS; i++) {
-            float rgba[4];
-            shinyGradientSample(mapped.fallback.shared.stops, mapped.fallback.shared.stopPos,
-                                mapped.fallback.shared.stopCount, shinyGradientStopPos(i, SHINY_MAX_GRADIENT_STEPS),
-                                rgba);
-            stops.emplace_back(rgba[0], rgba[1], rgba[2], rgba[3]);
-        }
-    } else if (mapped.fallback.shared.stopCount >= 2) {
-        stops.reserve(sc<size_t>(mapped.fallback.shared.stopCount));
-        for (int i = 0; i < mapped.fallback.shared.stopCount; i++)
-            stops.emplace_back(mapped.fallback.shared.stops[i]);
-    } else {
-        stops = {CHyprColor{mapped.fallback.shared.colA}, CHyprColor{mapped.fallback.shared.colB}};
-    }
-    Config::CGradientValueData grad(std::move(stops), drawAngle);
-
-    CBorderPassElement::SBorderData data;
-    data.box           = windowBox;
-    data.grad1         = grad;
-    data.round         = mapped.fallback.shared.rounding;
-    data.outerRound    = mapped.fallback.shared.outerRound;
-    data.roundingPower = mapped.fallback.shared.roundingPower;
-    data.a             = mapped.fallback.shared.a;
-    data.borderSize    = mapped.fallback.shared.borderSize;
-    data.window        = m_window;
-
-    g_pHyprRenderer->addPassElement(makeUnique<CBorderPassElement>(data));
+    CShinyPassElement::SData fallback;
+    fallback.shared    = mapped.fallback.shared;
+    fallback.box       = outerBox;
+    fallback.angle     = drawAngle;
+    fallback.customPos = customPos;
+    fallback.window    = m_window;
+    for (auto& el : shinyLinearFallbackElements(fallback, pMonitor->m_scale))
+        g_pHyprRenderer->addPassElement(std::move(el));
 }
 
 eDecorationType CShinyBorder::getDecorationType() {

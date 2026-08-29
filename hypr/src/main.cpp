@@ -207,16 +207,10 @@ APICALL EXPORT void PLUGIN_EXIT() {
     g_onConfigReloaded.reset();
 
     // Leftover draw() must not compile a new program into a dying .so.
-    markShinyTeardown();
-
-    // Leftover pass is already-rendered dead data. clear() destroys nested
-    // CTransformedWindowPassElement → nested CShinyPassElement before dlclose.
-    // removeAllOfType("CShinyPassElement") does not recurse.
-    // Do not remove CBorderPassElement: that is the stock border too.
-    if (g_pHyprRenderer)
-        g_pHyprRenderer->m_renderPass.clear();
-
-    destroyShinyShader();
+    // Recurse-remove this plugin's pass elements (including nested transformer
+    // children) via the owner-pass registry — do not wipe the compositor's
+    // whole pass, which drops stock borders and windows already queued.
+    shinyOnPluginExit();
 
     // Destroy before dlclose so a later config reload cannot flushCaches()
     // through a pointer into unmapped plugin text.

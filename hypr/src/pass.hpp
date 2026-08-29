@@ -2,6 +2,9 @@
 
 #include "runtime.hpp"
 
+#include <cstdint>
+
+#include <hyprland/src/desktop/DesktopTypes.hpp>
 #include <hyprland/src/render/pass/PassElement.hpp>
 #include <hyprland/src/helpers/math/Math.hpp>
 
@@ -21,11 +24,13 @@ class CShinyPassElement : public IPassElement {
         float           pulseHz = 0.4f;
         float           lobe    = 0.18f; // effective half-width; shimmer scale already applied
         float           thickScale = 1.f; // shimmer thickness modulation; 1 when not shimmering
-        bool            mirror = false; // same lobe on the far support; off = facing-only
+        bool            mirror     = false; // same lobe on the far support; off = facing-only
+        bool            customPos  = false; // gradient_positions applied; fallback resamples
+        PHLWINDOWREF    window;             // CBorderPassElement fallback
     };
 
     CShinyPassElement(const SData& data);
-    virtual ~CShinyPassElement() = default;
+    virtual ~CShinyPassElement();
 
     virtual std::vector<UP<IPassElement>> draw() override;
     virtual bool                          needsLiveBlur() override;
@@ -42,10 +47,16 @@ class CShinyPassElement : public IPassElement {
         return EK_CUSTOM;
     }
 
-    SData m_data;
+    SData    m_data;
+    uint64_t m_epoch = 0;
 };
 
-bool ensureShinyShader();
-void destroyShinyShader();
-void markShinyTeardown();
-void shinyResetLifecycle();
+std::vector<UP<IPassElement>> shinyLinearFallbackElements(const CShinyPassElement::SData& data, float monitorScale);
+
+bool     ensureShinyShader();
+void     destroyShinyShader();
+void     markShinyTeardown();
+void     shinyResetLifecycle();
+void     shinyOnPluginExit();
+uint64_t shinyPassEpoch();
+bool     shinyPassElementLive(uint64_t bornEpoch);

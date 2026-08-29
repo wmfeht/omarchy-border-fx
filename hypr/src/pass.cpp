@@ -7,13 +7,17 @@
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/OpenGL.hpp>
 #include <hyprland/src/render/Shader.hpp>
+#include <hyprland/src/render/ShaderLoader.hpp>
+#include <hyprland/src/render/pass/BorderPassElement.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/debug/log/Logger.hpp>
 #include <hyprland/src/helpers/Color.hpp>
+#include <hyprland/src/helpers/memory/Memory.hpp>
 
 #include <GLES3/gl32.h>
 
 #include <algorithm>
+#include <vector>
 
 using namespace Render::GL;
 
@@ -89,6 +93,52 @@ static void hyprAbandonShader() {
     resetGradUniformLocations();
 }
 
+struct ShinyQueued {
+    CShinyPassElement*   elem = nullptr;
+    Render::CRenderPass* pass = nullptr;
+};
+
+static std::vector<ShinyQueued> g_queuedShiny;
+
+static void hyprRemoveQueuedPassElements() {
+    std::vector<Render::CRenderPass*> passes;
+    passes.reserve(g_queuedShiny.size());
+    for (const auto& q : g_queuedShiny) {
+        if (q.pass)
+            passes.push_back(q.pass);
+    }
+    std::sort(passes.begin(), passes.end());
+    passes.erase(std::unique(passes.begin(), passes.end()), passes.end());
+    // removeAllOfType is non-recursive; each owning pass (top-level or a
+    // CTransformedWindowPassElement nested pass recorded at ctor) is visited.
+    for (auto* p : passes)
+        p->removeAllOfType("CShinyPassElement");
+}
+
+static void hyprUnbindVao() {
+    glBindVertexArray(0);
+}
+
+static void hyprClearScissor() {
+    if (g_pHyprOpenGL)
+        g_pHyprOpenGL->scissor(nullptr);
+}
+
+static void hyprRestoreBlend() {
+    if (g_pHyprOpenGL)
+        g_pHyprOpenGL->blend(true);
+}
+
+static void hyprRestoreProgram() {
+    if (!g_pHyprOpenGL)
+        return;
+    // useShader is not RAII and caches m_currentProgram. Binding a stock
+    // variant updates both GL and that cache; glUseProgram(0) would desync it.
+    auto stock = g_pHyprOpenGL->getShaderVariant(Render::SH_FRAG_QUAD);
+    if (stock)
+        g_pHyprOpenGL->useShader(stock);
+}
+
 [[gnu::constructor]] static void bindShinyShaderOps() {
     shinySetShaderOps({
         .glAlive     = hyprGlAlive,
@@ -98,9 +148,70 @@ static void hyprAbandonShader() {
         .reset       = hyprResetShader,
         .abandon     = hyprAbandonShader,
     });
+    shinySetPassRemoveOps({
+        .removeQueued = hyprRemoveQueuedPassElements,
+    });
+    shinySetGlRestoreOps({
+        .unbindVao      = hyprUnbindVao,
+        .clearScissor   = hyprClearScissor,
+        .restoreBlend   = hyprRestoreBlend,
+        .restoreProgram = hyprRestoreProgram,
+    });
 }
 
-CShinyPassElement::CShinyPassElement(const SData& data) : m_data(data) {}
+CShinyPassElement::CShinyPassElement(const SData& data) : m_data(data), m_epoch(shinyPassEpoch()) {
+    Render::CRenderPass* owner = nullptr;
+    if (g_pHyprRenderer)
+        owner = &g_pHyprRenderer->currentPass();
+    g_queuedShiny.push_back({this, owner});
+}
+
+CShinyPassElement::~CShinyPassElement() {
+    std::erase_if(g_queuedShiny, [this](const ShinyQueued& q) { return q.elem == this; });
+}
+
+std::vector<UP<IPassElement>> shinyLinearFallbackElements(const CShinyPassElement::SData& data, float monitorScale) {
+    const auto mapped    = shinyMapDrawBackends(data.shared, monitorScale);
+    CBox       windowBox = data.box.copy().expand(-mapped.fallback.expandPx).round();
+
+    std::vector<CHyprColor> stops;
+    if (mapped.fallback.shared.stopCount >= 2 && data.customPos) {
+        stops.reserve(SHINY_MAX_GRADIENT_STEPS);
+        for (int i = 0; i < SHINY_MAX_GRADIENT_STEPS; i++) {
+            float rgba[4];
+            shinyGradientSample(mapped.fallback.shared.stops, mapped.fallback.shared.stopPos, mapped.fallback.shared.stopCount,
+                                shinyGradientStopPos(i, SHINY_MAX_GRADIENT_STEPS), rgba);
+            stops.emplace_back(rgba[0], rgba[1], rgba[2], rgba[3]);
+        }
+    } else if (mapped.fallback.shared.stopCount >= 2) {
+        stops.reserve(sc<size_t>(mapped.fallback.shared.stopCount));
+        for (int i = 0; i < mapped.fallback.shared.stopCount; i++)
+            stops.emplace_back(mapped.fallback.shared.stops[i]);
+    } else {
+        stops = {CHyprColor{mapped.fallback.shared.colA}, CHyprColor{mapped.fallback.shared.colB}};
+    }
+    Config::CGradientValueData grad(std::move(stops), data.angle);
+
+    CBorderPassElement::SBorderData bd;
+    bd.box           = windowBox;
+    bd.grad1         = grad;
+    bd.round         = mapped.fallback.shared.rounding;
+    bd.outerRound    = mapped.fallback.shared.outerRound;
+    bd.roundingPower = mapped.fallback.shared.roundingPower;
+    bd.a             = mapped.fallback.shared.a;
+    bd.borderSize    = mapped.fallback.shared.borderSize;
+    bd.window        = data.window;
+
+    std::vector<UP<IPassElement>> out;
+    out.emplace_back(makeUnique<CBorderPassElement>(bd));
+    return out;
+}
+
+static std::vector<UP<IPassElement>> shinyFallbackIf(ShinyDrawResult result, const CShinyPassElement::SData& data, float monitorScale) {
+    if (result == SHINY_DRAW_FALLBACK)
+        return shinyLinearFallbackElements(data, monitorScale);
+    return {};
+}
 
 bool CShinyPassElement::needsLiveBlur() {
     return false;
@@ -125,7 +236,7 @@ CRegion CShinyPassElement::opaqueRegion() {
 }
 
 std::vector<UP<IPassElement>> CShinyPassElement::draw() {
-    if (!ensureShinyShader())
+    if (shinyBeginPassDraw(m_epoch) != SHINY_DRAW_CONTINUE)
         return {};
 
     auto&      rd = g_pHyprRenderer->m_renderData;
@@ -146,7 +257,7 @@ std::vector<UP<IPassElement>> CShinyPassElement::draw() {
     g_pHyprOpenGL->blend(true);
     auto shader = g_pHyprOpenGL->useShader(g_shinyShader);
     if (!shader)
-        return {};
+        return shinyFallbackIf(shinyFinishMutatedDraw(m_epoch, false, false), m_data, sc<float>(mon->m_scale));
 
     const CHyprColor colA{m_data.shared.colA};
     const CHyprColor colB{m_data.shared.colB};
@@ -200,7 +311,7 @@ std::vector<UP<IPassElement>> CShinyPassElement::draw() {
 
     const GLint vao = shader->getUniformLocation(SHADER_SHADER_VAO);
     if (!shinyCanBindVao(vao))
-        return {};
+        return shinyFallbackIf(shinyFinishMutatedDraw(m_epoch, true, false), m_data, sc<float>(mon->m_scale));
     glBindVertexArray(vao);
 
     const CRegion* dmg = &rd.damage;
