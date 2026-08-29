@@ -47,16 +47,16 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   libxcb1-dev libxcb-util-dev libxcb-render0-dev libxcb-xfixes0-dev \
   libxcb-icccm4-dev libxcb-composite0-dev libxcb-res0-dev
 
-# Newer cmake (Hyprland needs >= 3.30; only used to build the stack below).
-CMAKE=cmake
-if ! cmake --version 2>/dev/null | grep -qE '3\.(3[0-9]|[4-9][0-9])|[4-9]\.'; then
-  if [ ! -x /opt/cmake/bin/cmake ]; then
-    curl -fsSL "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VER}/cmake-${CMAKE_VER}-linux-x86_64.tar.gz" -o /tmp/cmake.tgz
-    sudo mkdir -p /opt/cmake && sudo tar -xzf /tmp/cmake.tgz -C /opt/cmake --strip-components=1
-  fi
-  CMAKE=/opt/cmake/bin/cmake
-  export PATH=/opt/cmake/bin:$PATH
+# Newer cmake. Hyprland needs >= 3.30, and, crucially, cmake < 3.30 maps
+# CMAKE_CXX_STANDARD 26 to -std=gnu++23 for GCC, which breaks hyprutils'
+# std::ofstream::native_handle() (a C++26 feature). Ubuntu 24.04 ships 3.28,
+# so always use the pinned prebuilt cmake (idempotent download).
+if [ ! -x /opt/cmake/bin/cmake ]; then
+  curl -fsSL "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VER}/cmake-${CMAKE_VER}-linux-x86_64.tar.gz" -o /tmp/cmake.tgz
+  sudo mkdir -p /opt/cmake && sudo tar -xzf /tmp/cmake.tgz -C /opt/cmake --strip-components=1
 fi
+CMAKE=/opt/cmake/bin/cmake
+export PATH=/opt/cmake/bin:$PATH
 
 sudo mkdir -p "$BUILD_DIR" && sudo chown "$(id -u):$(id -g)" "$BUILD_DIR"
 cd "$BUILD_DIR"
