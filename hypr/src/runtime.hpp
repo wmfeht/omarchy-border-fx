@@ -75,12 +75,12 @@ int shinyGradientStepCount(int configured);
 float shinyGradientStopPos(int i, int count);
 
 // Map full-axis u (0 = facing support, 1 = far side) onto the lit band.
-// Shader: d0 = u * 0.5, cone occupies d0 in [0, spread]. spread is the
-// applied lobe (config / shimmer-scaled range, floored at 0.04). Returns
-// 0 at the head, 1 at the lobe edge, and stays 1 past it. lobe 0.5 is
-// identity (uAxis maps to itself). Twin of uRamp in
-// SHINY_FRAG / shaders/shiny.frag.
-float shinyGradientLobeU(float uAxis, float spread);
+// Off (default): d0 = u * 0.5, facing-only comet. On: d0 = min(u, 1-u) * 0.5
+// so both ends of the axis are heads. spread is the applied lobe (config /
+// shimmer-scaled range, floored at 0.04). Returns 0 at a head, 1 at a
+// lobe edge, and stays 1 past it. lobe 0.5 off is identity. Twin of
+// uRamp in SHINY_FRAG / shaders/shiny.frag.
+float shinyGradientLobeU(float uAxis, float spread, bool mirrorLobe = false);
 
 // plugin:shiny-border:gradient_positions → per-stop ramp positions.
 // Always fills out[0..SHINY_MAX_GRADIENT_STEPS-1] — even spacing first,

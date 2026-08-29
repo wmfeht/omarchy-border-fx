@@ -309,7 +309,9 @@ function checkGradientLobeU() {
   check(approx(Gradient.lobeU(0.5, 0.5), 0.5), "lobe 0.5 mid is identity")
   check(Gradient.lobeU(1, 0.5) === 1, "lobe 0.5 far is identity")
 
+  check(Gradient.lobeU(0, 0.18) === 0, "lobe 0.18 head")
   check(approx(Gradient.lobeU(0.36, 0.18), 1), "lobe 0.18 edge at u=0.36")
+  check(Gradient.lobeU(1, 0.18) === 1, "lobe 0.18 far holds last stop")
   check(approx(Gradient.lobeU(0.18, 0.18), 0.5), "lobe 0.18 half")
 
   check(Gradient.lobeU(0, 0.1) === 0, "lobe 0.1 head")
@@ -321,6 +323,15 @@ function checkGradientLobeU() {
   check(approx(Gradient.lobeU(0.04, 0.01), 0.5), "tiny spread floors")
   check(Gradient.lobeU(-1, 0.18) === 0, "axis u clamps low")
   check(Gradient.lobeU(2, 0.18) === 1, "axis u clamps high")
+
+  check(Gradient.lobeU(1, 0.18, false) === Gradient.lobeU(1, 0.18), "off flag matches two-arg")
+
+  check(Gradient.lobeU(0, 0.18, true) === 0, "mirror facing still 0")
+  check(Gradient.lobeU(1, 0.18, true) === 0, "mirror far is 0")
+  check(Gradient.lobeU(1, 0.18, true) !== 1, "mirror far is not 1")
+  check(approx(Gradient.lobeU(0.36, 0.18, true), 1), "mirror facing edge at u=0.36")
+  check(approx(Gradient.lobeU(0.64, 0.18, true), 1), "mirror far edge at u=0.64")
+  check(Gradient.lobeU(0.5, 0.18, true) === 1, "mirror mid-axis holds last stop")
 
   const rgb = [rgba(1, 0, 0), rgba(0, 0, 1)]
   const even = Gradient.resolvePositions("", 2)
@@ -403,6 +414,17 @@ function checkWrapSource() {
   check(frag.indexOf("vec4  highlight = vec4(stop.rgb * a, a)") !== -1, "qs premul from stop")
   check(frag.indexOf("shinyPulseAlphaMul(brightness, time)") !== -1, "qs pulse is alpha mul")
   check(frag.indexOf("mix(color, colorSRGB, uRamp)") !== -1, "qs two-stop fallback along lobe")
+  check(frag.indexOf("float d0 = u * 0.5;") !== -1, "qs off path is facing-only d0")
+  check(frag.indexOf("min(u, 1.0 - u)") !== -1, "qs on path folds d0 to nearer end")
+  check(frag.indexOf("smoothstep(0.0, spread, d0)") !== -1, "qs cone uses the same d0")
+  check(frag.indexOf("int   mirrorLobe;") !== -1, "qs frag mirrorLobe UBO")
+  check(qml.indexOf("property bool mirrorLobe") !== -1, "QML overlay exposes mirrorLobe")
+  check(qml.indexOf("property int mirrorLobe: root.mirrorLobe ? 1 : 0") !== -1,
+        "ShaderEffect uploads mirrorLobe")
+
+  const service = fs.readFileSync(path.join(root, "Service.qml"), "utf8")
+  check(service.indexOf("mirrorLobe: root.look.mirrorLobe") !== -1,
+        "chrome overlay binds merged look.mirrorLobe")
 }
 
 checkPinnedHeading()

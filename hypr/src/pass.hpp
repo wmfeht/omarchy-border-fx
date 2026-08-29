@@ -21,6 +21,7 @@ class CShinyPassElement : public IPassElement {
         float           pulseHz = 0.4f;
         float           lobe    = 0.18f; // effective half-width; shimmer scale already applied
         float           thickScale = 1.f; // shimmer thickness modulation; 1 when not shimmering
+        bool            mirrorLobe = false; // same lobe on the far support; off = facing-only
     };
 
     CShinyPassElement(const SData& data);

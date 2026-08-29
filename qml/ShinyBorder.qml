@@ -25,6 +25,8 @@ Item {
   property color colB: "#ee00ff99"
   // Lit-band half-width along the light axis. 0.5 = the whole window.
   property real lobe: 0.18
+  // Mirror that lobe onto the far support. Off = facing-only comet.
+  property bool mirrorLobe: false
   property int pinDeg: 120
   property real angleOffset: 0
   property bool shimmer: true
@@ -175,6 +177,7 @@ Item {
     property real brightness: 0
     property real range: root._drawnLobe
     property real angle: root._drawnAngle
+    property int mirrorLobe: root.mirrorLobe ? 1 : 0
     property int gradCount: 0
     property int gradCountCW: 0
     property vector4d color

@@ -207,6 +207,10 @@ static void checkShaderSource() {
         CHECK(src.find("float uRamp = clamp(d0 / max(spread, 1.0e-4), 0.0, 1.0)") != std::string::npos);
         CHECK(src.find("shinyWrapComposite(highlight, baseColor, wrapRing)") != std::string::npos);
         CHECK(src.find("mix(color, colorSRGB, uRamp)") != std::string::npos);
+        CHECK(src.find("float d0 = u * 0.5;") != std::string::npos);
+        CHECK(src.find("min(u, 1.0 - u)") != std::string::npos);
+        CHECK(src.find("smoothstep(0.0, spread, d0)") != std::string::npos);
+        CHECK(src.find("mirrorLobe") != std::string::npos);
     };
     checkLighting(frag);
     checkLighting(qsFrag);
@@ -309,6 +313,13 @@ static void checkProductionWiring() {
     CHECK(pass.find("\"baseColor\"") != std::string::npos);
     CHECK(pass.find("decoration:shadow") == std::string::npos);
     CHECK(plug.find("decoration:shadow") == std::string::npos);
+
+    // mirror_lobe: config bool + draw payload + raw glUniform (no CShader slot).
+    CHECK(plug.find("plugin:shiny-border:mirror_lobe") != std::string::npos);
+    CHECK(deco.find("g_cfg.mirrorLobe->value()") != std::string::npos);
+    CHECK(pass.find("m_data.mirrorLobe") != std::string::npos);
+    CHECK(pass.find("\"mirrorLobe\"") != std::string::npos);
+    CHECK(pass.find("glUniform1i") != std::string::npos);
 }
 
 static void checkLightProjection() {

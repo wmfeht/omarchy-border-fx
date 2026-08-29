@@ -14,6 +14,7 @@ struct SShinyConfig {
     SP<Config::Values::CBoolValue>  activeOnly;
     SP<Config::Values::CBoolValue>  pulse;
     SP<Config::Values::CBoolValue>  shimmer;
+    SP<Config::Values::CBoolValue>  mirrorLobe;
     SP<Config::Values::CIntValue>   angleOffset;
     SP<Config::Values::CIntValue>   pinDeg;
     SP<Config::Values::CIntValue>   shimmerDeg;

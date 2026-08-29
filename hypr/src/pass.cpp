@@ -29,6 +29,7 @@ static GLint g_gradColorsCwLoc = -1;
 static GLint g_gradPosCwLoc    = -1;
 static GLint g_gradCountCwLoc  = -1;
 static GLint g_baseColorLoc    = -1;
+static GLint g_mirrorLobeLoc   = -1;
 
 static void resetGradUniformLocations() {
     g_gradColorsLoc   = -1;
@@ -38,6 +39,7 @@ static void resetGradUniformLocations() {
     g_gradPosCwLoc    = -1;
     g_gradCountCwLoc  = -1;
     g_baseColorLoc    = -1;
+    g_mirrorLobeLoc   = -1;
 }
 
 static bool hyprGlAlive() {
@@ -71,6 +73,7 @@ static bool hyprCompileShader() {
     g_gradPosCwLoc    = glGetUniformLocation(g_shinyShader->program(), "gradPosCW");
     g_gradCountCwLoc  = glGetUniformLocation(g_shinyShader->program(), "gradCountCW");
     g_baseColorLoc    = glGetUniformLocation(g_shinyShader->program(), "baseColor");
+    g_mirrorLobeLoc   = glGetUniformLocation(g_shinyShader->program(), "mirrorLobe");
 
     return true;
 }
@@ -163,6 +166,7 @@ std::vector<UP<IPassElement>> CShinyPassElement::draw() {
     shader->setUniformFloat(SHADER_RANGE, m_data.lobe);
     shader->setUniformFloat(SHADER_BRIGHTNESS, m_data.pulseHz);
     shader->setUniformFloat(SHADER_ANGLE, m_data.angle);
+    glUniform1i(g_mirrorLobeLoc, m_data.mirrorLobe ? 1 : 0);
 
     // CShader has no third color slot; upload like the gradient arrays.
     {

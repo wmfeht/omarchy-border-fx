@@ -41,6 +41,7 @@ layout(std140, binding = 0) uniform buf {
     float angle;
     int   gradCount;
     int   gradCountCW;
+    int   mirrorLobe;        // 0 = facing-only comet; 1 = same lobe on the far side
     vec4  color;             // colA, highlight head (straight rgba)
     vec4  colorSRGB;         // colB, shoulder
     vec4  baseColor;         // wrapping ring stroke (straight rgba); a=0 off
@@ -150,6 +151,8 @@ void main() {
     // 0 at the lit support, 1 at the far side. Coverage / cone use this.
     float u  = clamp(0.5 - 0.5 * dot(pUp, light) / extent, 0.0, 1.0);
     float d0 = u * 0.5;
+    if (mirrorLobe != 0)
+        d0 = min(u, 1.0 - u) * 0.5;
     // Negative cross = clockwise of the light axis (old t > 0.5 half).
     bool  cw = (light.x * pUp.y - light.y * pUp.x) < 0.0;
 

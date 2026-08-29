@@ -62,6 +62,7 @@ uniform int   gradCount;         // < 2 keeps the classic color / colorSRGB bran
 uniform vec4  gradColorsCW[MAX_STEPS];
 uniform float gradPosCW[MAX_STEPS];
 uniform int   gradCountCW;
+uniform int   mirrorLobe;        // 0 = facing-only comet; 1 = same lobe on the far side
 
 const float TAU = 6.28318530718;
 const float AA  = 1.25;
@@ -133,6 +134,8 @@ void main() {
     // 0 at the lit support, 1 at the far side. Coverage / cone use this.
     float u  = clamp(0.5 - 0.5 * dot(pUp, light) / extent, 0.0, 1.0);
     float d0 = u * 0.5;
+    if (mirrorLobe != 0)
+        d0 = min(u, 1.0 - u) * 0.5;
     // Negative cross = clockwise of the light axis (old t > 0.5 half).
     bool  cw = (light.x * pUp.y - light.y * pUp.x) < 0.0;
 

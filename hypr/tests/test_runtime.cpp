@@ -500,7 +500,9 @@ static void checkGradientLobeU() {
     CHECK(shinyGradientLobeU(1.f, 0.5f) == 1.f);
 
     // Default-ish lobe 0.18: comet edge is uAxis = 2 * 0.18 = 0.36.
+    CHECK(shinyGradientLobeU(0.f, 0.18f) == 0.f);
     CHECK(std::fabs(shinyGradientLobeU(0.36f, 0.18f) - 1.f) < 1e-5f);
+    CHECK(shinyGradientLobeU(1.f, 0.18f) == 1.f);
     CHECK(std::fabs(shinyGradientLobeU(0.18f, 0.18f) - 0.5f) < 1e-5f);
 
     // User lobe 0.1: uAxis 0.2 is the comet edge; past that holds 1.
@@ -516,6 +518,15 @@ static void checkGradientLobeU() {
     // Axis u is clamped before the scale.
     CHECK(shinyGradientLobeU(-1.f, 0.18f) == 0.f);
     CHECK(shinyGradientLobeU(2.f, 0.18f) == 1.f);
+
+    CHECK(shinyGradientLobeU(1.f, 0.18f, false) == shinyGradientLobeU(1.f, 0.18f));
+
+    CHECK(shinyGradientLobeU(0.f, 0.18f, true) == 0.f);
+    CHECK(shinyGradientLobeU(1.f, 0.18f, true) == 0.f);
+    CHECK(shinyGradientLobeU(1.f, 0.18f, true) != 1.f);
+    CHECK(std::fabs(shinyGradientLobeU(0.36f, 0.18f, true) - 1.f) < 1e-5f);
+    CHECK(std::fabs(shinyGradientLobeU(0.64f, 0.18f, true) - 1.f) < 1e-5f);
+    CHECK(shinyGradientLobeU(0.5f, 0.18f, true) == 1.f);
 }
 
 static void checkWrapComposite() {
