@@ -55,6 +55,7 @@ Dev copy (not git-managed, not `omarchy plugin update`):
 ```sh
 mise run install     # copies into ~/.config/omarchy/plugins/qs.border-fx
 mise run uninstall
+mise run reinstall   # omarchy plugin remove, then add this folder
 ```
 
 ### Already using hyprpm?
@@ -97,7 +98,6 @@ effect (`"shiny": { … }`). Nested keys win.
   "shimmer": true,
   "shimmerHz": 0.3,
   "shimmerDeg": 20,
-  "pin": true,
   "pinDeg": 120,
   "lobe": 0.18,
   "gradient": [
@@ -119,9 +119,10 @@ hot-reloads; `look-apply.sh` writes `~/.config/hypr/border-fx.lua` and
 `hyprctl eval`s it if the shiny `.so` is loaded.
 
 `baseColor` is the wrapping ring stroke on both hosts (transparent = off).
-It is not Hyprland `decoration:shadow`. `activeOnly` / `pulse` /
-`quantizeDeg` are Hyprland-only. `pin: false` is ignored on chrome in v1
-(always pinned).
+It is not Hyprland `decoration:shadow`. `activeOnly` / `pulse` are
+Hyprland-only. Heading is always `pinDeg` + `angleOffset` (plus shimmer
+wander when shimmer is on). Leftover `pin: false` does not restore cursor
+tracking.
 
 A generated `~/.config/hypr/border-fx.lua` is an **output**, not an input.
 `omarchy refresh hyprland` can drop the one-line
@@ -146,6 +147,7 @@ scripts/
   hypr-teardown.sh            # unload session copy; --purge deletes it
   look-apply.sh               # JSON look → border-fx.lua + hyprctl eval
   install.sh / uninstall.sh   # dev copy helpers
+  reinstall.sh                # omarchy plugin remove + add this folder
 ```
 
 No symlinks inside the plugin folder (`omarchy plugin validate` refuses them).
@@ -164,6 +166,7 @@ mise run hypr-build  # hypr-shiny-border.so
 mise run hypr-test   # C++ logic tests
 mise run nest        # nested Hyprland crash sandbox
 mise run reload      # rebuild + load into the nest
+mise run reinstall   # omarchy plugin remove + add this folder (live session)
 ```
 
 Hyprland C++ iteration: [hypr/DEVELOPMENT.md](hypr/DEVELOPMENT.md). Chrome

@@ -259,10 +259,8 @@ void CShinyBorder::draw(PHLMONITOR pMonitor, float const& a) {
 
     const auto mapped = shinyMapDrawBackends(shared, pMonitor->m_scale);
 
-    // Pin replaces the mouse latch entirely; angle_offset still applies.
-    const float baseAngle = g_cfg.pin->value()
-        ? shinyPinnedHeading(sc<int>(g_cfg.pinDeg->value()), sc<int>(g_cfg.angleOffset->value()))
-        : m_angle;
+    const float baseAngle =
+        shinyPinnedHeading(sc<int>(g_cfg.pinDeg->value()), sc<int>(g_cfg.angleOffset->value()));
 
     const auto mode       = effectMode();
     float      drawAngle  = baseAngle;
@@ -395,12 +393,4 @@ uint64_t CShinyBorder::getDecorationFlags() {
 
 std::string CShinyBorder::getDisplayName() {
     return "Shiny Border";
-}
-
-void CShinyBorder::setAngle(float radians) {
-    m_angle = radians;
-}
-
-float CShinyBorder::angle() const {
-    return m_angle;
 }

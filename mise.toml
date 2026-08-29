@@ -53,6 +53,11 @@ run = "bash scripts/install.sh"
 description = "Disable qs.border-fx, purge the login-session .so, remove the copy"
 run = "bash scripts/uninstall.sh"
 
+[tasks.reinstall]
+description = "Remove qs.border-fx from this system, then omarchy plugin add this folder"
+depends = ["bake"]
+run = "bash scripts/reinstall.sh"
+
 [tasks.hypr-build]
 description = "Compile hypr-shiny-border.so against system Hyprland headers"
 run = "make -C hypr -j$(nproc)"

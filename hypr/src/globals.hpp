@@ -14,8 +14,6 @@ struct SShinyConfig {
     SP<Config::Values::CBoolValue>  activeOnly;
     SP<Config::Values::CBoolValue>  pulse;
     SP<Config::Values::CBoolValue>  shimmer;
-    SP<Config::Values::CBoolValue>  pin;
-    SP<Config::Values::CIntValue>   quantizeDeg;
     SP<Config::Values::CIntValue>   angleOffset;
     SP<Config::Values::CIntValue>   pinDeg;
     SP<Config::Values::CIntValue>   shimmerDeg;
@@ -33,7 +31,7 @@ struct SShinyConfig {
     // Optional multi-step ramp. Fewer than two colors (the single-color
     // default) keeps the classic col.a/col.b comet; two or more colors
     // replace it, first color at the head. The gradient's own angle is
-    // ignored — the heading comes from the mouse / pin.
+    // ignored — the heading is pin_deg + angle_offset.
     SP<Config::Values::CGradientValue> gradient;
     // Per-stop positions, one percentage per gradient color ("0 70 100").
     // Empty (default), count mismatch, or junk = even spacing.
@@ -55,5 +53,4 @@ inline SShinyConfig g_cfg;
 
 // Keep these alive: hyprutils unregisters the listener when the SP dies.
 inline CHyprSignalListener g_onWindowOpen;
-inline CHyprSignalListener g_onMouseMove;
 inline CHyprSignalListener g_onFocus;

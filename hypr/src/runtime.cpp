@@ -36,29 +36,6 @@ float shinyShaderThick(float logicalPx, float monitorScale, float modifScale) {
     return logicalPx * monitorScale * modifScale;
 }
 
-float shinyGpuHeading(float pointerX, float pointerY, float centerX, float centerY) {
-    return std::atan2(-(pointerY - centerY), pointerX - centerX);
-}
-
-float shinyQuantizeHeading(float radians, int offsetDeg, int degStep) {
-    const int   step = std::max(1, degStep);
-    const float pi   = std::acos(-1.f);
-    float       deg  = std::fmod(std::fmod(radians * 180.f / pi, 360.f) + 360.f, 360.f);
-    deg              = std::floor((deg + static_cast<float>(offsetDeg)) / static_cast<float>(step)) * static_cast<float>(step);
-    deg              = std::fmod(std::fmod(deg, 360.f) + 360.f, 360.f);
-    return deg * pi / 180.f;
-}
-
-bool shinyShouldDamageHeading(float latched, float next) {
-    float       d    = std::fabs(next - latched);
-    const float pi   = std::acos(-1.f);
-    const float turn = 2.f * pi;
-    d                = std::fmod(d, turn);
-    if (d > pi)
-        d = turn - d; // shortest arc
-    return d >= 1e-4f;
-}
-
 ShinyUpdateActions shinyUpdateWindowActions(const ShinyGeoLatch& now, int effectiveBorder, const ShinyGeoLatch& last,
                                             int lastEffectiveBorder) {
     const bool borderChanged = (effectiveBorder != lastEffectiveBorder);

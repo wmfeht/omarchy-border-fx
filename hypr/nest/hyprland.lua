@@ -62,7 +62,7 @@ if shinyLoaded() then
         pulse = true,
         pulse_hz = 0.4,
         lobe = 0.18,
-        quantize_deg = 1,
+        pin_deg = 90,
         angle_offset = 0,
         border_size = 3,
       },
@@ -70,7 +70,7 @@ if shinyLoaded() then
   })
 end
 
--- Color interpolation on the stock border would fight mouse tracking.
+-- Color interpolation on the stock border would fight the plugin ring.
 hl.animation({ leaf = "border", enabled = false })
 hl.animation({ leaf = "borderangle", enabled = false })
 

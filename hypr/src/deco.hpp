@@ -24,8 +24,6 @@ class CShinyBorder : public IHyprWindowDecoration {
     virtual uint64_t                   getDecorationFlags() override;
     virtual std::string                getDisplayName() override;
 
-    void                               setAngle(float radians);
-    float                              angle() const;
     void                               syncPulse();
     void                               syncExtents();
 
@@ -35,7 +33,6 @@ class CShinyBorder : public IHyprWindowDecoration {
     SBoxExtents         m_extents          = {};
     Vector2D            m_lastPos;
     Vector2D            m_lastSize;
-    float               m_angle          = 0.f; // radians, math convention: 0 = +x
     int                 m_lastEffectiveB = -1;  // last reserved extent px
     SP<CEventLoopTimer> m_pulseTimer;           // drives pulse *or* shimmer damage
     ShinyShimmerState   m_shimmer;

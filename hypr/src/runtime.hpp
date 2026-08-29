@@ -39,18 +39,6 @@ int shinyEffectiveBorderSize(int resolvedPx, bool enabled);
 // modif it cannot see. Default 1 is identity (no zoom / no workspace scale).
 float shinyShaderThick(float logicalPx, float monitorScale, float modifScale = 1.f);
 
-// Heading from pointer vs box center, GLSL atan(-dir.y, dir.x) convention.
-// Live cursor feeds the mouse-move latch only — not the fragment.
-float shinyGpuHeading(float pointerX, float pointerY, float centerX, float centerY);
-
-// Visible heading: snap to degStep, add offset, wrap into [0, 2π).
-// Shader (SHADER_ANGLE) and fallback (m_angle) both draw this value.
-float shinyQuantizeHeading(float radians, int offsetDeg, int degStep);
-
-// True when the quantized heading moved enough to damage the ring.
-// Compares on the circle so 359° vs 0° is one step, not a full turn.
-bool shinyShouldDamageHeading(float latched, float next);
-
 // Dirty-check used by CShinyBorder::updateWindow. Hyprland-free so tests
 // can drive the same decision the deco calls.
 // Reposition only when effective border size changed (m_lastEffectiveB).
@@ -221,13 +209,14 @@ bool shinyEffectShouldRun(bool enabled, ShinyEffect mode, bool activeOnly, bool 
 // samples its eased random walk. Same clamp as shinyPulseTickMs.
 int shinyEffectTickMs(ShinyEffect mode, float pulseHz, float shimmerHz);
 
-// Wrap radians into [0, 2π). Shimmer adds a signed offset to the latched
+// Wrap radians into [0, 2π). Shimmer adds a signed offset to the pinned
 // heading; the shader and the fallback gradient both expect a wrapped angle.
 float shinyWrapAngle(float radians);
 
-// Pinned heading: (pinDeg + offsetDeg) degrees → radians in [0, 2π).
+// Light heading: (pinDeg + offsetDeg) degrees → radians in [0, 2π).
 // GLSL atan(-y, x) convention: 0° faces +x (right), 90° faces up.
-// Replaces the mouse latch when pin is on; angle_offset still applies.
+// Shader (SHADER_ANGLE) and fallback (CGradientValueData) both draw this
+// value, plus optional shimmer wander. Not computed from the cursor.
 float shinyPinnedHeading(int pinDeg, int offsetDeg);
 
 // Shimmer: two independent random-walk channels. Each channel eases

@@ -89,12 +89,12 @@ plan does **not** invent a third renderer, patch Omarchy `BorderSurface` /
   uses the table name **`shiny_border`** (hyphens become underscores) and
   **must** gate on `hl.get_loaded_plugins()`. Live edits on a Lua Hyprland
   config go through **`hyprctl eval`**, not `hyprctl keyword`.
-- **Defaults in C++** are not the live look: pulse on, pin off / 90°,
+- **Defaults in C++** are not the live look: pulse on, pinDeg 90°,
   border 3, two-color `col.a`/`col.b`. The **intended shared look** lives
   in `looknfeel.lua` (and is what qs-shiny-border hardcoded).
-- **Hyprland-only keys:** `active_only`, `pulse` / `pulse_hz`,
-  `quantize_deg`, mouse tracking (`pin = false`). Quickshell cannot see
-  the pointer over other windows and does not drive pulse in v1.
+- **Hyprland-only keys:** `active_only`, `pulse` / `pulse_hz`. Heading is
+  always `pin_deg` + `angle_offset` on both hosts. Quickshell does not
+  drive pulse in v1.
 - **Wrapping stroke:** `baseColor`, a border-thickness ring under the
   directional highlight on both hosts. Transparent = off. Not Hyprland
   `decoration:shadow` (the shader crushes far-side highlight alpha to
@@ -358,7 +358,6 @@ Example after implementation:
   "shimmerDeg": 20,
   "shimmerScaleMin": 0.75,
   "shimmerScaleMax": 1.35,
-  "pin": true,
   "pinDeg": 120,
   "angleOffset": 0,
   "lobe": 0.18,
@@ -374,8 +373,7 @@ Example after implementation:
   "baseColor": "rgba(00687855)",
   "activeOnly": true,
   "pulse": false,
-  "pulseHz": 0.4,
-  "quantizeDeg": 1
+  "pulseHz": 0.4
 }
 ```
 
@@ -383,7 +381,7 @@ Canonical color strings are Hyprland `rgba(RRGGBBAA)` — the language
 already in `looknfeel.lua`. The Quickshell adapter converts to Qt
 `#AARRGGBB`. Missing keys mean the intended shared look (today’s
 looknfeel + `ShinyBorder.qml` defaults), **not** the C++ plugin
-defaults (pulse on, pin 90, border 3).
+defaults (pulse on, pinDeg 90, border 3).
 
 Do **not** introduce a third file
 (`~/.config/omarchy/shiny-border.json`) as another source of truth.
@@ -408,7 +406,6 @@ Small shared set, per-host adapters. No third renderer.
 | `shimmerHz` | `shimmer_hz` | `shimmerHz` | both |
 | `shimmerDeg` | `shimmer_deg` | `shimmerDeg` | both |
 | `shimmerScaleMin` / `Max` | `shimmer_scale_*` | `shimmerScale*` | both |
-| `pin` | `pin` | (always pinned in v1 chrome) | both; QS v1 ignores `false` |
 | `pinDeg` | `pin_deg` | `pinDeg` | both |
 | `angleOffset` | `angle_offset` | `angleOffset` | both |
 | `lobe` | `lobe` | `lobe` | both |
@@ -420,7 +417,6 @@ Small shared set, per-host adapters. No third renderer.
 | `baseColor` | `base_color` | `baseColor` | both (wrap under the highlight; transparent = off) |
 | `activeOnly` | `active_only` | — | Hyprland only |
 | `pulse` / `pulseHz` | `pulse` / `pulse_hz` | — | Hyprland only (QS fragment keeps brightness ≤ 0) |
-| `quantizeDeg` | `quantize_deg` | — | Hyprland only |
 
 A host that does not understand a key ignores it. That is the adapter
 rule. Changing `pinDeg` in `shell.json` must move **both** the window
@@ -630,7 +626,6 @@ shiny_border = {
   shimmer_deg = 20,
   shimmer_hz  = 0.3,
   pulse       = false,
-  pin         = true,
   pin_deg     = 120,
   gradient = { colors = { "rgba(33ccffee)", "rgba(1ad4c0ee)", "rgba(007a48ee)", "rgba(004830aa)" } },
   gradient_positions    = "0 1 3 100",

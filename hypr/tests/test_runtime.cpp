@@ -143,11 +143,14 @@ static void checkEffectExclusivity() {
 static void checkPinnedHeading() {
     const float pi = std::acos(-1.f);
 
+    // Shipped heading is pinDeg + offset only — not pointer vs box center.
     CHECK(std::fabs(shinyPinnedHeading(0, 0)) < 1e-5f);
     CHECK(std::fabs(shinyPinnedHeading(90, 0) - pi * 0.5f) < 1e-5f);
     CHECK(std::fabs(shinyPinnedHeading(180, 0) - pi) < 1e-5f);
+    CHECK(std::fabs(shinyPinnedHeading(120, 0) - 120.f * pi / 180.f) < 1e-4f);
 
     // angle_offset still applies, and the sum wraps into [0, 2π).
+    CHECK(std::fabs(shinyPinnedHeading(0, 90) - pi * 0.5f) < 1e-4f);
     CHECK(std::fabs(shinyPinnedHeading(350, 20) - 10.f * pi / 180.f) < 1e-4f);
     CHECK(std::fabs(shinyPinnedHeading(-90, 0) - 270.f * pi / 180.f) < 1e-4f);
 

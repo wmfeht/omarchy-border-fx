@@ -209,7 +209,7 @@ static void checkPluginctl() {
     writeFile(kStatePath, "KEEP\n");
     stub.clearRecord();
     stub.setList("Plugin hypr-shiny-border by wmfeht:\n\tHandle: 0x1\n\tVersion: 0.1.0\n"
-                 "\tDescription: Gradient window border that faces the cursor\n");
+                 "\tDescription: Gradient window border with a directional highlight\n");
     int rc = stub.run("load", "", out);
     CHECK(rc != 0);
     CHECK(out.find("already loaded") != std::string::npos);

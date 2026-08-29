@@ -76,7 +76,6 @@ DEFAULTS = {
     "shimmerDeg": 20,
     "shimmerScaleMin": 0.75,
     "shimmerScaleMax": 1.35,
-    "pin": True,
     "pinDeg": 120,
     "angleOffset": 0,
     "lobe": 0.18,
@@ -95,7 +94,6 @@ DEFAULTS = {
     "activeOnly": True,
     "pulse": False,
     "pulseHz": 0.4,
-    "quantizeDeg": 1,
 }
 
 raw = os.environ.get("LOOK_JSON") or "{}"
@@ -275,11 +273,9 @@ lines = [
     "        shimmer_deg  = " + lua_num(look["shimmerDeg"]) + ",",
     "        shimmer_scale_min = " + lua_num(look["shimmerScaleMin"]) + ",",
     "        shimmer_scale_max = " + lua_num(look["shimmerScaleMax"]) + ",",
-    "        pin          = " + lua_bool(look["pin"]) + ",",
     "        pin_deg      = " + lua_num(look["pinDeg"]) + ",",
     "        angle_offset = " + lua_num(look["angleOffset"]) + ",",
     "        lobe         = " + lua_num(look["lobe"]) + ",",
-    "        quantize_deg = " + lua_num(look["quantizeDeg"]) + ",",
     "        border_size  = " + lua_num(look["borderSize"]) + ",",
     "        col = {",
     "          a = " + lua_str(to_hypr(look["colA"])) + ",",

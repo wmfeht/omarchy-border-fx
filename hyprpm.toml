@@ -8,7 +8,7 @@ authors = ["wmfeht"]
 commit_pins = []
 
 [hypr-shiny-border]
-description = "Gradient window border that faces the cursor"
+description = "Gradient window border with a directional highlight"
 authors = ["wmfeht"]
 output = "hypr/hypr-shiny-border.so"
 build = [

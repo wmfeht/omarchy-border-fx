@@ -33,7 +33,9 @@ function checkDefaults() {
   const d = Look.merge(null)
   check(d.effect === "shiny", "merge default effect shiny")
   check(d.borderSize === 2, "default borderSize 2 (not C++ 3)")
-  check(d.pin === true, "default pin")
+  check(!Object.prototype.hasOwnProperty.call(d, "pin"), "pin is not a look key")
+  check(!Object.prototype.hasOwnProperty.call(Look.DEFAULTS, "pin"), "DEFAULTS has no pin switch")
+  check(!Object.prototype.hasOwnProperty.call(Look.DEFAULTS, "quantizeDeg"), "DEFAULTS has no mouse quantize")
   check(d.pinDeg === 120, "default pinDeg 120 (not C++ 90)")
   check(d.shimmer === true, "default shimmer")
   check(d.pulse === false, "default pulse off (not C++ on)")
@@ -66,6 +68,12 @@ function checkMerge() {
   const other = Look.merge({ effect: "other", pinDeg: 10 })
   check(other.effect === "other", "unknown effect is preserved")
   check(other.pinDeg === 10, "look keys still merge when effect is not shiny")
+
+  const leftoverPin = Look.merge({ pin: false, pinDeg: 90, quantizeDeg: 15 })
+  check(!Object.prototype.hasOwnProperty.call(leftoverPin, "pin"), "leftover pin:false is not a look key")
+  check(leftoverPin.pin !== false, "leftover pin:false does not restore mouse follow")
+  check(!Object.prototype.hasOwnProperty.call(leftoverPin, "quantizeDeg"), "leftover quantizeDeg is ignored")
+  check(leftoverPin.pinDeg === 90, "pinDeg still merges when leftover pin is present")
 }
 
 function checkEntry() {
@@ -121,6 +129,10 @@ function checkLookApply() {
   check(lua.indexOf("shiny_border") !== -1, "emits shiny_border Hyprland adapter table")
   check(/border_size\s*=\s*2/.test(lua), "lua border_size = 2")
   check(/pin_deg\s*=\s*120/.test(lua), "lua pin_deg = 120")
+  check(!/\bpin\s*=/.test(lua), "lua does not emit pin as a mouse-follow switch")
+  check(!/quantize_deg/.test(lua), "lua does not emit mouse-heading quantize_deg")
+  check(!/mouse/.test(lua), "generated lua does not mention mouse")
+  check(!/cursor/.test(lua), "generated lua does not mention cursor")
   check(/pulse\s*=\s*false/.test(lua), "lua pulse = false")
   check(/shimmer\s*=\s*true/.test(lua), "lua shimmer = true")
   check(lua.indexOf("rgba(33ccffee)") !== -1, "lua keeps hypr rgba")
@@ -146,7 +158,18 @@ function checkLookApply() {
   )
   check(custom.status === 0, "custom look-apply")
   check(/pin_deg\s*=\s*0/.test(custom.stdout), "custom pin_deg")
+  check(!/\bpin\s*=/.test(custom.stdout), "custom look still has no pin switch")
   check(/border_size\s*=\s*1/.test(custom.stdout), "custom border_size")
+
+  const leftoverLua = spawnSync(
+    "bash",
+    [script, "--stdout", "--look-json", JSON.stringify({ pin: false, quantizeDeg: 15, pinDeg: 45 })],
+    { encoding: "utf8", env: env }
+  )
+  check(leftoverLua.status === 0, "leftover pin:false look-apply")
+  check(/pin_deg\s*=\s*45/.test(leftoverLua.stdout), "leftover pin:false still fans out pinDeg")
+  check(!/\bpin\s*=/.test(leftoverLua.stdout), "leftover pin:false does not emit pin lua")
+  check(!/quantize_deg/.test(leftoverLua.stdout), "leftover quantizeDeg does not fan out")
 
   const customBase = spawnSync(
     "bash",

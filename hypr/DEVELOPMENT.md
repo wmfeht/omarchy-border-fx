@@ -13,11 +13,9 @@ must show the same git hash for `hyprctl version` and `version.h`.
 
 Hyprland already has gradient borders and `borderangle`. This plugin does
 something else: a **directional light on a rounded-rect ring**. The heading
-(mouse or `pin_deg`) is a light direction; the gradient is the pattern of
+(`pin_deg` + `angle_offset`) is a light direction; the gradient is the pattern of
 that light, projected along the axis using this window's width and height.
 
-- `input.mouse.move` computes the heading from the window center to the cursor
-- the angle is quantized, then only the ring is damaged if it changed
 - `CShinyBorder` is a custom `IHyprWindowDecoration`, so the plugin owns the
   draw path instead of poking Hyprland’s border-color angle field
 - a GLES 3 fragment shader draws the ring (`src/shaders.hpp`); if that
@@ -29,9 +27,9 @@ that light, projected along the axis using this window's width and height.
   two CPU-side random walks (`shinyShimmerStep`, seeded per deco) modulate the
   heading and the highlight size, then the pass gets a final angle / lobe /
   thickness scale — the shader draws its nominal branch, no new uniforms
-- optional pin (`pin` / `pin_deg`) replaces the mouse latch with a fixed
-  heading; `onMouseMove` bails out early and `draw` computes the pinned angle
-  live, so pulse/shimmer still animate around it
+- heading is always `pin_deg` + `angle_offset` (`shinyPinnedHeading`);
+  `draw` computes it live so pulse/shimmer still animate around it. There is
+  no cursor-tracking mode and no `plugin:shiny-border:pin` switch
 - optional multi-step gradient: one native `CGradientValue` key plus a
   `gradient_positions` string; the deco clamps the stop count
   (`shinyGradientStepCount`, cap 8), resolves per-stop positions CPU-side
@@ -68,7 +66,7 @@ that light, projected along the axis using this window's width and height.
   not use `decoration:shadow` and is not the last gradient stop. CPU twin
   is `shinyWrapComposite` in `runtime.cpp`.
 
-`active_only` (default on) means only the focused window tracks the cursor and
+`active_only` (default on) means only the focused window draws the ring and
 pulses. Unfocused windows have **no** ring, but they still reserve the same
 padding so focus does not reflow the client. There is no inactive shiny
 border. `enabled = false` reserves 0 px.
@@ -105,7 +103,7 @@ mise run reload        # make + copy to a fresh /tmp path + unload/load
 0 (the login session) unless you set both `SHINY_INSTANCE=0` and `SHINY_LIVE=1`.
 
 ```
-edit src/  →  mise run reload  →  wiggle the mouse  →  repeat
+edit src/  →  mise run reload  →  watch the ring  →  repeat
 ```
 
 If the nest dies, close the window and `mise run nest` again. `PLUGIN_EXIT` is
@@ -132,7 +130,7 @@ Same-path reload can reuse the mapping; `pluginctl` avoids that by copying.
 ## Layout
 
 ```
-src/main.cpp     PLUGIN_INIT / EXIT, listeners, heading
+src/main.cpp     PLUGIN_INIT / EXIT, listeners
 src/deco.*       IHyprWindowDecoration, pulse timer
 src/pass.*       CShinyPassElement, shader compile
 src/teardown.*   teardown mark + shader lifecycle

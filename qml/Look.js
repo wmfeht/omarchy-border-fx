@@ -4,7 +4,7 @@
 // plugins[] entry is the source of truth. `effect` selects the renderer
 // (`shiny` today). Missing look keys mean the intended shared look
 // (looknfeel / ShinyBorder defaults), not the C++ plugin defaults
-// (pulse on, pin 90, border 3).
+// (pulse on, pinDeg 90, border 3).
 
 var PLUGIN_ID = "qs.border-fx"
 var LEGACY_PLUGIN_ID = "qs.shiny-border"
@@ -18,7 +18,6 @@ var DEFAULTS = {
   shimmerDeg: 20,
   shimmerScaleMin: 0.75,
   shimmerScaleMax: 1.35,
-  pin: true,
   pinDeg: 120,
   angleOffset: 0,
   lobe: 0.18,
@@ -36,8 +35,7 @@ var DEFAULTS = {
   baseColor: "rgba(00687855)",
   activeOnly: true,
   pulse: false,
-  pulseHz: 0.4,
-  quantizeDeg: 1
+  pulseHz: 0.4
 }
 
 function cloneValue(v) {

@@ -109,78 +109,22 @@ static void checkThickness() {
 }
 
 static void checkHeading() {
-    // Pointer at the transformed origin (0,0) still uses atan vs center — no CPU-angle fallback.
-    const float origin = shinyGpuHeading(0.f, 0.f, 100.f, 100.f);
-    const float onRay  = shinyGpuHeading(50.f, 50.f, 100.f, 100.f);
-    CHECK(std::isfinite(origin));
-    CHECK(std::isfinite(onRay));
-    CHECK(std::fabs(origin - onRay) < 1e-5f);
-
-    const float atCenter = shinyGpuHeading(100.f, 100.f, 100.f, 100.f);
-    CHECK(std::isfinite(atCenter));
-
-    // Two pointers on the same ray from center share a heading.
-    const float a = shinyGpuHeading(110.f, 100.f, 100.f, 100.f);
-    const float b = shinyGpuHeading(200.f, 100.f, 100.f, 100.f);
-    CHECK(std::fabs(a - b) < 1e-5f);
-    CHECK(std::fabs(a) < 1e-5f);
-
-    // Pointer is screen-relative (no floatingOffset); center is visual
-    // (middle + floatingOffset). The old canceling pair — both get the
-    // offset — is a different heading. Offset no longer cancels; intended.
-    const float cursorX = 200.f, cursorY = 100.f;
-    const float middleX = 100.f, middleY = 100.f;
-    const float offX = 0.f, offY = 40.f;
-    const float canceled = shinyGpuHeading(cursorX + offX, cursorY + offY, middleX + offX, middleY + offY);
-    const float visual   = shinyGpuHeading(cursorX, cursorY, middleX + offX, middleY + offY);
-    CHECK(std::fabs(canceled - visual) > 1e-4f);
-    CHECK(std::fabs(canceled - shinyGpuHeading(cursorX, cursorY, middleX, middleY)) < 1e-5f);
-}
-
-static void checkQuantizeLatch() {
+    // Production heading is pinDeg + angleOffset, wrapped into [0, 2π).
+    // Not atan(cursor − center): leftover pointer math is not a heading source.
     const float pi = std::acos(-1.f);
-    auto        deg = [pi](float d) { return d * pi / 180.f; };
 
-    // Heading of +x. A 1px vertical move at 100px is well under a 5° step.
-    const float h0 = shinyGpuHeading(100.f, 0.f, 0.f, 0.f);
-    const float q0 = shinyQuantizeHeading(h0, 0, 5);
-    const float hSmall = shinyGpuHeading(100.f, -1.f, 0.f, 0.f);
-    const float qSmall = shinyQuantizeHeading(hSmall, 0, 5);
-    CHECK(!shinyShouldDamageHeading(q0, qSmall));
-
-    // ~11° is past one 5° step — latch updates.
-    const float hStep = shinyGpuHeading(100.f, -20.f, 0.f, 0.f);
-    const float qStep = shinyQuantizeHeading(hStep, 0, 5);
-    CHECK(shinyShouldDamageHeading(q0, qStep));
+    CHECK(std::fabs(shinyPinnedHeading(0, 0)) < 1e-5f);
+    CHECK(std::fabs(shinyPinnedHeading(90, 0) - pi * 0.5f) < 1e-5f);
+    CHECK(std::fabs(shinyPinnedHeading(180, 0) - pi) < 1e-5f);
 
     // angle_offset is part of the visible heading (shader and fallback).
-    const float qOff = shinyQuantizeHeading(h0, 90, 1);
-    const float qNo  = shinyQuantizeHeading(h0, 0, 1);
-    CHECK(shinyShouldDamageHeading(qNo, qOff));
-    CHECK(qOff >= 0.f);
-    CHECK(qOff < 2.f * pi);
-    CHECK(std::fabs(qOff - pi * 0.5f) < 1e-4f);
+    CHECK(std::fabs(shinyPinnedHeading(0, 90) - pi * 0.5f) < 1e-4f);
+    CHECK(std::fabs(shinyPinnedHeading(350, 20) - 10.f * pi / 180.f) < 1e-4f);
+    CHECK(std::fabs(shinyPinnedHeading(-90, 0) - 270.f * pi / 180.f) < 1e-4f);
 
-    // 350° + 90 offset = 440 without wrap; wrap lands in [0, 2π) at 80°.
-    const float qWrap = shinyQuantizeHeading(deg(350.f), 90, 1);
-    CHECK(qWrap >= 0.f);
-    CHECK(qWrap < 2.f * pi);
-    CHECK(std::fabs(qWrap - deg(80.f)) < 1e-3f);
-
-    // 359° vs 0° with step 5: floor buckets are 355 and 0 (5° apart) → damage.
-    // Offset 1 puts both in the 0 bucket after wrap → no damage.
-    CHECK(shinyShouldDamageHeading(shinyQuantizeHeading(deg(359.f), 0, 5),
-                                   shinyQuantizeHeading(deg(0.f), 0, 5)));
-    CHECK(shinyShouldDamageHeading(shinyQuantizeHeading(deg(355.f), 0, 5),
-                                   shinyQuantizeHeading(deg(0.f), 0, 5)));
-    CHECK(!shinyShouldDamageHeading(shinyQuantizeHeading(deg(359.f), 1, 5),
-                                    shinyQuantizeHeading(deg(0.f), 1, 5)));
-    CHECK(!shinyShouldDamageHeading(shinyQuantizeHeading(deg(356.f), 0, 5),
-                                    shinyQuantizeHeading(deg(359.f), 0, 5)));
-
-    // Raw fabs at ~2π vs 0 looks like a full turn; shortest arc can be a no-op.
-    CHECK(!shinyShouldDamageHeading(2.f * pi - 1e-5f, 0.f));
-    CHECK(shinyShouldDamageHeading(deg(359.f), deg(0.f)));
+    const float wrapped = shinyPinnedHeading(-360, -180);
+    CHECK(wrapped >= 0.f);
+    CHECK(wrapped < 2.f * pi);
 }
 
 static std::string sourceDir() {
@@ -246,16 +190,25 @@ static void checkShaderSource() {
 }
 
 static void checkProductionWiring() {
-    const std::string deco = readFile(sourceDir() + "/deco.cpp");
-    const std::string pass = readFile(sourceDir() + "/pass.cpp");
-    const std::string plug = readFile(sourceDir() + "/main.cpp");
+    const std::string deco    = readFile(sourceDir() + "/deco.cpp");
+    const std::string pass    = readFile(sourceDir() + "/pass.cpp");
+    const std::string plug    = readFile(sourceDir() + "/main.cpp");
+    const std::string hdr     = readFile(sourceDir() + "/deco.hpp");
+    const std::string cfg     = readFile(sourceDir() + "/globals.hpp");
+    const std::string runtime = readFile(sourceDir() + "/runtime.hpp");
     CHECK(!deco.empty());
     CHECK(!pass.empty());
     CHECK(!plug.empty());
+    CHECK(!hdr.empty());
+    CHECK(!cfg.empty());
+    CHECK(!runtime.empty());
 
     CHECK(deco.find("data.angle") != std::string::npos);
-    CHECK(deco.find("m_angle") != std::string::npos);
+    CHECK(deco.find("m_angle") == std::string::npos);
+    CHECK(deco.find("setAngle") == std::string::npos);
+    CHECK(hdr.find("setAngle") == std::string::npos);
     CHECK(deco.find("getMouseCoordsInternal") == std::string::npos);
+    CHECK(plug.find("getMouseCoordsInternal") == std::string::npos);
     CHECK(deco.find("data.pointer") == std::string::npos);
 
     CHECK(pass.find("SHADER_ANGLE") != std::string::npos);
@@ -270,10 +223,30 @@ static void checkProductionWiring() {
     CHECK(deco.find("SHINY_EFFECT_PULSE") != std::string::npos);
     CHECK(pass.find("m_data.thickScale") != std::string::npos);
 
-    // Pin replaces the mouse latch: the deco computes the pinned heading and
-    // the mouse-move listener bails out before touching any latch.
+    // Heading is always pinDeg + angleOffset. No pin-vs-mouse latch, no
+    // cursor listener, no leftover pin bool that pin:false could flip.
     CHECK(deco.find("shinyPinnedHeading") != std::string::npos);
-    CHECK(plug.find("g_cfg.pin->value()") != std::string::npos);
+    CHECK(deco.find("g_cfg.pinDeg->value()") != std::string::npos);
+    CHECK(deco.find("g_cfg.angleOffset->value()") != std::string::npos);
+    CHECK(deco.find("g_cfg.pin->") == std::string::npos);
+    CHECK(plug.find("g_cfg.pin->") == std::string::npos);
+    CHECK(plug.find("plugin:shiny-border:pin\"") == std::string::npos);
+    CHECK(plug.find("plugin:shiny-border:quantize_deg") == std::string::npos);
+    CHECK(plug.find("input.mouse.move") == std::string::npos);
+    CHECK(plug.find("onMouseMove") == std::string::npos);
+    CHECK(plug.find("g_onMouseMove") == std::string::npos);
+    CHECK(plug.find("faces the cursor") == std::string::npos);
+    CHECK(plug.find("tracking the mouse") == std::string::npos);
+    CHECK(cfg.find("g_onMouseMove") == std::string::npos);
+    CHECK(cfg.find("quantizeDeg") == std::string::npos);
+    CHECK(plug.find("shinyGpuHeading") == std::string::npos);
+    CHECK(deco.find("shinyGpuHeading") == std::string::npos);
+    CHECK(plug.find("shinyQuantizeHeading") == std::string::npos);
+    CHECK(deco.find("shinyQuantizeHeading") == std::string::npos);
+    CHECK(runtime.find("shinyGpuHeading") == std::string::npos);
+    CHECK(runtime.find("shinyQuantizeHeading") == std::string::npos);
+    CHECK(runtime.find("shinyShouldDamageHeading") == std::string::npos);
+    CHECK(runtime.find("shinyPinnedHeading") != std::string::npos);
 
     // Gradient is one native gradient key, clamped through the shared count
     // helper, and the fallback consumes the same stop list as the shader.
@@ -376,7 +349,6 @@ int main() {
     checkDrawAgreement();
     checkThickness();
     checkHeading();
-    checkQuantizeLatch();
     checkShaderSource();
     checkProductionWiring();
     checkLightProjection();
