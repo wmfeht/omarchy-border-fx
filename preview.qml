@@ -173,6 +173,15 @@ ShellRoot {
           }
 
           DemoCard {
+            title: "Pulse"
+            body: "Shimmer off; highlight alpha breathes at 0.4 Hz. Same uniforms as a pulsing window."
+            caption: "pulse · chrome should match a pulsing window"
+            shiny.shimmer: false
+            shiny.pulse: true
+            shiny.pulseHz: 0.4
+          }
+
+          DemoCard {
             cardWidth: 320
             cardHeight: 180
             radius: 16

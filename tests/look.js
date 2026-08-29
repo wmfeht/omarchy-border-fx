@@ -56,6 +56,11 @@ function checkMerge() {
   check(e.mirror === false, "unmentioned mirror stays default off")
   check(e.effect === "shiny", "effect stays default")
 
+  const pulseOn = Look.merge({ pulse: true, pulseHz: 1.25, shimmer: false })
+  check(pulseOn.pulse === true, "override pulse true")
+  check(pulseOn.pulseHz === 1.25, "override pulseHz")
+  check(pulseOn.shimmer === false, "pulse recipe can freeze shimmer")
+
   const mirrorOn = Look.merge({ mirror: true })
   check(mirrorOn.mirror === true, "override mirror true")
 

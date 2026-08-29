@@ -21,8 +21,8 @@
 //
 // Gradient colors are packed as mat4 columns (std140-safe; ShaderEffect
 // array uniforms are a footgun). Positions are packed into two vec4s.
-// brightness <= 0 is pulse identity (chrome always); shimmer writes
-// angle / range / thick on the CPU.
+// brightness <= 0 is pulse identity; shimmer writes angle / range /
+// thick on the CPU. Chrome and windows both drive pulse uniforms.
 
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;

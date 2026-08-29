@@ -32,6 +32,28 @@ function pulseAlphaMul(brightness, time) {
   return 0.5 + 0.5 * Math.sin(Number(time) * Number(brightness) * TAU)
 }
 
+// Twin of shinyPulseUniforms. Pulse off or hz <= 0 → both zero even if
+// the clock is running. Time is wrapped into one 1/hz period.
+function pulseUniforms(pulse, clockSeconds, hz) {
+  if (!pulse || !(Number(hz) > 0))
+    return { time: 0, pulseHz: 0 }
+  var period = 1 / Number(hz)
+  var t = Number(clockSeconds) % period
+  if (t < 0)
+    t += period
+  return { time: t, pulseHz: Number(hz) }
+}
+
+// Twin of shinyEffectMode. Shimmer and pulse are mutually exclusive;
+// shimmer wins when both are on and their Hz > 0.
+function effectMode(pulse, pulseHz, shimmer, shimmerHz) {
+  if (shimmer && Number(shimmerHz) > 0)
+    return "shimmer"
+  if (pulse && Number(pulseHz) > 0)
+    return "pulse"
+  return "none"
+}
+
 function tickMs(hz) {
   var kMin = 16
   var kMax = 50

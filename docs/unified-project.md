@@ -92,9 +92,9 @@ plan does **not** invent a third renderer, patch Omarchy `BorderSurface` /
 - **Defaults in C++** are not the live look: pulse on, pinDeg 90°,
   border 3, two-color `col.a`/`col.b`. The **intended shared look** lives
   in `looknfeel.lua` (and is what qs-shiny-border hardcoded).
-- **Hyprland-only keys:** `active_only`, `pulse` / `pulse_hz`. Heading is
-  always `pin_deg` + `angle_offset` on both hosts. Quickshell does not
-  drive pulse in v1.
+- **Hyprland-only keys:** `active_only`. Heading is always `pin_deg` +
+  `angle_offset` on both hosts. Pulse is driven on both hosts; chrome
+  ignores `activeOnly`.
 - **Wrapping stroke:** `baseColor`, a border-thickness ring under the
   directional highlight on both hosts. Transparent = off. Not Hyprland
   `decoration:shadow` (the shader crushes far-side highlight alpha to
@@ -416,7 +416,7 @@ Small shared set, per-host adapters. No third renderer.
 | `colA` / `colB` | `col.a` / `col.b` | `colA` / `colB` | both (used when gradient &lt; 2) |
 | `baseColor` | `base_color` | `baseColor` | both (wrap under the highlight; transparent = off) |
 | `activeOnly` | `active_only` | — | Hyprland only |
-| `pulse` / `pulseHz` | `pulse` / `pulse_hz` | — | Hyprland only (QS fragment keeps brightness ≤ 0) |
+| `pulse` / `pulseHz` | `pulse` / `pulse_hz` | `pulse` / `pulseHz` | both (QS fragment brightness is pulse Hz; ≤ 0 is identity) |
 
 A host that does not understand a key ignores it. That is the adapter
 rule. Changing `pinDeg` in `shell.json` must move **both** the window

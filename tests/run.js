@@ -56,6 +56,32 @@ function checkPulseAlphaMul() {
   check(approx(Shimmer.pulseAlphaMul(1, 0.75), 0), "pulse on at three-quarter is 0")
 }
 
+function checkPulseUniforms() {
+  const off = Shimmer.pulseUniforms(false, 12.5, 0.4)
+  check(off.time === 0 && off.pulseHz === 0, "pulse false zeros uniforms")
+  const offHz = Shimmer.pulseUniforms(true, 12.5, 0)
+  check(offHz.time === 0 && offHz.pulseHz === 0, "pulse hz 0 zeros uniforms")
+  const on = Shimmer.pulseUniforms(true, 12.5, 0.4)
+  check(on.time >= 0 && on.time < 2.5, "pulse time wrapped into 1/hz")
+  check(on.pulseHz === 0.4, "pulse hz passes through")
+  const onMid = Shimmer.pulseUniforms(true, 13.0, 0.4)
+  check(approx(onMid.time, 0.5), "pulse time at mid-cycle")
+  const onFast = Shimmer.pulseUniforms(true, 0.25, 4)
+  check(onFast.time >= 0 && onFast.time < 0.25, "fast pulse wrap")
+  check(onFast.pulseHz === 4, "fast pulse hz")
+}
+
+function checkEffectMode() {
+  check(Shimmer.effectMode(true, 0.4, true, 0.6) === "shimmer", "shimmer wins when both on")
+  check(Shimmer.effectMode(false, 0.4, true, 0.6) === "shimmer", "shimmer on, pulse off")
+  check(Shimmer.effectMode(true, 0.4, false, 0.6) === "pulse", "pulse when shimmer off")
+  check(Shimmer.effectMode(true, 0.4, true, 0) === "pulse", "shimmer hz 0 falls through to pulse")
+  check(Shimmer.effectMode(true, 0.4, true, -1) === "pulse", "shimmer hz < 0 falls through to pulse")
+  check(Shimmer.effectMode(true, 0, false, 0.6) === "none", "pulse hz 0 is none")
+  check(Shimmer.effectMode(false, 0.4, false, 0.6) === "none", "both off is none")
+  check(Shimmer.effectMode(true, 0, true, 0) === "none", "both hz 0 is none")
+}
+
 function checkTickMs() {
   check(Shimmer.tickMs(0.4) > 0, "tick > 0")
   check(Shimmer.tickMs(0.4) < 1000 / 0.4, "tick < cycle")
@@ -429,10 +455,25 @@ function checkWrapSource() {
   check(qml.indexOf("property bool mirror") !== -1, "QML overlay exposes mirror")
   check(qml.indexOf("property int mirror: root.mirror ? 1 : 0") !== -1,
         "ShaderEffect uploads mirror")
+  check(qml.indexOf("property bool pulse") !== -1, "QML overlay exposes pulse")
+  check(qml.indexOf("property real pulseHz") !== -1, "QML overlay exposes pulseHz")
+  check(qml.indexOf("function stepPulse()") !== -1, "QML steps pulse time")
+  check(qml.indexOf("property real brightness: 0") === -1,
+        "ShaderEffect brightness is not stuck at 0")
+  check(qml.indexOf("root._pulseOn ? root.pulseHz : 0") !== -1,
+        "ShaderEffect brightness is pulse Hz when pulse is the active effect")
+  check(qml.indexOf("root._pulseOn ? root._pulseTime : 0") !== -1,
+        "ShaderEffect time is driven when pulse is the active effect")
+  check(qml.indexOf("root._shimmerOn || root._pulseOn") !== -1,
+        "chrome timer runs for pulse, not only shimmer")
 
   const service = fs.readFileSync(path.join(root, "Service.qml"), "utf8")
   check(service.indexOf("mirror: root.look.mirror") !== -1,
         "chrome overlay binds merged look.mirror")
+  check(service.indexOf("pulse: root.look.pulse") !== -1,
+        "chrome overlay binds merged look.pulse")
+  check(service.indexOf("pulseHz: root.look.pulseHz") !== -1,
+        "chrome overlay binds merged look.pulseHz")
 }
 
 function checkGlowCoverage() {
@@ -475,6 +516,8 @@ function checkGlowCoverage() {
 
 checkPinnedHeading()
 checkPulseAlphaMul()
+checkPulseUniforms()
+checkEffectMode()
 checkTickMs()
 checkShimmer()
 checkGradient()

@@ -34,6 +34,10 @@ Item {
   property real shimmerDeg: 20
   property real shimmerScaleMin: 0.75
   property real shimmerScaleMax: 1.35
+  // Oscillate highlight transparency. Exclusive with shimmer (shimmer
+  // wins). Twin of plugin:shiny-border:pulse / pulse_hz.
+  property bool pulse: false
+  property real pulseHz: 0.4
   property real roundingPower: 2
 
   // Wrapping ring stroke under the directional highlight. Both hosts
@@ -57,12 +61,17 @@ Item {
   property string gradientPositionsCw: "0 22 50 100"
 
   readonly property real dpr: Screen.devicePixelRatio || 1
+  readonly property string _effectMode: Shimmer.effectMode(pulse, pulseHz, shimmer, shimmerHz)
+  readonly property bool _shimmerOn: _effectMode === "shimmer"
+  readonly property bool _pulseOn: _effectMode === "pulse"
   readonly property real _baseAngle: Shimmer.pinnedHeading(pinDeg, angleOffset)
-  readonly property real _drawnAngle: Shimmer.wrapAngle(_baseAngle + _shimmerAngle)
-  readonly property real _drawnLobe: shimmer && shimmerHz > 0
+  readonly property real _drawnAngle: _shimmerOn
+      ? Shimmer.wrapAngle(_baseAngle + _shimmerAngle)
+      : _baseAngle
+  readonly property real _drawnLobe: _shimmerOn
       ? Shimmer.lobe(lobe, _shimmerScale)
       : Math.max(lobe, 0.04)
-  readonly property real _thickScale: shimmer && shimmerHz > 0
+  readonly property real _thickScale: _shimmerOn
       ? Shimmer.thickScale(_shimmerScale)
       : 1
   // On the RHI path, status often stays Uncompiled even while the shader
@@ -77,6 +86,7 @@ Item {
   property real _shimmerScale: 1
   property var _shimmerState: null
   property real _lastTickMs: 0
+  property real _pulseTime: 0
 
   onShimmerChanged: {
     if (!shimmer) {
@@ -84,6 +94,8 @@ Item {
       _shimmerScale = 1
     }
   }
+
+  on_PulseOnChanged: if (_pulseOn) stepPulse()
 
   onColAChanged: rebuildRamp()
   onColBChanged: rebuildRamp()
@@ -156,6 +168,11 @@ Item {
     _shimmerScale = _shimmerState.scale.value
   }
 
+  function stepPulse() {
+    var u = Shimmer.pulseUniforms(true, Date.now() / 1000, pulseHz)
+    _pulseTime = u.time
+  }
+
   Component.onCompleted: {
     _shimmerState = Shimmer.makeState(Math.floor(Math.random() * 0xffffffff) || 1)
     rebuildRamp()
@@ -173,8 +190,8 @@ Item {
     property real radiusOuter: Math.max(root.radius, 0) * root.dpr
     property real roundingPower: root.roundingPower
     property real thick: root.borderSize * root.dpr * root._thickScale
-    property real time: 0
-    property real brightness: 0
+    property real time: root._pulseOn ? root._pulseTime : 0
+    property real brightness: root._pulseOn ? root.pulseHz : 0
     property real range: root._drawnLobe
     property real angle: root._drawnAngle
     property int mirror: root.mirror ? 1 : 0
@@ -204,12 +221,22 @@ Item {
   }
 
   Timer {
-    interval: Shimmer.tickMs(root.shimmerHz)
+    interval: Shimmer.tickMs(root._shimmerOn ? root.shimmerHz : root.pulseHz)
     repeat: true
     triggeredOnStart: true
-    running: root.visible && root.shimmer && root.shimmerHz > 0
+    running: root.visible && (root._shimmerOn || root._pulseOn)
              && effect.status !== ShaderEffect.Error
-    onRunningChanged: if (!running) root._lastTickMs = 0
-    onTriggered: root.stepShimmer()
+    onRunningChanged: {
+      if (!running) {
+        root._lastTickMs = 0
+        root._pulseTime = 0
+      }
+    }
+    onTriggered: {
+      if (root._shimmerOn)
+        root.stepShimmer()
+      else if (root._pulseOn)
+        root.stepPulse()
+    }
   }
 }

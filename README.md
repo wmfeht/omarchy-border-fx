@@ -206,7 +206,7 @@ overlays destroyed). Re-enable to bring them back.
 ### Look keys
 
 **Hosts:** *both* = windows and chrome. *windows* = Hyprland decoration
-only (chrome ignores the key). Chrome never pulses.
+only (chrome ignores the key).
 
 | JSON key | Type | Default | Hosts | What it does |
 |---|---|---|---|---|
@@ -228,9 +228,9 @@ only (chrome ignores the key). Chrome never pulses.
 | `shimmerDeg` | number | `20` | both | Max wander **each side** of the heading, degrees. Hyprland clamps `0…180`. |
 | `shimmerScaleMin` | number | `0.75` | both | Lower bound of the size walk. Swapped with max if inverted. Hyprland clamps `0.2…3`. |
 | `shimmerScaleMax` | number | `1.35` | both | Upper bound of the size walk. Scale also fattens/thins the stroke (~35% of the deviation from 1). Hyprland clamps `0.2…3`. |
-| `activeOnly` | bool | `true` | windows | Only the focused window draws / shimmers / pulses. Unfocused windows keep the reserved padding so layout does not jump. |
-| `pulse` | bool | `false` | windows | Oscillate highlight **transparency** in the window shader (`0.5+0.5*sin`). Does not change lobe width or thickness. No-op on chrome. Ignored while shimmer is running. |
-| `pulseHz` | number | `0.4` | windows | Pulse rate. `0` disables. Hyprland clamps `0…4`. |
+| `activeOnly` | bool | `true` | windows | Only the focused window draws / shimmers / pulses. Unfocused windows keep the reserved padding so layout does not jump. Chrome has no unfocused state, so it ignores this key. |
+| `pulse` | bool | `false` | both | Oscillate highlight **transparency** in the shader (`0.5+0.5*sin`). Does not change lobe width or thickness. Ignored while shimmer is running. |
+| `pulseHz` | number | `0.4` | both | Pulse rate. `0` disables. Hyprland clamps `0…4`. |
 
 Hyprland adapter keys (what you see in generated lua / `plugin:shiny-border:*`)
 use snake_case: `border_size`, `pin_deg`, `angle_offset`, `base_color`,
@@ -308,7 +308,7 @@ duration (0.6–1.4 of `1/shimmerHz`) so they drift out of lockstep.
 Windows seed per decoration so overlapping windows do not walk in unison.
 
 When both shimmer and pulse could run, **shimmer wins**. Pulse uniforms
-are zeroed; chrome never sends a pulse (`brightness` stays 0).
+are zeroed (`brightness` stays 0) until shimmer is off or its Hz is `≤ 0`.
 
 ### Recipes
 
@@ -334,7 +334,7 @@ Classic two-stop comet (`colA` / `colB`) instead of the 4-stop ramp:
 }
 ```
 
-Windows pulse instead of shimmer (chrome stays static at `pinDeg`):
+Pulse instead of shimmer (windows and chrome both breathe highlight alpha):
 
 ```json
 {
