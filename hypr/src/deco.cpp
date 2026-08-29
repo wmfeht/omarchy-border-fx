@@ -240,7 +240,7 @@ void CShinyBorder::draw(PHLMONITOR pMonitor, float const& a) {
     };
     // Fewer than two gradient colors (unset, or an explicit one-color /
     // empty override) keeps stopCount at 0 → col.a/col.b. The shared
-    // look default is four stops.
+    // look default is two stops.
     const auto& gradientCfg = g_cfg.gradient->value();
     shared.stopCount        = shinyGradientStepCount(sc<int>(gradientCfg.m_colors.size()));
     for (int i = 0; i < shared.stopCount; i++)

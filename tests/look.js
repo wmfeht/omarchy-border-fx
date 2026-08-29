@@ -83,13 +83,19 @@ function checkDefaults() {
   check(!Object.prototype.hasOwnProperty.call(Look.DEFAULTS, "quantizeDeg"), "DEFAULTS has no mouse quantize")
   check(d.pinDeg === 120, "default pinDeg 120")
   check(d.shimmer === true, "default shimmer")
+  check(d.shimmerHz === 0.28, "default shimmerHz")
+  check(d.shimmerDeg === 22, "default shimmerDeg")
+  check(d.shimmerScaleMin === 0.8, "default shimmerScaleMin")
+  check(d.shimmerScaleMax === 1.4, "default shimmerScaleMax")
+  check(d.lobe === 0.16, "default lobe")
   check(d.pulse === false, "default pulse off")
-  check(d.mirror === false, "default mirror off")
-  check(Look.merge({}).mirror === false, "empty {} look keeps mirror off")
-  check(d.gradient.length === 4, "default 4-stop ramp")
-  check(d.gradient[0] === "rgba(33ccffee)", "head rgba")
-  check(d.gradientPositions === "0 1 3 100", "positions")
-  check(d.baseColor === "rgba(00687855)", "default baseColor")
+  check(d.mirror === true, "default mirror on")
+  check(Look.merge({}).mirror === true, "empty {} look keeps mirror on")
+  check(d.gradient.length === 2, "default 2-stop ramp")
+  check(d.gradient[0] === "rgba(f7ffffee)", "head rgba")
+  check(d.gradient[1] === "rgba(0a3f4700)", "tail rgba")
+  check(d.gradientPositions === "0 99", "positions")
+  check(d.baseColor === "rgba(0a3f47dd)", "default baseColor")
   check(d.activeOnly === true, "hypr-only activeOnly")
   check(d.rippleFreq === 0.025, "default rippleFreq is dedicated")
   check(d.rippleSpeed === 2, "default rippleSpeed is dedicated")
@@ -110,7 +116,7 @@ function checkMerge() {
   check(e.pinDeg === 90, "override pinDeg")
   check(e.borderSize === 1, "override borderSize")
   check(e.shimmer === true, "unmentioned key stays default")
-  check(e.mirror === false, "unmentioned mirror stays default off")
+  check(e.mirror === true, "unmentioned mirror stays default on")
   check(e.effect === "shiny", "effect stays default")
 
   const pulseOn = Look.merge({ pulse: true, pulseHz: 1.25, shimmer: false })
@@ -218,7 +224,7 @@ function checkColors() {
   check(Look.toHyprRgba("rgba(33ccffee)") === "rgba(33ccffee)", "rgba identity")
   check(Look.toQtColor("#ee33ccff") === "#ee33ccff", "Qt identity")
   check(Look.toQtColor("rgb(007a48)") === "#ff007a48", "rgb() assumes ff alpha")
-  check(Look.toHyprRgba("#55006878") === "rgba(00687855)", "baseColor round-trip")
+  check(Look.toHyprRgba("#dd0a3f47") === "rgba(0a3f47dd)", "baseColor round-trip")
   const qt = Look.toQtColorList(["rgba(33ccffee)", "rgba(1ad4c0ee)"])
   check(qt[0] === "#ee33ccff" && qt[1] === "#ee1ad4c0", "list to Qt")
   check(Look.toQtColor("nope") === "#00000000", "junk → transparent")
@@ -251,9 +257,9 @@ function checkLookApply() {
   check(!/cursor/.test(lua), "generated lua does not mention cursor")
   check(/pulse\s*=\s*false/.test(lua), "lua pulse = false")
   check(/shimmer\s*=\s*true/.test(lua), "lua shimmer = true")
-  check(/mirror\s*=\s*false/.test(lua), "lua mirror = false")
-  check(lua.indexOf("rgba(33ccffee)") !== -1, "lua keeps hypr rgba")
-  check(/base_color\s*=\s*"rgba\(00687855\)"/.test(lua), "lua includes Hyprland adapter base_color")
+  check(/mirror\s*=\s*true/.test(lua), "lua mirror = true")
+  check(lua.indexOf("rgba(f7ffffee)") !== -1, "lua keeps hypr rgba")
+  check(/base_color\s*=\s*"rgba\(0a3f47dd\)"/.test(lua), "lua includes Hyprland adapter base_color")
   check(luaAssign(lua, "ripple_origin_x") === "0.5", "empty look lua origin X default")
   check(luaAssign(lua, "ripple_origin_y") === "0.5", "empty look lua origin Y default")
   check(luaAssign(lua, "ripple_fade") === "0", "empty look lua fade off")
@@ -528,11 +534,11 @@ function checkPluginInitDefaults() {
     "PLUGIN_INIT base_color ARGB == Look.DEFAULTS.baseColor")
 
   const wantStops = Look.asColorList(d.gradient).map(argbHexFromLookColor)
-  check(wantStops.length === 4, "Look.DEFAULTS.gradient is four stops")
+  check(wantStops.length === 2, "Look.DEFAULTS.gradient is two stops")
   const gotStops = cppU64Array(main, "kLookDefaultGradient")
-  check(gotStops !== null && gotStops.length === 4, "kLookDefaultGradient is a four-stop list")
+  check(gotStops !== null && gotStops.length === 2, "kLookDefaultGradient is a two-stop list")
   if (gotStops) {
-    for (let i = 0; i < 4; i++)
+    for (let i = 0; i < wantStops.length; i++)
       check(sameHex(gotStops[i], wantStops[i]), "kLookDefaultGradient[" + i + "] == Look.DEFAULTS.gradient[" + i + "]")
   }
 
@@ -545,14 +551,14 @@ function checkPluginInitDefaults() {
   const reloadAt = init.indexOf("HyprlandAPI::reloadConfig()")
   const reloadedAt = init.indexOf("config.reloaded.listen")
   const exitBody = main.slice(main.indexOf("APICALL EXPORT void PLUGIN_EXIT"))
-  check(main.indexOf("data.m_colors") !== -1, "4-stop seed writes CGradientValueData.m_colors")
-  check(main.indexOf("updateColorsOk") !== -1, "4-stop seed calls updateColorsOk")
+  check(main.indexOf("data.m_colors") !== -1, "2-stop seed writes CGradientValueData.m_colors")
+  check(main.indexOf("updateColorsOk") !== -1, "2-stop seed calls updateColorsOk")
   check(main.indexOf("shinySeedGradientStops(g_cfg.gradient, kLookDefaultGradient") !== -1,
     "seed writes kLookDefaultGradient onto g_cfg.gradient")
   check(addGrad >= 0 && reloadAt >= 0, "PLUGIN_INIT registers gradient then reloadConfig")
-  check(applyAt >= 0 && applyAt < addGrad, "4-stop apply runs before addConfigValueV2")
+  check(applyAt >= 0 && applyAt < addGrad, "2-stop apply runs before addConfigValueV2")
   check(init.indexOf(applyNeedle, addGrad) >= 0 && init.indexOf(applyNeedle, addGrad) < reloadAt,
-    "4-stop apply re-runs after register, before reloadConfig")
+    "2-stop apply re-runs after register, before reloadConfig")
   check(reloadedAt >= 0 && reloadedAt > reloadAt,
     "PLUGIN_INIT listens for config.reloaded after scheduling reloadConfig")
   check(/config\.reloaded\.listen\(\s*\[\]\s*\{\s*shinyApplyLookGradientDefault\(\)\s*;\s*\}\s*\)/.test(init),
@@ -564,7 +570,7 @@ function checkPluginInitDefaults() {
   check(exitBody.indexOf("g_onConfigReloaded.reset()") !== -1,
     "PLUGIN_EXIT drops the config.reloaded listener")
   check(init.indexOf("shinySeedGradientStops(g_cfg.gradientCw") < 0,
-    "gradient_cw is not seeded with the 4-stop ramp")
+    "gradient_cw is not seeded with the shared look ramp")
 
   const cwCtor = hyprCtorDefault(init, "gradient_cw")
   check(cwCtor !== null, "gradient_cw still has a one-color CGradientValue ctor")
@@ -588,7 +594,7 @@ function checkTypedCoerce() {
 
   const strFalseMirror = Look.merge({ mirror: "false" })
   const strFalseMirrorWarns = takeWarnings()
-  check(strFalseMirror.mirror === false, "string \"false\" on default-false mirror keeps false")
+  check(strFalseMirror.mirror === true, "string \"false\" on default-true mirror keeps default true")
   check(warnedKey(strFalseMirrorWarns, "mirror"), "string \"false\" mirror warns")
 
   const strFalseShimmer = Look.merge({ shimmer: "false" })
@@ -736,7 +742,7 @@ function checkLookApplyTyped() {
   luaHasNoNonConfig(lua)
   check(luaAssign(lua, "pulse") === "false", "lua pulse stays false (string \"false\" not inverted)")
   check(luaAssign(lua, "shimmer") === "true", "lua shimmer keeps default true for string \"false\"")
-  check(luaAssign(lua, "mirror") === "false", "lua mirror stays false for string \"false\"")
+  check(luaAssign(lua, "mirror") === "true", "lua mirror keeps default true for string \"false\"")
   check(luaAssign(lua, "border_size") === String(d.borderSize), "lua border_size default for \"inf\"")
   check(luaAssign(lua, "lobe") === "0.5", "lua lobe clamped to 0.5")
   check(luaAssign(lua, "angle_offset") === "11", "lua angle_offset is int 11")

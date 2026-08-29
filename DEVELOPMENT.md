@@ -26,10 +26,6 @@ sudo) to build/load `~/.local/lib/hypr/hypr-shiny-border.so`.
 | Hyprland plugin `hypr-shiny-border` | Shiny window adapter (`hyprctl plugin list`, hyprpm, `PLUGIN_INIT`) |
 | Config keys `plugin:shiny-border:*` / Lua `shiny_border` | Shiny Hyprland adapter (hyphen → underscore) |
 
-Design notes and the original unification plan:
-[docs/unified-project.md](docs/unified-project.md). The ripple effect's
-feasibility note: [docs/underwater-ripple.md](docs/underwater-ripple.md).
-
 ### Config fan-out
 
 The `wmfeht.border-fx` entry in `shell.json` `plugins[]` is the only input.
@@ -82,7 +78,6 @@ scripts/
   look-apply.sh               # JSON look → border-fx.lua + hyprctl eval
   install.sh / uninstall.sh   # dev copy helpers
   reinstall.sh                # purge, restart shell, add --enable; keeps shell.json look
-docs/                         # design notes and review phases
 tests/                        # compositor-free JS tests (run in CI)
 ```
 
@@ -117,7 +112,7 @@ mise run reinstall   # purge live .so, restart shell, add this folder; keeps she
 ```
 
 CI (`.github/workflows/test.yml`) runs `mise run test` — the
-compositor-free JS suite, including the docs audits under `tests/`.
+compositor-free JS suite.
 
 ## Hyprland side
 

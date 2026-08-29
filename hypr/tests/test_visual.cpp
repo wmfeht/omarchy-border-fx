@@ -413,10 +413,10 @@ static void checkPluginInitLookDefaults() {
     CHECK(tokHex(hyprCtorDefault(init, "base_color"), rgbaToArgb(jsScalar(defaults, "baseColor"))));
 
     const auto wantStops = jsRgbaList(defaults, "gradient");
-    CHECK(wantStops.size() == 4);
+    CHECK(wantStops.size() == 2);
     const auto gotStops = cppU64Array(main, "kLookDefaultGradient");
-    CHECK(gotStops.size() == 4);
-    for (size_t i = 0; i < 4 && i < gotStops.size() && i < wantStops.size(); i++)
+    CHECK(gotStops.size() == 2);
+    for (size_t i = 0; i < gotStops.size() && i < wantStops.size(); i++)
         CHECK(gotStops[i] == rgbaToArgb(wantStops[i]));
 
     CHECK(main.find("shinySeedGradientStops") != std::string::npos);
@@ -568,7 +568,7 @@ static void checkProductionWiring() {
 
     // baseColor: config key + draw payload + raw glUniform (no CShader slot).
     CHECK(plug.find("plugin:shiny-border:base_color") != std::string::npos);
-    CHECK(plug.find("0x55006878") != std::string::npos);
+    CHECK(plug.find("0xdd0a3f47") != std::string::npos);
     CHECK(deco.find("shared.baseColor") != std::string::npos || deco.find(".baseColor") != std::string::npos);
     CHECK(deco.find("g_cfg.baseColor->value()") != std::string::npos);
     CHECK(pass.find("m_data.shared.baseColor") != std::string::npos);

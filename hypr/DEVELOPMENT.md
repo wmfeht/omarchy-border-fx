@@ -70,7 +70,7 @@ that light, projected along the axis using this window's width and height.
   Uploaded as a raw `glUniform1i` of `mirror` (no CShader slot). The
   fallback cannot represent a two-headed comet.
 - wrapping `baseColor` stroke: `plugin:shiny-border:base_color` (default
-  `rgba(00687855)` / ARGB `0x55006878`) rides in `ShinyDrawShared::baseColor`
+  `rgba(0a3f47dd)` / ARGB `0xdd0a3f47`) rides in `ShinyDrawShared::baseColor`
   and a raw `glUniform4f` of `baseColor` — CShader has no third color slot.
   Both fragments run `shinyWrapComposite` (premultiplied highlight over a
   border-thickness ring; glow excluded; `a <= 0` is off). The wrap does
