@@ -62,11 +62,11 @@ that light, projected along the axis using this window's width and height.
   not enforced — mismatched first/last colors seam at the head / lobe edge
   (documented in the README). The fallback linear gradient cannot express
   asymmetry and keeps drawing the primary side.
-- `mirror_lobe` (default off): when set, both fragments fold `d0` to
+- `mirror` (default off): when set, both fragments fold `d0` to
   `min(u, 1-u) * 0.5` so the same lobe sits on the far support too.
   Cone, `uRamp`, glow, and local thickness share that distance. The CW
-  split is unchanged. CPU twin is `shinyGradientLobeU(..., mirrorLobe)`.
-  Uploaded as a raw `glUniform1i` of `mirrorLobe` (no CShader slot). The
+  split is unchanged. CPU twin is `shinyGradientLobeU(..., mirror)`.
+  Uploaded as a raw `glUniform1i` of `mirror` (no CShader slot). The
   fallback cannot represent a two-headed comet.
 - wrapping `baseColor` stroke: `plugin:shiny-border:base_color` (default
   `rgba(00687855)` / ARGB `0x55006878`) rides in `ShinyDrawShared::baseColor`

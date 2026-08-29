@@ -417,14 +417,15 @@ function checkWrapSource() {
   check(frag.indexOf("float d0 = u * 0.5;") !== -1, "qs off path is facing-only d0")
   check(frag.indexOf("min(u, 1.0 - u)") !== -1, "qs on path folds d0 to nearer end")
   check(frag.indexOf("smoothstep(0.0, spread, d0)") !== -1, "qs cone uses the same d0")
-  check(frag.indexOf("int   mirrorLobe;") !== -1, "qs frag mirrorLobe UBO")
-  check(qml.indexOf("property bool mirrorLobe") !== -1, "QML overlay exposes mirrorLobe")
-  check(qml.indexOf("property int mirrorLobe: root.mirrorLobe ? 1 : 0") !== -1,
-        "ShaderEffect uploads mirrorLobe")
+  check(frag.indexOf("int   mirror;") !== -1, "qs frag mirror UBO")
+  check(frag.indexOf("if (mirror != 0)") !== -1, "qs on path gates on mirror")
+  check(qml.indexOf("property bool mirror") !== -1, "QML overlay exposes mirror")
+  check(qml.indexOf("property int mirror: root.mirror ? 1 : 0") !== -1,
+        "ShaderEffect uploads mirror")
 
   const service = fs.readFileSync(path.join(root, "Service.qml"), "utf8")
-  check(service.indexOf("mirrorLobe: root.look.mirrorLobe") !== -1,
-        "chrome overlay binds merged look.mirrorLobe")
+  check(service.indexOf("mirror: root.look.mirror") !== -1,
+        "chrome overlay binds merged look.mirror")
 }
 
 checkPinnedHeading()

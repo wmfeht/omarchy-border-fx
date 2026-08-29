@@ -32,7 +32,7 @@ Item {
   // Bump when the overlay's look changes so attach() drops leftovers from a
   // previous plugin load. omarchy-shell caches service instances; copying
   // QML is not enough if an old ShinyBorder is still a child of the card.
-  readonly property int overlayRev: 8
+  readonly property int overlayRev: 9
 
   // shell.json plugins[] entry is the shared look. Services are not injected
   // a settings object — read it off shell.shellConfig ourselves.
@@ -408,7 +408,7 @@ Item {
       colA: Look.toQtColor(root.look.colA)
       colB: Look.toQtColor(root.look.colB)
       lobe: root.look.lobe
-      mirrorLobe: root.look.mirrorLobe
+      mirror: root.look.mirror
       pinDeg: root.look.pinDeg
       angleOffset: root.look.angleOffset
       shimmer: root.look.shimmer

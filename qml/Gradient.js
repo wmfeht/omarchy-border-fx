@@ -32,15 +32,15 @@ function stopPos(i, count) {
 // lobe edge). Twin of shinyGradientLobeU / shader uRamp. spread is the
 // applied lobe (config / shimmer-scaled range); values below 0.04 floor
 // like max(range, 0.04). Pulse no longer modulates spread.
-// mirrorLobe folds d0 onto the nearer end of the axis so both supports
+// mirror folds d0 onto the nearer end of the axis so both supports
 // are comet heads. Omitted / false is facing-only (d0 = u * 0.5).
-function lobeU(uAxis, spread, mirrorLobe) {
+function lobeU(uAxis, spread, mirror) {
   var u = Number(uAxis) || 0
   if (u < 0)
     u = 0
   if (u > 1)
     u = 1
-  var d0 = (mirrorLobe ? Math.min(u, 1 - u) : u) * 0.5
+  var d0 = (mirror ? Math.min(u, 1 - u) : u) * 0.5
   var s = Number(spread)
   if (!(s >= 0.04))
     s = 0.04

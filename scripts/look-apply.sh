@@ -79,7 +79,7 @@ DEFAULTS = {
     "pinDeg": 120,
     "angleOffset": 0,
     "lobe": 0.18,
-    "mirrorLobe": False,
+    "mirror": False,
     "gradient": [
         "rgba(33ccffee)",
         "rgba(1ad4c0ee)",
@@ -277,7 +277,7 @@ lines = [
     "        pin_deg      = " + lua_num(look["pinDeg"]) + ",",
     "        angle_offset = " + lua_num(look["angleOffset"]) + ",",
     "        lobe         = " + lua_num(look["lobe"]) + ",",
-    "        mirror_lobe  = " + lua_bool(look["mirrorLobe"]) + ",",
+    "        mirror       = " + lua_bool(look["mirror"]) + ",",
     "        border_size  = " + lua_num(look["borderSize"]) + ",",
     "        col = {",
     "          a = " + lua_str(to_hypr(look["colA"])) + ",",

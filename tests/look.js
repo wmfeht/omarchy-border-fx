@@ -39,8 +39,8 @@ function checkDefaults() {
   check(d.pinDeg === 120, "default pinDeg 120 (not C++ 90)")
   check(d.shimmer === true, "default shimmer")
   check(d.pulse === false, "default pulse off (not C++ on)")
-  check(d.mirrorLobe === false, "default mirrorLobe off")
-  check(Look.merge({}).mirrorLobe === false, "empty {} look keeps mirrorLobe off")
+  check(d.mirror === false, "default mirror off")
+  check(Look.merge({}).mirror === false, "empty {} look keeps mirror off")
   check(d.gradient.length === 4, "default 4-stop ramp")
   check(d.gradient[0] === "rgba(33ccffee)", "head rgba")
   check(d.gradientPositions === "0 1 3 100", "positions")
@@ -53,14 +53,14 @@ function checkMerge() {
   check(e.pinDeg === 90, "override pinDeg")
   check(e.borderSize === 1, "override borderSize")
   check(e.shimmer === true, "unmentioned key stays default")
-  check(e.mirrorLobe === false, "unmentioned mirrorLobe stays default off")
+  check(e.mirror === false, "unmentioned mirror stays default off")
   check(e.effect === "shiny", "effect stays default")
 
-  const mirrorOn = Look.merge({ mirrorLobe: true })
-  check(mirrorOn.mirrorLobe === true, "override mirrorLobe true")
+  const mirrorOn = Look.merge({ mirror: true })
+  check(mirrorOn.mirror === true, "override mirror true")
 
-  const nestedMirror = Look.merge({ mirrorLobe: false, shiny: { mirrorLobe: true } })
-  check(nestedMirror.mirrorLobe === true, "nested shiny.mirrorLobe wins")
+  const nestedMirror = Look.merge({ mirror: false, shiny: { mirror: true } })
+  check(nestedMirror.mirror === true, "nested shiny.mirror wins")
   check(e.id === undefined, "id is not a look key")
 
   const emptyRamp = Look.merge({ gradient: [] })
@@ -144,7 +144,7 @@ function checkLookApply() {
   check(!/cursor/.test(lua), "generated lua does not mention cursor")
   check(/pulse\s*=\s*false/.test(lua), "lua pulse = false")
   check(/shimmer\s*=\s*true/.test(lua), "lua shimmer = true")
-  check(/mirror_lobe\s*=\s*false/.test(lua), "lua mirror_lobe = false")
+  check(/mirror\s*=\s*false/.test(lua), "lua mirror = false")
   check(lua.indexOf("rgba(33ccffee)") !== -1, "lua keeps hypr rgba")
   check(/base_color\s*=\s*"rgba\(00687855\)"/.test(lua), "lua includes Hyprland adapter base_color")
   check(lua.indexOf("hl.plugin.load") !== -1, "login load of session .so")
@@ -207,19 +207,19 @@ function checkLookApply() {
 
   const mirrorLua = spawnSync(
     "bash",
-    [script, "--stdout", "--look-json", JSON.stringify({ mirrorLobe: true })],
+    [script, "--stdout", "--look-json", JSON.stringify({ mirror: true })],
     { encoding: "utf8", env: env }
   )
-  check(mirrorLua.status === 0, "mirrorLobe look-apply")
-  check(/mirror_lobe\s*=\s*true/.test(mirrorLua.stdout), "mirrorLobe fans out true")
+  check(mirrorLua.status === 0, "mirror look-apply")
+  check(/mirror\s*=\s*true/.test(mirrorLua.stdout), "mirror fans out true")
 
   const nestedMirrorLua = spawnSync(
     "bash",
-    [script, "--stdout", "--look-json", JSON.stringify({ mirrorLobe: false, shiny: { mirrorLobe: true } })],
+    [script, "--stdout", "--look-json", JSON.stringify({ mirror: false, shiny: { mirror: true } })],
     { encoding: "utf8", env: env }
   )
-  check(nestedMirrorLua.status === 0, "nested shiny.mirrorLobe look-apply")
-  check(/mirror_lobe\s*=\s*true/.test(nestedMirrorLua.stdout), "nested shiny.mirrorLobe fans out")
+  check(nestedMirrorLua.status === 0, "nested shiny.mirror look-apply")
+  check(/mirror\s*=\s*true/.test(nestedMirrorLua.stdout), "nested shiny.mirror fans out")
 
   const otherFx = spawnSync(
     "bash",

@@ -210,7 +210,7 @@ static void checkShaderSource() {
         CHECK(src.find("float d0 = u * 0.5;") != std::string::npos);
         CHECK(src.find("min(u, 1.0 - u)") != std::string::npos);
         CHECK(src.find("smoothstep(0.0, spread, d0)") != std::string::npos);
-        CHECK(src.find("mirrorLobe") != std::string::npos);
+        CHECK(src.find("if (mirror != 0)") != std::string::npos);
     };
     checkLighting(frag);
     checkLighting(qsFrag);
@@ -314,11 +314,11 @@ static void checkProductionWiring() {
     CHECK(pass.find("decoration:shadow") == std::string::npos);
     CHECK(plug.find("decoration:shadow") == std::string::npos);
 
-    // mirror_lobe: config bool + draw payload + raw glUniform (no CShader slot).
-    CHECK(plug.find("plugin:shiny-border:mirror_lobe") != std::string::npos);
-    CHECK(deco.find("g_cfg.mirrorLobe->value()") != std::string::npos);
-    CHECK(pass.find("m_data.mirrorLobe") != std::string::npos);
-    CHECK(pass.find("\"mirrorLobe\"") != std::string::npos);
+    // mirror: config bool + draw payload + raw glUniform (no CShader slot).
+    CHECK(plug.find("plugin:shiny-border:mirror") != std::string::npos);
+    CHECK(deco.find("g_cfg.mirror->value()") != std::string::npos);
+    CHECK(pass.find("m_data.mirror") != std::string::npos);
+    CHECK(pass.find("\"mirror\"") != std::string::npos);
     CHECK(pass.find("glUniform1i") != std::string::npos);
 }
 

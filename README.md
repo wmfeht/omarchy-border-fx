@@ -133,7 +133,7 @@ All keys at their shared defaults (equivalent to `{ "id": "qs.border-fx" }`):
   "pinDeg": 120,
   "angleOffset": 0,
   "lobe": 0.18,
-  "mirrorLobe": false,
+  "mirror": false,
   "gradient": [
     "rgba(33ccffee)",
     "rgba(1ad4c0ee)",
@@ -216,7 +216,7 @@ only (chrome ignores the key). Chrome never pulses.
 | `pinDeg` | number (°) | `120` | both | Light heading, degrees CCW. `0` = from the right, `90` = from above. Hyprland clamps `-360…360`. |
 | `angleOffset` | number (°) | `0` | both | Added to `pinDeg` before drawing. Hyprland clamps `-180…180`. |
 | `lobe` | number | `0.18` | both | Lit-band **half-width** along the light axis. `0.5` = the whole window. Hyprland clamps config to `0.04…0.5`. Chrome clamps a walking lobe to that range, and a static lobe to at least `0.04`. |
-| `mirrorLobe` | bool | `false` | both | Mirror the same lobe onto the **far side** of the light axis (two comet heads). Off keeps today’s facing-only comet. Cone, ramp, glow, and local thickness all follow the nearer-end distance. The clockwise vs primary half split is unchanged. |
+| `mirror` | bool | `false` | both | Mirror the same lobe onto the **far side** of the light axis (two comet heads). Off keeps today’s facing-only comet. Cone, ramp, glow, and local thickness all follow the nearer-end distance. The clockwise vs primary half split is unchanged. |
 | `gradient` | color list | 4-stop teal ramp | both | Comet ramp, **facing support first**, last stop = edge of the lit band (`lobe`). Fewer than two colors turns the ramp off and uses `colA` / `colB`. |
 | `gradientPositions` | string | `"0 1 3 100"` | both | Stop positions for `gradient`. See [Gradient](#gradient). |
 | `gradientCw` | color list | `[]` | both | Optional colors for the **clockwise** half of the light axis. See [Clockwise half](#clockwise-half). |
@@ -236,7 +236,7 @@ Hyprland adapter keys (what you see in generated lua / `plugin:shiny-border:*`)
 use snake_case: `border_size`, `pin_deg`, `angle_offset`, `base_color`,
 `gradient_positions`, `gradient_cw`, `gradient_positions_cw`, `col.a`,
 `col.b`, `active_only`, `pulse_hz`, `shimmer_hz`, `shimmer_deg`,
-`shimmer_scale_min`, `shimmer_scale_max`, `mirror_lobe`. Hyphens in the Hyprland plugin
+`shimmer_scale_min`, `shimmer_scale_max`, `mirror`. Hyphens in the Hyprland plugin
 prefix become underscores in Lua (`shiny_border`).
 
 Not a look key (hardcoded or host-owned):
@@ -263,7 +263,7 @@ specular/white core has to be a stop, not a shader mix toward white.
 - `lobe` 0.5 (the whole window) is the same mapping as stretching 0…100
   across the axis. Smaller lobes compress the same stop list into the
   comet so every stop stays visible in the highlight.
-- With `mirrorLobe` on, the same 0…100 band is also measured from the far
+- With `mirror` on, the same 0…100 band is also measured from the far
   support, so both ends of the axis are comet heads. Mid-axis past both
   lobe edges still holds the last stop.
 - Each half of the axis (facing → far, then the other flank) runs that

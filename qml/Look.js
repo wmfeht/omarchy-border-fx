@@ -21,7 +21,7 @@ var DEFAULTS = {
   pinDeg: 120,
   angleOffset: 0,
   lobe: 0.18,
-  mirrorLobe: false,
+  mirror: false,
   gradient: [
     "rgba(33ccffee)",
     "rgba(1ad4c0ee)",

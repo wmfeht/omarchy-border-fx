@@ -286,7 +286,7 @@ void CShinyBorder::draw(PHLMONITOR pMonitor, float const& a) {
         data.pulseHz      = pulseU.pulseHz;
         data.lobe         = lobe;
         data.thickScale   = thickScale;
-        data.mirrorLobe   = g_cfg.mirrorLobe->value();
+        data.mirror       = g_cfg.mirror->value();
         g_pHyprRenderer->addPassElement(makeUnique<CShinyPassElement>(data));
         return;
     }

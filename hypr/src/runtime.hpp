@@ -80,7 +80,7 @@ float shinyGradientStopPos(int i, int count);
 // shimmer-scaled range, floored at 0.04). Returns 0 at a head, 1 at a
 // lobe edge, and stays 1 past it. lobe 0.5 off is identity. Twin of
 // uRamp in SHINY_FRAG / shaders/shiny.frag.
-float shinyGradientLobeU(float uAxis, float spread, bool mirrorLobe = false);
+float shinyGradientLobeU(float uAxis, float spread, bool mirror = false);
 
 // plugin:shiny-border:gradient_positions → per-stop ramp positions.
 // Always fills out[0..SHINY_MAX_GRADIENT_STEPS-1] — even spacing first,

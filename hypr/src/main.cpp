@@ -72,7 +72,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
                                                                     Config::Values::SFloatValueOptions{.min = 0.2f, .max = 3.f});
     g_cfg.lobe         = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:lobe", "Lit-band half-width along the light axis; 0.5 = the whole window", 0.18,
                                                                 Config::Values::SFloatValueOptions{.min = 0.04, .max = 0.5});
-    g_cfg.mirrorLobe   = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:mirror_lobe", "Mirror the lit-band lobe onto the far side of the border", false);
+    g_cfg.mirror       = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:mirror", "Mirror the lit-band lobe onto the far side of the border", false);
     g_cfg.colA         = makeShared<Config::Values::CColorValue>("plugin:shiny-border:col.a", "Highlight head (ARGB)", 0xee33ccff);
     g_cfg.colB         = makeShared<Config::Values::CColorValue>("plugin:shiny-border:col.b", "Highlight shoulder (ARGB)", 0xee00ff99);
     g_cfg.baseColor    = makeShared<Config::Values::CColorValue>("plugin:shiny-border:base_color",
@@ -105,7 +105,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.shimmerScaleMin);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.shimmerScaleMax);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.lobe);
-    HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.mirrorLobe);
+    HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.mirror);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.colA);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.colB);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.baseColor);
