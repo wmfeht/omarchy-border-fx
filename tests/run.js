@@ -777,7 +777,15 @@ function checkOverlayAttach() {
   check(typeof OA.hostShowing === "function", "OverlayAttach.hostShowing is shipped")
   check(typeof OA.decideHostSync === "function", "OverlayAttach.decideHostSync is shipped")
   check(typeof OA.applyCardPolicy === "function", "OverlayAttach.applyCardPolicy is shipped")
-  check(OA.ASSIGN_STOCK === false, "overlay-only: ASSIGN_STOCK is false")
+  check(OA.ASSIGN_STOCK === true, "ASSIGN_STOCK hides the stock stroke while the overlay is on")
+  check(typeof OA.stockWidth === "function", "OverlayAttach.stockWidth is shipped")
+  check(typeof OA.hiddenSpec === "function", "OverlayAttach.hiddenSpec is shipped")
+  check(OA.stockWidth(null) === 2, "stockWidth default is 2")
+  check(OA.stockWidth({ widths: { top: 3, right: 1, bottom: 0, left: 2 } }) === 3, "stockWidth is max side")
+  const fillSpec = OA.hiddenSpec("#112233", 4)
+  check(fillSpec.widths.top === 4 && fillSpec.widths.right === 4, "hiddenSpec is uniform width")
+  check(fillSpec.gradient && fillSpec.gradient.enabled === false, "hiddenSpec is native (no overlay gradient)")
+  check(fillSpec.color === "#112233", "hiddenSpec keeps fill color")
 
   const bar = makeBarPanel(true, true)
   const overlay = makeOverlay(true)
@@ -840,25 +848,19 @@ function checkOverlayAttach() {
 
   const first = driveSync(OA, session, bar.host, bar.card)
   check(first.decision.action === "attach", "showing shiny bar-panel attaches")
-  check(first.decision.assignStock === false, "first attach does not assign stock (overlay-only)")
+  check(first.decision.assignStock === true, "first attach hides stock stroke")
+  check(first.result.assignStock === true, "first attach policy assignStock")
   check(first.result.overlayAction === "create", "first attach creates overlay")
   check(OA.isAttached(session.attached, bar.card) === true, "attach-once: set membership grows")
   check(session.attached.length === 1, "one attached card after first sync")
   check(first.overlay && first.overlay.overlayRev === 12, "created overlay stamped with current overlayRev")
-  check(bar.card.specWrites === 0, "first attach does not write borderSpec")
-  check(bar.card.clipWrites === 0, "first attach does not write clip")
-  check(bar.card.borderSpec === bar.spec, "host borderSpec identity preserved on attach")
 
   const second = driveSync(OA, session, bar.host, bar.card)
   check(second.decision.action === "noop", "second sync on attached showing card is noop")
-  check(second.decision.assignStock === false, "second sync does not assign borderSpec/clip")
+  check(second.decision.assignStock === false, "second sync does not poll-assign borderSpec/clip")
   check(second.decision.createOverlay === false, "second sync does not recreate overlay")
   check(second.result.overlayAction === "keep", "second sync keeps existing overlay")
   check(session.attached.length === 1, "second sync does not grow the attached set")
-  check(bar.card.specWrites === 0, "second sync does not write borderSpec")
-  check(bar.card.clipWrites === 0, "second sync does not write clip")
-  check(bar.card.borderSpec === bar.spec, "borderSpec unchanged after second sync")
-  check(bar.card.clip === true, "clip unchanged after second sync")
 
   const stale = { attached: [], overlayOf: new Map(), overlayRev: 12 }
   stale.overlayOf.set(overlay.card, { overlayRev: 11 })
@@ -868,7 +870,7 @@ function checkOverlayAttach() {
   check(replaced.result.overlayAction === "replace", "stale stamp overlayAction replace")
   check(replaced.overlay && replaced.overlay.overlayRev === 12, "replacement stamped with current overlayRev")
   check(OA.isAttached(stale.attached, overlay.card) === true, "replace still attaches the card")
-  check(overlay.card.specWrites === 0, "leftover replace does not assign borderSpec")
+  check(replaced.decision.assignStock === true, "leftover replace hides stock (not already attached)")
 
   const kept = driveSync(OA, stale, overlay.host, overlay.card)
   check(kept.decision.action === "noop", "matching overlayRev is kept")
@@ -883,7 +885,7 @@ function checkOverlayAttach() {
   check(join.decision.createOverlay === false, "matching leftover keeps existing child")
   check(join.decision.keepOverlay === true, "matching leftover keepOverlay")
   check(sameRevLeftover.attached.length === 1, "matching leftover joins the attached set")
-  check(toast.card.specWrites === 0, "matching leftover join does not assign borderSpec")
+  check(join.decision.assignStock === true, "matching leftover join hides stock")
 
   bar.host.open = false
   bar.host.visible = false
@@ -893,9 +895,8 @@ function checkOverlayAttach() {
   check(OA.isAttached(session.attached, bar.card) === false, "hide removes card from attached set")
   check(session.attached.length === 0, "attached set empty after hide")
   check(hidden.overlay === null, "overlay gone after hide")
-  check(bar.card.borderSpec === bar.spec, "hide leaves host borderSpec untouched (overlay-only)")
-  check(bar.card.clip === true, "hide leaves host clip untouched (overlay-only)")
-  check(bar.card.specWrites === 0 && bar.card.clipWrites === 0, "hide does not write stock properties")
+  check(hidden.decision.restoreStock === true, "hide restores stock stroke")
+  check(hidden.result.restoreStock === true, "hide policy restoreStock")
 
   bar.host.open = true
   bar.host.visible = true
@@ -904,7 +905,7 @@ function checkOverlayAttach() {
   const destroyed = driveSync(OA, session, bar.host, bar.card, { hostDestroyed: true })
   check(destroyed.decision.action === "detach", "destroy of attached host detaches")
   check(OA.isAttached(session.attached, bar.card) === false, "destroy removes card from attached set")
-  check(bar.card.borderSpec === bar.spec, "destroy leaves host borderSpec untouched")
+  check(destroyed.decision.restoreStock === true, "destroy restores stock stroke")
 
   const disableSess = { attached: [], overlayOf: new Map(), overlayRev: 12 }
   driveSync(OA, disableSess, toast.host, toast.card)
@@ -913,8 +914,7 @@ function checkOverlayAttach() {
   check(disabled.decision.action === "detach", "disable teardown detaches")
   check(disabled.result.overlayAction === "destroy", "disable destroys overlay")
   check(disableSess.attached.length === 0, "disable clears attached set")
-  check(toast.card.borderSpec === toast.spec, "disable leaves host borderSpec untouched")
-  check(toast.card.clip === true, "disable leaves host clip untouched")
+  check(disabled.decision.restoreStock === true, "disable restores stock stroke")
 
   const notShiny = { attached: [], overlayOf: new Map(), overlayRev: 12 }
   driveSync(OA, notShiny, overlay.host, overlay.card)
@@ -946,10 +946,18 @@ function checkOverlayAttachWiring() {
   check(service.indexOf("function isHost") === -1, "no QML-only isHost copy")
   check(service.indexOf("function isChromeCard") === -1, "no QML-only isChromeCard copy")
   check(service.indexOf("function hostShowing") === -1, "no QML-only hostShowing copy")
-  check(service.indexOf("function hideStock") === -1, "Service does not hideStock")
-  check(service.indexOf("function restoreStock") === -1, "Service does not restoreStock")
-  check(!/card\.borderSpec\s*=/.test(service), "Service never JS-assigns card.borderSpec")
-  check(!/card\.clip\s*=/.test(service), "Service never JS-assigns card.clip")
+  check(service.indexOf("function hideStock") !== -1, "Service hides stock stroke on attach")
+  check(service.indexOf("function restoreStock") !== -1, "Service restores stock stroke on detach")
+  check(service.indexOf("result.assignStock") !== -1, "Service hides stock from attach policy, not a poll")
+  check(service.indexOf("result.restoreStock") !== -1, "Service restores stock from detach policy")
+  const hideAt = service.indexOf("function hideStock")
+  const restoreAt = service.indexOf("function restoreStock")
+  const hideFn = hideAt === -1 ? "" : service.slice(hideAt, restoreAt)
+  check(/card\.borderSpec\s*=/.test(hideFn), "hideStock assigns borderSpec")
+  check(hideFn.indexOf("Qt.binding") !== -1, "hidden stock spec tracks card.color")
+  check(/card\.clip\s*=\s*false/.test(hideFn), "hideStock drops clip so the ring is not scissored")
+  const restoreFn = restoreAt === -1 ? "" : service.slice(restoreAt, service.indexOf("function pluginRoot"))
+  check(/card\.borderSpec\s*=\s*entry\.spec/.test(restoreFn), "restoreStock writes the captured spec")
 
   check(/onActivePopoutChanged\(\)\s*\{\s*Qt\.callLater\(root\.syncAll\)/.test(service),
         "onActivePopoutChanged invokes syncAll")

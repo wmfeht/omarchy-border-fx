@@ -2,12 +2,38 @@
 
 // Host discovery and overlay attach policy for Service.qml.
 // Duck-types Omarchy chrome (bar popouts, overlay cards, notification
-// toasts). Overlay is an extra child — never JS-assign host borderSpec
-// or clip (that replaces QML bindings). Attach once; drop leftover
-// overlays whose overlayRev does not match the current stamp.
+// toasts). Overlay is an extra child. Hide the stock stroke once on
+// attach (same-width fill so insets do not jump); restore on detach.
+// Do not poll-assign — a JS write still replaces QML bindings.
+// Drop leftover overlays whose overlayRev does not match the current stamp.
 
-// Extra-child overlay only. Do not hide/restore stock borderSpec/clip.
-var ASSIGN_STOCK = false
+// Hide stock BorderSurface stroke while the overlay is on. Assign once.
+var ASSIGN_STOCK = true
+
+function stockWidth(spec) {
+  var w = 0
+  if (spec && spec.widths) {
+    w = Math.max(
+      Number(spec.widths.top) || 0,
+      Number(spec.widths.right) || 0,
+      Number(spec.widths.bottom) || 0,
+      Number(spec.widths.left) || 0
+    )
+  }
+  return w > 0 ? w : 2
+}
+
+// Same shape as Border.flat(color, width): native Rectangle.border, no Shape overlay.
+function hiddenSpec(color, width) {
+  var w = Number(width)
+  if (!(w > 0))
+    w = 2
+  return {
+    color: color,
+    widths: { top: w, right: w, bottom: w, left: w },
+    gradient: { colors: [], angle: 0, enabled: false }
+  }
+}
 
 function isBarPanelHost(obj) {
   return obj

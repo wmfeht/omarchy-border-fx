@@ -13,8 +13,9 @@
 // Does not patch qs.Ui. Walks shell.bar.moduleSlots, summoned panel
 // loaders, and the notifications service tree, finds the chrome card
 // (shallowest BorderSurface, not inner rows), and overlays ShinyBorder
-// as an extra child while visible. Host borderSpec/clip are not
-// JS-assigned (that would drop QML bindings).
+// as an extra child while visible. Hides the stock stroke once on attach
+// (fill-colored, same width) so it does not paint under the ring; restores
+// on detach. Not a 200 ms rewrite.
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -46,8 +47,10 @@ Item {
   property bool hyprReady: false
   // Cards currently carrying a ShinyBorder child. Entries are
   // {host, card}. Attach-once: a second sync on a member does not
-  // recreate the overlay or write host properties.
+  // recreate the overlay or rewrite stock properties.
   property var attached: []
+  // Captured host borderSpec/clip while the overlay is on.
+  property var stock: []
   property var hostWatches: []
   property bool warnedMissingToasts: false
 
@@ -141,6 +144,80 @@ Item {
     } catch (e) {
       return false
     }
+  }
+
+  function stockEntry(card) {
+    for (var i = 0; i < root.stock.length; i++) {
+      if (root.stock[i].card === card)
+        return root.stock[i]
+    }
+    return null
+  }
+
+  function pruneStock() {
+    var next = []
+    for (var i = 0; i < root.stock.length; i++) {
+      if (alive(root.stock[i].card))
+        next.push(root.stock[i])
+    }
+    if (next.length !== root.stock.length)
+      root.stock = next
+  }
+
+  // Keep the reserved width so content insets do not jump, but paint that
+  // strip as the card fill. A transparent native border punches a hole
+  // through to the scrim; the ring would then composite over empty pixels.
+  // NotificationCard clip: true would scissor the ring at the rounded edge.
+  function hideStock(card) {
+    if (!card)
+      return
+    var entry = stockEntry(card)
+    var spec = entry ? entry.spec : card.borderSpec
+    if (!entry) {
+      var next = []
+      for (var i = 0; i < root.stock.length; i++)
+        next.push(root.stock[i])
+      next.push({ card: card, spec: spec, clip: card.clip })
+      root.stock = next
+    }
+    var w = OverlayAttach.stockWidth(spec)
+    if (typeof Border !== "undefined" && typeof Border.uniformWidth === "function") {
+      var uw = Number(Border.uniformWidth(spec)) || 0
+      if (uw > 0)
+        w = uw
+    }
+    try {
+      card.borderSpec = Qt.binding(function() {
+        if (typeof Border !== "undefined" && typeof Border.flat === "function")
+          return Border.flat(card.color, w)
+        return OverlayAttach.hiddenSpec(card.color, w)
+      })
+    } catch (e) {
+      if (typeof Border !== "undefined" && typeof Border.flat === "function")
+        card.borderSpec = Border.flat(card.color, w)
+      else
+        card.borderSpec = OverlayAttach.hiddenSpec(card.color, w)
+    }
+    card.clip = false
+  }
+
+  function restoreStock(card) {
+    var entry = stockEntry(card)
+    if (!entry)
+      return
+    if (!alive(card)) {
+      pruneStock()
+      return
+    }
+    card.borderSpec = entry.spec
+    if (entry.clip !== undefined)
+      card.clip = entry.clip
+    var next = []
+    for (var i = 0; i < root.stock.length; i++) {
+      if (root.stock[i].card !== card)
+        next.push(root.stock[i])
+    }
+    root.stock = next
   }
 
   function pluginRoot() {
@@ -265,6 +342,7 @@ Item {
     }
     if (next.length !== root.attached.length)
       root.attached = next
+    pruneStock()
   }
 
   function syncHost(host, opts) {
@@ -302,6 +380,9 @@ Item {
     var result = OverlayAttach.applyCardPolicy(root.attached, card, decision, extra)
     var act = result.overlayAction
 
+    if (result.assignStock && card && alive(card))
+      hideStock(card)
+
     if ((act === "destroy" || act === "replace") && shiny) {
       shiny.destroy()
       shiny = null
@@ -316,6 +397,8 @@ Item {
           shiny.radius = Qt.binding(function() { return card.radius })
       }
     }
+    if (result.restoreStock && card)
+      restoreStock(card)
     if (created)
       root.attached = result.attached
 
@@ -341,7 +424,13 @@ Item {
           shiny.destroy()
       }
     }
+    var leftoverStock = []
+    for (var s = 0; s < root.stock.length; s++)
+      leftoverStock.push(root.stock[s])
+    for (var r = 0; r < leftoverStock.length; r++)
+      restoreStock(leftoverStock[r].card)
     root.attached = []
+    root.stock = []
     destroyAllWatches()
   }
 
@@ -500,8 +589,8 @@ Item {
     interval: 200
     running: true
     repeat: true
-    // Host discovery only. syncHost is attach-once and never assigns
-    // borderSpec/clip; already-attached showing cards are a no-op.
+    // Host discovery only. syncHost is attach-once; already-attached
+    // showing cards do not rewrite borderSpec/clip.
     onTriggered: root.syncAll()
   }
 
