@@ -186,6 +186,14 @@ stops are used; extra colors are dropped.
 `id` and `enabled` are not look keys. `omarchy plugin disable` is the only
 off switch; it turns both surfaces off, and re-enable brings them back.
 
+### Option map
+
+The figure below places each shiny option where it acts, with its default
+value (a PNG version is at
+[docs/images/shiny-config-visual.png](docs/images/shiny-config-visual.png)):
+
+![Annotated diagram of the shiny effect on a dark desktop: one window with a glowing glint border ring, labeled with borderSize (ring thickness), baseColor (the wrap stroke between the lit heads), pinDeg and angleOffset (light heading with a protractor and arrow), shimmerDeg (a dashed wander fan), lobe (a bracket over the lit band), mirror (a second lit head on the far side), and the two gradient halves split by the light axis; side panels show the effect selector, the colA and colB two-stop fallback, the gradient glint ramp with its stop positions, the clockwise-half keys, and the shimmer and pulse motion keys; a second unfocused window illustrates activeOnly.](docs/images/shiny-config-visual.svg)
+
 ### Option reference
 
 **Hosts:** *both* = windows and chrome. *windows* = Hyprland decoration

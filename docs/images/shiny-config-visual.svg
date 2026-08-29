@@ -1,0 +1,213 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="900" viewBox="0 0 1280 900" role="img" aria-labelledby="figTitle figDesc">
+  <title id="figTitle">omarchy-border-fx: shiny effect configuration map</title>
+  <desc id="figDesc">An annotated diagram mapping the shiny border options onto a dark desktop window. Callouts label the ring thickness, wrap stroke, light heading, lit band, mirrored second head, gradient halves, fallback colors, motion settings, and the focused-window rule.</desc>
+
+  <style>
+    .h1 { font: 600 21px "Segoe UI", system-ui, -apple-system, sans-serif; fill: #dbe6ee; }
+    .h2 { font: 12.5px "Segoe UI", system-ui, sans-serif; fill: #8494a1; }
+    .ph { font: 600 11px "Segoe UI", system-ui, sans-serif; letter-spacing: 0.14em; fill: #6f8091; }
+    .k  { font: 12.5px ui-monospace, "Cascadia Mono", "DejaVu Sans Mono", Consolas, monospace; fill: #4fd6ff; }
+    .v  { fill: #a9b8c4; }
+    .n  { font: 12px "Segoe UI", system-ui, sans-serif; fill: #8b9aa7; }
+    .ns { font: 11px "Segoe UI", system-ui, sans-serif; fill: #5f6f7c; }
+    .lead { stroke: #46525e; stroke-width: 1; fill: none; }
+    .dot { fill: #46525e; }
+    .bracket { stroke: #5a6874; stroke-width: 1.2; fill: none; }
+    .panel { fill: #0f151b; stroke: #1d2833; stroke-width: 1; }
+  </style>
+
+  <defs>
+    <radialGradient id="bgGlow" gradientUnits="userSpaceOnUse" cx="770" cy="355" r="430">
+      <stop offset="0" stop-color="#123b43" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#123b43" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="comet" gradientUnits="userSpaceOnUse" cx="686" cy="210" r="225">
+      <stop offset="0"    stop-color="#f7ffff" stop-opacity="0.95"/>
+      <stop offset="0.08" stop-color="#cfe6e7" stop-opacity="0.8"/>
+      <stop offset="0.3"  stop-color="#6d9ba0" stop-opacity="0.45"/>
+      <stop offset="0.75" stop-color="#0a3f47" stop-opacity="0"/>
+      <stop offset="1"    stop-color="#0a3f47" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="cometFar" gradientUnits="userSpaceOnUse" cx="854" cy="500" r="225">
+      <stop offset="0"    stop-color="#f7ffff" stop-opacity="0.95"/>
+      <stop offset="0.08" stop-color="#cfe6e7" stop-opacity="0.8"/>
+      <stop offset="0.3"  stop-color="#6d9ba0" stop-opacity="0.45"/>
+      <stop offset="0.75" stop-color="#0a3f47" stop-opacity="0"/>
+      <stop offset="1"    stop-color="#0a3f47" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="686" cy="210" r="240">
+      <stop offset="0"    stop-color="#f7ffff" stop-opacity="0.4"/>
+      <stop offset="0.2"  stop-color="#9fd0d2" stop-opacity="0.2"/>
+      <stop offset="0.6"  stop-color="#0a3f47" stop-opacity="0.05"/>
+      <stop offset="0.85" stop-color="#0a3f47" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowFar" gradientUnits="userSpaceOnUse" cx="854" cy="500" r="240">
+      <stop offset="0"    stop-color="#f7ffff" stop-opacity="0.4"/>
+      <stop offset="0.2"  stop-color="#9fd0d2" stop-opacity="0.2"/>
+      <stop offset="0.6"  stop-color="#0a3f47" stop-opacity="0.05"/>
+      <stop offset="0.85" stop-color="#0a3f47" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rampMain" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"    stop-color="#f7ffff" stop-opacity="0.95"/>
+      <stop offset="0.99" stop-color="#0a3f47" stop-opacity="0.03"/>
+      <stop offset="1"    stop-color="#0a3f47" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3fb9e6"/>
+    </marker>
+  </defs>
+
+  <!-- background -->
+  <rect width="1280" height="900" fill="#0a0f14"/>
+  <circle cx="770" cy="355" r="430" fill="url(#bgGlow)"/>
+
+  <!-- header -->
+  <text class="h1" x="40" y="50">omarchy-border-fx &#8212; the shiny effect, mapped to its config keys</text>
+  <text class="h2" x="40" y="74">Defaults shown &#183; keys sit inline on the plugins[] entry in shell.json</text>
+
+  <!-- ============ left column: control plane ============ -->
+  <rect class="panel" x="40" y="104" width="260" height="170" rx="10"/>
+  <text class="ph" x="56" y="130">CONTROL PLANE</text>
+  <rect x="56" y="144" width="176" height="30" rx="6" fill="#0c2531" stroke="#1f4a5e"/>
+  <text class="k" x="68" y="164">"effect": "shiny"</text>
+  <text class="n" x="56" y="196">selects the renderer for windows</text>
+  <text class="n" x="56" y="212">and shell chrome</text>
+  <text class="n" x="56" y="236">on/off: omarchy plugin enable /</text>
+  <text class="n" x="56" y="252">disable (enabled is not a look key)</text>
+
+  <!-- left column: two-stop fallback -->
+  <rect class="panel" x="40" y="292" width="260" height="150" rx="10"/>
+  <text class="ph" x="56" y="318">TWO-STOP FALLBACK</text>
+  <rect x="56" y="332" width="24" height="24" rx="5" fill="#f7ffff"/>
+  <text class="k" x="90" y="349">colA: <tspan class="v">"rgba(f7ffffee)"</tspan></text>
+  <rect x="56" y="366" width="24" height="24" rx="5" fill="#0a3f47" fill-opacity="0.3" stroke="#2c3944" stroke-dasharray="3 3"/>
+  <line x1="58" y1="388" x2="78" y2="368" stroke="#2c3944" stroke-width="1"/>
+  <text class="k" x="90" y="383">colB: <tspan class="v">"rgba(0a3f4700)"</tspan></text>
+  <text class="n" x="56" y="412">used only when gradient has fewer</text>
+  <text class="n" x="56" y="427">than two colors (colB alpha is 00)</text>
+
+  <text class="ns" x="40" y="486">Illustration, not a screenshot &#8212; ring thickness and glow exaggerated for legibility.</text>
+
+  <!-- ============ scene: unfocused window (activeOnly) ============ -->
+  <rect x="1032" y="142" width="206" height="146" rx="16" fill="none" stroke="#2c3944" stroke-width="1" stroke-dasharray="3 5"/>
+  <rect x="1040" y="150" width="190" height="130" rx="12" fill="#0f151b" stroke="#222c35" stroke-width="1"/>
+  <rect x="1056" y="168" width="90" height="7" rx="3" fill="#1a242e"/>
+  <rect x="1056" y="186" width="120" height="6" rx="3" fill="#141d26"/>
+  <rect x="1056" y="200" width="90" height="6" rx="3" fill="#141d26"/>
+  <text class="k" x="1040" y="308">activeOnly: <tspan class="v">true</tspan></text>
+  <text class="n" x="1040" y="324">unfocused: no ring drawn,</text>
+  <text class="n" x="1040" y="339">padding kept (windows-only key)</text>
+
+  <!-- ============ scene: focused window with the glint ring ============ -->
+  <!-- glow, both heads -->
+  <rect x="560" y="210" width="420" height="290" rx="18" fill="none" stroke="url(#glow)" stroke-width="24" filter="url(#soft)"/>
+  <rect x="560" y="210" width="420" height="290" rx="18" fill="none" stroke="url(#glowFar)" stroke-width="24" filter="url(#soft)"/>
+  <!-- window body -->
+  <rect x="560" y="210" width="420" height="290" rx="18" fill="#10161c"/>
+  <!-- wrap stroke (baseColor) -->
+  <rect x="560" y="210" width="420" height="290" rx="18" fill="none" stroke="#0a3f47" stroke-opacity="0.87" stroke-width="8"/>
+  <!-- glint highlight, facing head + mirrored far head -->
+  <rect x="560" y="210" width="420" height="290" rx="18" fill="none" stroke="url(#comet)" stroke-width="8"/>
+  <rect x="560" y="210" width="420" height="290" rx="18" fill="none" stroke="url(#cometFar)" stroke-width="8"/>
+  <!-- mock window content -->
+  <rect x="584" y="234" width="160" height="10" rx="5" fill="#1a242e"/>
+  <rect x="584" y="258" width="240" height="8" rx="4" fill="#151e27"/>
+  <rect x="584" y="276" width="180" height="8" rx="4" fill="#151e27"/>
+
+  <!-- light axis -->
+  <line x1="655" y1="156" x2="886" y2="556" stroke="#37434f" stroke-width="1.2" stroke-dasharray="5 7"/>
+  <text class="ns" x="760" y="361" transform="rotate(60 760 361)">light axis (pinDeg + angleOffset)</text>
+
+  <!-- heading arrow + protractor -->
+  <circle cx="626" cy="106" r="20" fill="none" stroke="#46525e" stroke-width="1"/>
+  <line x1="626" y1="106" x2="674" y2="106" stroke="#46525e" stroke-width="1" stroke-dasharray="3 3"/>
+  <text class="ns" x="678" y="110">0&#176;</text>
+  <path d="M646,106 A20,20 0 0 0 616,88.7" fill="none" stroke="#4fd6ff" stroke-opacity="0.6" stroke-width="1.4"/>
+  <line x1="626" y1="106" x2="616" y2="88.7" stroke="#4fd6ff" stroke-opacity="0.6" stroke-width="1.4"/>
+  <text class="ns" x="600" y="80" fill="#4fd6ff">120&#176;</text>
+  <line x1="636" y1="123.3" x2="663" y2="171" stroke="#4fd6ff" stroke-width="2" stroke-opacity="0.9" marker-end="url(#arrow)"/>
+  <!-- shimmer wander fan -->
+  <line x1="636" y1="123" x2="679.3" y2="156.9" stroke="#4fd6ff" stroke-opacity="0.35" stroke-width="1.2" stroke-dasharray="4 4"/>
+  <line x1="636" y1="123" x2="643.7" y2="177.5" stroke="#4fd6ff" stroke-opacity="0.35" stroke-width="1.2" stroke-dasharray="4 4"/>
+
+  <!-- heading labels -->
+  <text class="k" x="330" y="104">pinDeg: <tspan class="v">120</tspan></text>
+  <text class="n" x="330" y="120">light heading, degrees CCW</text>
+  <text class="n" x="330" y="135">(0 = from the right, 90 = from above)</text>
+  <line class="lead" x1="420" y1="100" x2="602" y2="102"/>
+  <circle class="dot" cx="602" cy="102" r="2"/>
+  <text class="k" x="330" y="158">angleOffset: <tspan class="v">0</tspan></text>
+  <text class="n" x="330" y="173">added to pinDeg before drawing</text>
+  <text class="k" x="330" y="196">shimmerDeg: <tspan class="v">22</tspan></text>
+  <text class="n" x="330" y="211">heading wanders up to &#177;22&#176; (dashed fan)</text>
+  <line class="lead" x1="524" y1="207" x2="641" y2="176"/>
+  <circle class="dot" cx="641" cy="176" r="2"/>
+
+  <!-- lobe bracket along the lit band -->
+  <path class="bracket" d="M690,198 L690,190 L860,190 L860,198"/>
+  <text class="k" x="775" y="176" text-anchor="middle" xml:space="preserve">lobe: <tspan class="v">0.16 </tspan><tspan class="n">&#8212; lit-band half-width</tspan></text>
+
+  <!-- borderSize bracket at the left edge -->
+  <path class="bracket" d="M556,296 L556,290 L564,290 L564,296"/>
+  <line class="lead" x1="544" y1="292" x2="554" y2="292"/>
+  <text class="k" x="540" y="287" text-anchor="end">borderSize: <tspan class="v">2</tspan></text>
+  <text class="n" x="540" y="302" text-anchor="end">ring thickness (px)</text>
+
+  <!-- primary flank -->
+  <text class="k" x="330" y="432">gradient + gradientPositions</text>
+  <text class="n" x="330" y="448">paint this half of the light axis</text>
+  <line class="lead" x1="478" y1="438" x2="556" y2="415"/>
+  <circle class="dot" cx="556" cy="415" r="2"/>
+
+  <!-- clockwise flank -->
+  <text class="k" x="1040" y="398">gradientCw +</text>
+  <text class="k" x="1040" y="414">gradientPositionsCw</text>
+  <text class="n" x="1040" y="430">optional recolor of the</text>
+  <text class="n" x="1040" y="445">clockwise half of the axis</text>
+  <line class="lead" x1="1035" y1="405" x2="984" y2="382"/>
+  <circle class="dot" cx="984" cy="382" r="2"/>
+
+  <!-- baseColor -->
+  <line class="lead" x1="600" y1="502" x2="525" y2="540"/>
+  <circle class="dot" cx="600" cy="502" r="2"/>
+  <text class="k" x="330" y="548">baseColor: <tspan class="v">"rgba(0a3f47dd)"</tspan></text>
+  <text class="n" x="330" y="564">wrap stroke under the highlight; the ring between the heads</text>
+
+  <!-- mirror -->
+  <line class="lead" x1="920" y1="506" x2="1010" y2="538"/>
+  <circle class="dot" cx="920" cy="506" r="2"/>
+  <text x="1240" y="548" text-anchor="end" xml:space="preserve"><tspan class="k">mirror: <tspan class="v">true </tspan></tspan><tspan class="n">&#8212; the same lobe lights the far support (second head)</tspan></text>
+
+  <!-- ============ bottom left: gradient panel ============ -->
+  <rect class="panel" x="40" y="600" width="700" height="280" rx="10"/>
+  <text class="ph" x="56" y="628">GRADIENT &#8212; COLORS ALONG THE LIT BAND</text>
+  <text class="k" x="56" y="656">gradient: <tspan class="v">["rgba(f7ffffee)", "rgba(0a3f4700)"]</tspan></text>
+  <text class="k" x="56" y="678">gradientPositions: <tspan class="v">"0 99"</tspan></text>
+  <rect x="70" y="694" width="600" height="26" rx="6" fill="url(#rampMain)" stroke="#223039"/>
+  <line x1="70"  y1="720" x2="70"  y2="728" stroke="#5a6874"/>
+  <line x1="664" y1="720" x2="664" y2="728" stroke="#5a6874"/>
+  <text class="n" x="70"  y="744">0 &#8212; white head at the facing support</text>
+  <text class="n" x="664" y="744" text-anchor="end">99 &#8212; transparent tail</text>
+  <text class="ns" x="56" y="770">stops fill the lit band (lobe); past the last stop its color is held</text>
+  <text class="k" x="56" y="800">gradientCw: <tspan class="v">[]</tspan>  &#183;  gradientPositionsCw: <tspan class="v">"0 22 50 100"</tspan></text>
+  <text class="n" x="56" y="822">four position tokens vs two colors: the spec mismatches, so the</text>
+  <text class="n" x="56" y="838">clockwise half falls back to a mirror of the primary positions</text>
+  <text class="ns" x="56" y="862">(both halves show the same glint by default)</text>
+
+  <!-- ============ bottom right: motion panel ============ -->
+  <rect class="panel" x="770" y="600" width="470" height="280" rx="10"/>
+  <text class="ph" x="786" y="628">MOTION &#8212; SHIMMER WINS OVER PULSE</text>
+  <text class="k" x="786" y="656">shimmer: <tspan class="v">true</tspan>  &#183;  shimmerHz: <tspan class="v">0.28</tspan></text>
+  <text class="n" x="786" y="672">random walk of heading and highlight size, ~0.28 retargets/s</text>
+  <text class="k" x="786" y="696" xml:space="preserve">shimmerDeg: <tspan class="v">22 </tspan><tspan class="n">&#8212; wander each side of the heading</tspan></text>
+  <text class="k" x="786" y="720">shimmerScaleMin: <tspan class="v">0.8</tspan>  &#183;  shimmerScaleMax: <tspan class="v">1.4</tspan></text>
+  <text class="n" x="786" y="736">highlight size drifts between 0.8&#215; and 1.4&#215;</text>
+  <line x1="786" y1="756" x2="1224" y2="756" stroke="#1d2833"/>
+  <text class="k" x="786" y="782">pulse: <tspan class="v">false</tspan>  &#183;  pulseHz: <tspan class="v">0.4</tspan></text>
+  <text class="n" x="786" y="798">breathes highlight transparency only &#8212; width and thickness stay</text>
+  <text class="n" x="786" y="814">ignored while shimmer is running</text>
+  <path d="M1060,850 q12,-20 24,0 t24,0 t24,0 t24,0" fill="none" stroke="#4fd6ff" stroke-opacity="0.45" stroke-width="1.5"/>
+</svg>
