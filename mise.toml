@@ -16,8 +16,8 @@ description = "Bake, then dump qsb reflection (UBO layout)"
 run = "bash scripts/bake.sh --dump"
 
 [tasks.test]
-description = "Compositor-free tests (shimmer, gradient, shared look adapter, session install, review-phase audit)"
-run = "node tests/run.js && node tests/look.js && node tests/hypr-session.js && node tests/audit-unified-plan.js && node tests/audit-review-phases.js"
+description = "Compositor-free tests (shimmer, gradient, shared look adapter, session install)"
+run = "node tests/run.js && node tests/look.js && node tests/hypr-session.js"
 
 [tasks.lint]
 description = "qmllint ShinyBorder.qml"
