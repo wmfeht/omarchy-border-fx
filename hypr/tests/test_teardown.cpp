@@ -90,6 +90,13 @@ static void checkTeardownOrdering() {
     CHECK(markAt < clearAt);
     CHECK(clearAt < destAt);
 
+    // Event::bus listeners must die before dlclose, including config.reloaded.
+    const auto exitAt0 = main.find("APICALL EXPORT void PLUGIN_EXIT");
+    const auto relRst  = main.find("g_onConfigReloaded.reset()");
+    CHECK(exitAt0 != std::string::npos && relRst != std::string::npos);
+    CHECK(relRst > exitAt0);
+    CHECK(relRst < markAt);
+
     // PLUGIN_INIT must clear teardown / compile-failed before first draw.
     const auto initAt  = main.find("PLUGIN_INIT");
     const auto resetAt = main.find("shinyResetLifecycle();");

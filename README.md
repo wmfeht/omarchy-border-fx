@@ -95,9 +95,9 @@ overlays attach only while `effect` is `shiny`. Any other value detaches
 chrome and fans out `enabled = false` to the shiny Hyprland adapter (look
 keys still merge, for a later renderer).
 
-Missing or `null` look keys mean the **intended shared look** (pinned
-120°, shimmer, 4-stop ramp, wrap stroke) — **not** the C++ plugin
-defaults (pulse on, `pinDeg` 90, border 3). An empty `gradient` array is
+Missing or `null` look keys mean the **shared look** (pinned 120°,
+shimmer, 4-stop ramp, wrap stroke). Hyprland `PLUGIN_INIT` registers the
+same numbers, so first paint matches chrome. An empty `gradient` array is
 a real override (two-stop `colA`/`colB`), not “use the default ramp.”
 
 There is no settings UI for this service. Edit `shell.json` and save:
@@ -111,7 +111,7 @@ There is no settings UI for this service. Edit `shell.json` and save:
 A generated `~/.config/hypr/border-fx.lua` is an **output**, not an
 input. Do not edit it. `omarchy refresh hyprland` can drop the one-line
 `pcall(require, "hypr.border-fx")` from `hyprland.lua`; the next service
-start still `hyprctl plugin load`s (brief default-look flash).
+start still `hyprctl plugin load`s.
 
 Until you delete the gated `shiny_border` block from `looknfeel.lua`, that
 file can fight plugin settings on `reloadConfig()`. Leave it until fan-out

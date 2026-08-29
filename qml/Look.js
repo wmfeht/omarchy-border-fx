@@ -2,9 +2,9 @@
 
 // Shared look: shell.json camelCase + Hyprland rgba() on the wmfeht.border-fx
 // plugins[] entry is the source of truth. `effect` selects the renderer
-// (`shiny` today). Missing look keys mean the intended shared look
-// (looknfeel / ShinyBorder defaults), not the C++ plugin defaults
-// (pulse on, pinDeg 90, border 3).
+// (`shiny` today). Missing look keys mean DEFAULTS below (pinned 120°,
+// shimmer, 4-stop ramp). PLUGIN_INIT registers the same numbers so first
+// paint matches chrome.
 
 var PLUGIN_ID = "wmfeht.border-fx"
 var LEGACY_PLUGIN_ID = "qs.border-fx"

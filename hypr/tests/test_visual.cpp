@@ -1,11 +1,15 @@
 #include "../src/runtime.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <vector>
 
 static int g_fails = 0;
 
@@ -220,6 +224,270 @@ static void checkShaderSource() {
     checkLighting(qsFrag);
 }
 
+static std::string lookJsPath() {
+    return sourceDir() + "/../../qml/Look.js";
+}
+
+static std::string extractLookDefaults(const std::string& js) {
+    const auto start = js.find("var DEFAULTS = {");
+    if (start == std::string::npos)
+        return {};
+    int depth = 0;
+    for (size_t i = start; i < js.size(); i++) {
+        if (js[i] == '{')
+            depth++;
+        else if (js[i] == '}') {
+            depth--;
+            if (depth == 0)
+                return js.substr(start, i - start + 1);
+        }
+    }
+    return {};
+}
+
+static std::string jsScalar(const std::string& obj, const std::string& key) {
+    const std::string needle = "\n  " + key + ":";
+    auto              p      = obj.find(needle);
+    if (p == std::string::npos)
+        return {};
+    p += needle.size();
+    while (p < obj.size() && std::isspace(static_cast<unsigned char>(obj[p])))
+        p++;
+    if (p >= obj.size())
+        return {};
+    if (obj[p] == '"') {
+        auto q = obj.find('"', p + 1);
+        if (q == std::string::npos)
+            return {};
+        return obj.substr(p + 1, q - p - 1);
+    }
+    if (obj[p] == '[')
+        return {};
+    size_t q = p;
+    while (q < obj.size() && obj[q] != ',' && obj[q] != '\n')
+        q++;
+    return obj.substr(p, q - p);
+}
+
+static std::vector<std::string> jsRgbaList(const std::string& obj, const std::string& key) {
+    const std::string needle = "\n  " + key + ":";
+    auto              p      = obj.find(needle);
+    std::vector<std::string> out;
+    if (p == std::string::npos)
+        return out;
+    auto open = obj.find('[', p);
+    auto close = obj.find(']', open);
+    if (open == std::string::npos || close == std::string::npos || close <= open)
+        return out;
+    const std::string body = obj.substr(open, close - open);
+    size_t            q    = 0;
+    while (true) {
+        auto r = body.find("rgba(", q);
+        if (r == std::string::npos)
+            break;
+        auto e = body.find(')', r);
+        if (e == std::string::npos)
+            break;
+        out.push_back(body.substr(r, e - r + 1));
+        q = e + 1;
+    }
+    return out;
+}
+
+static uint64_t rgbaToArgb(const std::string& s) {
+    auto open  = s.find('(');
+    auto close = s.find(')');
+    if (open == std::string::npos || close == std::string::npos || close <= open)
+        return 0;
+    std::string hex = s.substr(open + 1, close - open - 1);
+    if (hex.size() == 6)
+        hex += "ff";
+    if (hex.size() != 8)
+        return 0;
+    const unsigned long v   = std::strtoul(hex.c_str(), nullptr, 16);
+    const unsigned long rgb = (v >> 8) & 0xffffffUL;
+    const unsigned long a   = v & 0xffUL;
+    return (static_cast<uint64_t>(a) << 24) | rgb;
+}
+
+static std::string pluginInitSection(const std::string& src) {
+    const auto a = src.find("PLUGIN_DESCRIPTION_INFO PLUGIN_INIT");
+    const auto b = src.find("APICALL EXPORT void PLUGIN_EXIT");
+    if (a == std::string::npos || b == std::string::npos || b <= a)
+        return {};
+    return src.substr(a, b - a);
+}
+
+static size_t skipCppString(const std::string& s, size_t i) {
+    if (i >= s.size() || s[i] != '"')
+        return i;
+    i++;
+    while (i < s.size()) {
+        if (s[i] == '\\') {
+            i += 2;
+            continue;
+        }
+        if (s[i] == '"')
+            return i + 1;
+        i++;
+    }
+    return i;
+}
+
+static std::string hyprCtorDefault(const std::string& init, const std::string& key) {
+    const std::string needle = "\"plugin:shiny-border:" + key + "\"";
+    auto              p      = init.find(needle);
+    if (p == std::string::npos)
+        return {};
+    size_t i = p + needle.size();
+    while (i < init.size() && (std::isspace(static_cast<unsigned char>(init[i])) || init[i] == ','))
+        i++;
+    i = skipCppString(init, i);
+    while (i < init.size() && (std::isspace(static_cast<unsigned char>(init[i])) || init[i] == ','))
+        i++;
+    if (i >= init.size())
+        return {};
+    if (init[i] == '"') {
+        const size_t start = i + 1;
+        i                  = skipCppString(init, i);
+        if (i == 0)
+            return {};
+        return init.substr(start, i - start - 1);
+    }
+    if (init.compare(i, 10, "CHyprColor") == 0) {
+        auto open  = init.find('{', i);
+        auto close = init.find('}', open);
+        if (open == std::string::npos || close == std::string::npos)
+            return {};
+        std::string inner = init.substr(open + 1, close - open - 1);
+        while (!inner.empty() && std::isspace(static_cast<unsigned char>(inner.front())))
+            inner.erase(inner.begin());
+        while (!inner.empty() && std::isspace(static_cast<unsigned char>(inner.back())))
+            inner.pop_back();
+        return inner;
+    }
+    size_t q = i;
+    while (q < init.size() && (std::isalnum(static_cast<unsigned char>(init[q])) || init[q] == '.' || init[q] == '-' || init[q] == '_'))
+        q++;
+    return init.substr(i, q - i);
+}
+
+static std::vector<uint64_t> cppU64Array(const std::string& src, const std::string& name) {
+    const std::string needle = name + "[]";
+    auto              p      = src.find(needle);
+    std::vector<uint64_t> out;
+    if (p == std::string::npos)
+        return out;
+    auto open  = src.find('{', p);
+    auto close = src.find('}', open);
+    if (open == std::string::npos || close == std::string::npos)
+        return out;
+    const std::string body = src.substr(open, close - open);
+    size_t            q    = 0;
+    while (true) {
+        auto h = body.find("0x", q);
+        if (h == std::string::npos)
+            break;
+        size_t e = h + 2;
+        while (e < body.size() && std::isxdigit(static_cast<unsigned char>(body[e])))
+            e++;
+        out.push_back(std::strtoull(body.substr(h, e - h).c_str(), nullptr, 16));
+        q = e;
+    }
+    return out;
+}
+
+static bool tokBool(const std::string& tok, bool want) {
+    return tok == (want ? "true" : "false");
+}
+
+static bool tokNumber(const std::string& tok, double want) {
+    if (tok.empty())
+        return false;
+    char* end = nullptr;
+    const double got = std::strtod(tok.c_str(), &end);
+    if (!end || end == tok.c_str())
+        return false;
+    return std::fabs(got - want) < 1e-9;
+}
+
+static bool tokHex(const std::string& tok, uint64_t want) {
+    if (tok.size() < 3)
+        return false;
+    return std::strtoull(tok.c_str(), nullptr, 16) == want;
+}
+
+static void checkPluginInitLookDefaults() {
+    const std::string js   = readFile(lookJsPath());
+    const std::string main = readFile(sourceDir() + "/main.cpp");
+    CHECK(!js.empty());
+    CHECK(!main.empty());
+
+    const std::string defaults = extractLookDefaults(js);
+    const std::string init     = pluginInitSection(main);
+    CHECK(!defaults.empty());
+    CHECK(!init.empty());
+
+    CHECK(tokBool(hyprCtorDefault(init, "pulse"), jsScalar(defaults, "pulse") == "true"));
+    CHECK(tokBool(hyprCtorDefault(init, "shimmer"), jsScalar(defaults, "shimmer") == "true"));
+    CHECK(tokBool(hyprCtorDefault(init, "mirror"), jsScalar(defaults, "mirror") == "true"));
+    CHECK(tokBool(hyprCtorDefault(init, "active_only"), jsScalar(defaults, "activeOnly") == "true"));
+
+    CHECK(tokNumber(hyprCtorDefault(init, "pin_deg"), std::strtod(jsScalar(defaults, "pinDeg").c_str(), nullptr)));
+    CHECK(tokNumber(hyprCtorDefault(init, "border_size"), std::strtod(jsScalar(defaults, "borderSize").c_str(), nullptr)));
+    CHECK(tokNumber(hyprCtorDefault(init, "shimmer_deg"), std::strtod(jsScalar(defaults, "shimmerDeg").c_str(), nullptr)));
+    CHECK(tokNumber(hyprCtorDefault(init, "angle_offset"), std::strtod(jsScalar(defaults, "angleOffset").c_str(), nullptr)));
+    CHECK(tokNumber(hyprCtorDefault(init, "shimmer_hz"), std::strtod(jsScalar(defaults, "shimmerHz").c_str(), nullptr)));
+    CHECK(tokNumber(hyprCtorDefault(init, "pulse_hz"), std::strtod(jsScalar(defaults, "pulseHz").c_str(), nullptr)));
+    CHECK(tokNumber(hyprCtorDefault(init, "shimmer_scale_min"), std::strtod(jsScalar(defaults, "shimmerScaleMin").c_str(), nullptr)));
+    CHECK(tokNumber(hyprCtorDefault(init, "shimmer_scale_max"), std::strtod(jsScalar(defaults, "shimmerScaleMax").c_str(), nullptr)));
+    CHECK(tokNumber(hyprCtorDefault(init, "lobe"), std::strtod(jsScalar(defaults, "lobe").c_str(), nullptr)));
+
+    CHECK(hyprCtorDefault(init, "gradient_positions") == jsScalar(defaults, "gradientPositions"));
+    CHECK(hyprCtorDefault(init, "gradient_positions_cw") == jsScalar(defaults, "gradientPositionsCw"));
+
+    CHECK(tokHex(hyprCtorDefault(init, "col.a"), rgbaToArgb(jsScalar(defaults, "colA"))));
+    CHECK(tokHex(hyprCtorDefault(init, "col.b"), rgbaToArgb(jsScalar(defaults, "colB"))));
+    CHECK(tokHex(hyprCtorDefault(init, "base_color"), rgbaToArgb(jsScalar(defaults, "baseColor"))));
+
+    const auto wantStops = jsRgbaList(defaults, "gradient");
+    CHECK(wantStops.size() == 4);
+    const auto gotStops = cppU64Array(main, "kLookDefaultGradient");
+    CHECK(gotStops.size() == 4);
+    for (size_t i = 0; i < 4 && i < gotStops.size() && i < wantStops.size(); i++)
+        CHECK(gotStops[i] == rgbaToArgb(wantStops[i]));
+
+    CHECK(main.find("shinySeedGradientStops") != std::string::npos);
+    CHECK(main.find("data.m_colors") != std::string::npos);
+    CHECK(main.find("updateColorsOk") != std::string::npos);
+    CHECK(main.find("shinySeedGradientStops(g_cfg.gradient, kLookDefaultGradient") != std::string::npos);
+
+    const std::string applyNeedle = "shinyApplyLookGradientDefault()";
+    const auto        applyAt     = init.find(applyNeedle);
+    const auto        addGrad     = init.find("HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.gradient)");
+    const auto        reloadAt    = init.find("HyprlandAPI::reloadConfig()");
+    const auto        reloadedAt  = init.find("config.reloaded.listen");
+    CHECK(applyAt != std::string::npos);
+    CHECK(addGrad != std::string::npos);
+    CHECK(reloadAt != std::string::npos);
+    CHECK(applyAt < addGrad);
+    CHECK(init.find(applyNeedle, addGrad) != std::string::npos);
+    CHECK(init.find(applyNeedle, addGrad) < reloadAt);
+    CHECK(reloadedAt != std::string::npos);
+    CHECK(reloadedAt > reloadAt);
+    const auto applyFromReload = init.find("shinyApplyLookGradientDefault();", reloadedAt);
+    CHECK(applyFromReload != std::string::npos);
+    CHECK(applyFromReload - reloadedAt < 80);
+    CHECK(main.find("shinyGradientSetByUser") != std::string::npos);
+    CHECK(main.find("getConfigValue(\"plugin:shiny-border:gradient\")") != std::string::npos);
+    CHECK(main.find(".setByUser") != std::string::npos);
+    CHECK(main.find("g_onConfigReloaded.reset()") != std::string::npos);
+    CHECK(init.find("shinySeedGradientStops(g_cfg.gradientCw") == std::string::npos);
+
+    CHECK(jsRgbaList(defaults, "gradientCw").size() < 2);
+    CHECK(!hyprCtorDefault(init, "gradient_cw").empty());
+}
+
 static void checkProductionWiring() {
     const std::string deco    = readFile(sourceDir() + "/deco.cpp");
     const std::string pass    = readFile(sourceDir() + "/pass.cpp");
@@ -389,6 +657,7 @@ int main() {
     checkThickness();
     checkHeading();
     checkShaderSource();
+    checkPluginInitLookDefaults();
     checkProductionWiring();
     checkLightProjection();
 

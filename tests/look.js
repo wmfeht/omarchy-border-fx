@@ -33,13 +33,13 @@ function checkDefaults() {
   check(Look.DEFAULT_EFFECT === "shiny", "default effect")
   const d = Look.merge(null)
   check(d.effect === "shiny", "merge default effect shiny")
-  check(d.borderSize === 2, "default borderSize 2 (not C++ 3)")
+  check(d.borderSize === 2, "default borderSize 2")
   check(!Object.prototype.hasOwnProperty.call(d, "pin"), "pin is not a look key")
   check(!Object.prototype.hasOwnProperty.call(Look.DEFAULTS, "pin"), "DEFAULTS has no pin switch")
   check(!Object.prototype.hasOwnProperty.call(Look.DEFAULTS, "quantizeDeg"), "DEFAULTS has no mouse quantize")
-  check(d.pinDeg === 120, "default pinDeg 120 (not C++ 90)")
+  check(d.pinDeg === 120, "default pinDeg 120")
   check(d.shimmer === true, "default shimmer")
-  check(d.pulse === false, "default pulse off (not C++ on)")
+  check(d.pulse === false, "default pulse off")
   check(d.mirror === false, "default mirror off")
   check(Look.merge({}).mirror === false, "empty {} look keeps mirror off")
   check(d.gradient.length === 4, "default 4-stop ramp")
@@ -248,7 +248,177 @@ function checkLookApply() {
   check(/enabled\s*=\s*false/.test(otherFx.stdout), "non-shiny effect disables shiny adapter")
 }
 
+function pluginInitSection(src) {
+  const a = src.indexOf("PLUGIN_DESCRIPTION_INFO PLUGIN_INIT")
+  const b = src.indexOf("APICALL EXPORT void PLUGIN_EXIT")
+  if (a < 0 || b < 0 || b <= a)
+    return ""
+  return src.slice(a, b)
+}
+
+function skipCppString(s, i) {
+  if (s[i] !== '"')
+    return i
+  i++
+  while (i < s.length) {
+    if (s[i] === "\\") {
+      i += 2
+      continue
+    }
+    if (s[i] === '"')
+      return i + 1
+    i++
+  }
+  return i
+}
+
+function hyprCtorDefault(init, key) {
+  const needle = '"plugin:shiny-border:' + key + '"'
+  const p = init.indexOf(needle)
+  if (p < 0)
+    return null
+  let i = p + needle.length
+  while (i < init.length && /[\s,]/.test(init[i]))
+    i++
+  i = skipCppString(init, i)
+  while (i < init.length && /[\s,]/.test(init[i]))
+    i++
+  if (init[i] === '"') {
+    const start = i + 1
+    i = skipCppString(init, i)
+    return init.slice(start, i - 1).replace(/\\"/g, '"')
+  }
+  if (init.slice(i, i + 10) === "CHyprColor") {
+    const open = init.indexOf("{", i)
+    const close = init.indexOf("}", open)
+    return init.slice(open + 1, close).trim()
+  }
+  const m = /^(true|false|0x[0-9a-fA-F]+|-?\d+(?:\.\d+)?|[A-Za-z_][A-Za-z0-9_]*\[\d+\])/.exec(init.slice(i))
+  return m ? m[1] : null
+}
+
+function cppU64Array(src, name) {
+  const re = new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\[\\]\\s*=\\s*\\{([^}]+)\\}")
+  const m = re.exec(src)
+  if (!m)
+    return null
+  return m[1].match(/0x[0-9a-fA-F]+/g)
+}
+
+function argbHexFromLookColor(s) {
+  const qt = Look.toQtColor(s)
+  check(qt && qt.charAt(0) === "#" && qt.length === 9, "Look.toQtColor packed " + s)
+  return "0x" + qt.slice(1).toLowerCase()
+}
+
+function resolveCtorToken(src, tok) {
+  if (!tok)
+    return tok
+  const m = /^kLookDefaultGradient\[(\d+)\]$/.exec(tok)
+  if (!m)
+    return tok
+  const arr = cppU64Array(src, "kLookDefaultGradient")
+  if (!arr)
+    return tok
+  return arr[Number(m[1])]
+}
+
+function sameNumber(a, b) {
+  return Number(a) === Number(b)
+}
+
+function sameBool(tok, want) {
+  return tok === String(want)
+}
+
+function sameHex(tok, wantHex) {
+  if (!tok || !wantHex)
+    return false
+  return parseInt(tok, 16) === parseInt(wantHex, 16)
+}
+
+function checkPluginInitDefaults() {
+  const mainPath = path.join(root, "hypr/src/main.cpp")
+  const main = fs.readFileSync(mainPath, "utf8")
+  check(main.length > 0, "read shipped hypr/src/main.cpp")
+  const init = pluginInitSection(main)
+  check(init.length > 0, "PLUGIN_INIT body is present")
+
+  const d = Look.DEFAULTS
+
+  check(sameBool(hyprCtorDefault(init, "pulse"), d.pulse), "PLUGIN_INIT pulse == Look.DEFAULTS.pulse")
+  check(sameBool(hyprCtorDefault(init, "shimmer"), d.shimmer), "PLUGIN_INIT shimmer == Look.DEFAULTS.shimmer")
+  check(sameBool(hyprCtorDefault(init, "mirror"), d.mirror), "PLUGIN_INIT mirror == Look.DEFAULTS.mirror")
+  check(sameBool(hyprCtorDefault(init, "active_only"), d.activeOnly), "PLUGIN_INIT active_only == Look.DEFAULTS.activeOnly")
+
+  check(sameNumber(hyprCtorDefault(init, "pin_deg"), d.pinDeg), "PLUGIN_INIT pin_deg == Look.DEFAULTS.pinDeg")
+  check(sameNumber(hyprCtorDefault(init, "border_size"), d.borderSize), "PLUGIN_INIT border_size == Look.DEFAULTS.borderSize")
+  check(sameNumber(hyprCtorDefault(init, "shimmer_deg"), d.shimmerDeg), "PLUGIN_INIT shimmer_deg == Look.DEFAULTS.shimmerDeg")
+  check(sameNumber(hyprCtorDefault(init, "angle_offset"), d.angleOffset), "PLUGIN_INIT angle_offset == Look.DEFAULTS.angleOffset")
+  check(sameNumber(hyprCtorDefault(init, "shimmer_hz"), d.shimmerHz), "PLUGIN_INIT shimmer_hz == Look.DEFAULTS.shimmerHz")
+  check(sameNumber(hyprCtorDefault(init, "pulse_hz"), d.pulseHz), "PLUGIN_INIT pulse_hz == Look.DEFAULTS.pulseHz")
+  check(sameNumber(hyprCtorDefault(init, "shimmer_scale_min"), d.shimmerScaleMin), "PLUGIN_INIT shimmer_scale_min == Look.DEFAULTS.shimmerScaleMin")
+  check(sameNumber(hyprCtorDefault(init, "shimmer_scale_max"), d.shimmerScaleMax), "PLUGIN_INIT shimmer_scale_max == Look.DEFAULTS.shimmerScaleMax")
+  check(sameNumber(hyprCtorDefault(init, "lobe"), d.lobe), "PLUGIN_INIT lobe == Look.DEFAULTS.lobe")
+
+  check(hyprCtorDefault(init, "gradient_positions") === d.gradientPositions,
+    "PLUGIN_INIT gradient_positions == Look.DEFAULTS.gradientPositions")
+  check(hyprCtorDefault(init, "gradient_positions_cw") === d.gradientPositionsCw,
+    "PLUGIN_INIT gradient_positions_cw == Look.DEFAULTS.gradientPositionsCw")
+
+  check(sameHex(hyprCtorDefault(init, "col.a"), argbHexFromLookColor(d.colA)),
+    "PLUGIN_INIT col.a ARGB == Look.DEFAULTS.colA")
+  check(sameHex(hyprCtorDefault(init, "col.b"), argbHexFromLookColor(d.colB)),
+    "PLUGIN_INIT col.b ARGB == Look.DEFAULTS.colB")
+  check(sameHex(hyprCtorDefault(init, "base_color"), argbHexFromLookColor(d.baseColor)),
+    "PLUGIN_INIT base_color ARGB == Look.DEFAULTS.baseColor")
+
+  const wantStops = Look.asColorList(d.gradient).map(argbHexFromLookColor)
+  check(wantStops.length === 4, "Look.DEFAULTS.gradient is four stops")
+  const gotStops = cppU64Array(main, "kLookDefaultGradient")
+  check(gotStops !== null && gotStops.length === 4, "kLookDefaultGradient is a four-stop list")
+  if (gotStops) {
+    for (let i = 0; i < 4; i++)
+      check(sameHex(gotStops[i], wantStops[i]), "kLookDefaultGradient[" + i + "] == Look.DEFAULTS.gradient[" + i + "]")
+  }
+
+  const gradCtor = resolveCtorToken(main, hyprCtorDefault(init, "gradient"))
+  check(sameHex(gradCtor, wantStops[0]), "CGradientValue ctor head is Look.DEFAULTS.gradient[0]")
+
+  const applyNeedle = "shinyApplyLookGradientDefault()"
+  const applyAt = init.indexOf(applyNeedle)
+  const addGrad = init.indexOf("HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.gradient)")
+  const reloadAt = init.indexOf("HyprlandAPI::reloadConfig()")
+  const reloadedAt = init.indexOf("config.reloaded.listen")
+  const exitBody = main.slice(main.indexOf("APICALL EXPORT void PLUGIN_EXIT"))
+  check(main.indexOf("data.m_colors") !== -1, "4-stop seed writes CGradientValueData.m_colors")
+  check(main.indexOf("updateColorsOk") !== -1, "4-stop seed calls updateColorsOk")
+  check(main.indexOf("shinySeedGradientStops(g_cfg.gradient, kLookDefaultGradient") !== -1,
+    "seed writes kLookDefaultGradient onto g_cfg.gradient")
+  check(addGrad >= 0 && reloadAt >= 0, "PLUGIN_INIT registers gradient then reloadConfig")
+  check(applyAt >= 0 && applyAt < addGrad, "4-stop apply runs before addConfigValueV2")
+  check(init.indexOf(applyNeedle, addGrad) >= 0 && init.indexOf(applyNeedle, addGrad) < reloadAt,
+    "4-stop apply re-runs after register, before reloadConfig")
+  check(reloadedAt >= 0 && reloadedAt > reloadAt,
+    "PLUGIN_INIT listens for config.reloaded after scheduling reloadConfig")
+  check(/config\.reloaded\.listen\(\s*\[\]\s*\{\s*shinyApplyLookGradientDefault\(\)\s*;\s*\}\s*\)/.test(init),
+    "config.reloaded re-seeds kLookDefaultGradient via shinyApplyLookGradientDefault")
+  check(main.indexOf("shinyGradientSetByUser") !== -1, "re-seed is gated on whether lua set the key")
+  check(main.indexOf('getConfigValue("plugin:shiny-border:gradient")') !== -1,
+    "setByUser is read from the live plugin:shiny-border:gradient key")
+  check(main.indexOf(".setByUser") !== -1, "user-set gradient is not overwritten")
+  check(exitBody.indexOf("g_onConfigReloaded.reset()") !== -1,
+    "PLUGIN_EXIT drops the config.reloaded listener")
+  check(init.indexOf("shinySeedGradientStops(g_cfg.gradientCw") < 0,
+    "gradient_cw is not seeded with the 4-stop ramp")
+
+  const cwCtor = hyprCtorDefault(init, "gradient_cw")
+  check(cwCtor !== null, "gradient_cw still has a one-color CGradientValue ctor")
+  check(Look.asColorList(d.gradientCw).length < 2, "Look.DEFAULTS.gradientCw is unset (< 2 colors)")
+}
+
 checkDefaults()
+checkPluginInitDefaults()
 checkMerge()
 checkEntry()
 checkColors()

@@ -231,8 +231,9 @@ void CShinyBorder::draw(PHLMONITOR pMonitor, float const& a) {
         .colB          = sc<uint64_t>(g_cfg.colB->value()),
         .baseColor     = sc<uint64_t>(g_cfg.baseColor->value()),
     };
-    // Multi-step ramp is opt-in: the single-color default (and any lone
-    // color) keeps stopCount at 0 → the classic col.a/col.b comet.
+    // Fewer than two gradient colors (unset, or an explicit one-color /
+    // empty override) keeps stopCount at 0 → col.a/col.b. The shared
+    // look default is four stops.
     const auto& gradientCfg = g_cfg.gradient->value();
     shared.stopCount        = shinyGradientStepCount(sc<int>(gradientCfg.m_colors.size()));
     for (int i = 0; i < shared.stopCount; i++)

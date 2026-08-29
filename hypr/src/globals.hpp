@@ -29,18 +29,18 @@ struct SShinyConfig {
     // Wrapping ring stroke under the highlight. Transparent (a=0) = off.
     // Packed ARGB; default matches the shared look rgba(00687855).
     SP<Config::Values::CColorValue> baseColor;
-    // Optional multi-step ramp. Fewer than two colors (the single-color
-    // default) keeps the classic col.a/col.b comet; two or more colors
-    // replace it, first color at the head. The gradient's own angle is
-    // ignored — the heading is pin_deg + angle_offset.
+    // Multi-step ramp. PLUGIN_INIT default is the shared 4-stop look.
+    // Fewer than two colors keeps the classic col.a/col.b comet; two or
+    // more colors replace it, first color at the head. The gradient's own
+    // angle is ignored — the heading is pin_deg + angle_offset.
     SP<Config::Values::CGradientValue> gradient;
-    // Per-stop positions, one percentage per gradient color ("0 70 100"),
-    // of the lit band (lobe), not the full window. Empty (default), count
-    // mismatch, or junk = even spacing.
+    // Per-stop positions, one percentage per gradient color ("0 1 3 100"),
+    // of the lit band (lobe), not the full window. Empty, count mismatch,
+    // or junk = even spacing.
     SP<Config::Values::CStringValue>   gradientPositions;
-    // Clockwise-half override. Unset (single-color default / empty spec)
-    // mirrors the primary side; gradient_positions_cw alone reshapes the
-    // half with the primary colors. Only active while gradient is on.
+    // Clockwise-half override. Unset (fewer than two colors) mirrors the
+    // primary side; gradient_positions_cw alone reshapes the half with
+    // the primary colors. Only active while gradient is on.
     SP<Config::Values::CGradientValue> gradientCw;
     SP<Config::Values::CStringValue>   gradientPositionsCw;
     // Pointer into Hyprland's CConfigValueBase::registry(). Bound in
@@ -56,3 +56,4 @@ inline SShinyConfig g_cfg;
 // Keep these alive: hyprutils unregisters the listener when the SP dies.
 inline CHyprSignalListener g_onWindowOpen;
 inline CHyprSignalListener g_onFocus;
+inline CHyprSignalListener g_onConfigReloaded;
