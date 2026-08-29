@@ -139,6 +139,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
                                                                 "Ripple spatial fade as a proportion of the decoration-box perimeter; 0 = off", 0.f,
                                                                 Config::Values::SFloatValueOptions{.min = 0.f, .max = 1.f});
     g_cfg.mirror       = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:mirror", "Mirror the lit-band lobe onto the far side of the border", true);
+    g_cfg.specularHalo = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:specular_halo",
+                                                                "Specular halo on bright border regions that bleeds outside the ring; does not change reserved padding", false);
     g_cfg.colA         = makeShared<Config::Values::CColorValue>("plugin:shiny-border:col.a", "Highlight head (ARGB)", 0xeef7ffff);
     g_cfg.colB         = makeShared<Config::Values::CColorValue>("plugin:shiny-border:col.b", "Highlight shoulder (ARGB)", 0x000a3f47);
     g_cfg.baseColor    = makeShared<Config::Values::CColorValue>("plugin:shiny-border:base_color",
@@ -183,6 +185,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.rippleOriginY);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.rippleFade);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.mirror);
+    HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.specularHalo);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.colA);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.colB);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.baseColor);

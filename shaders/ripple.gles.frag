@@ -34,6 +34,7 @@ uniform vec4  gradColorsCW[MAX_STEPS];
 uniform float gradPosCW[MAX_STEPS];
 uniform int   gradCountCW;
 uniform int   mirror;
+uniform float specularHalo;
 
 vec4 shinyRampColor(bool cw, float u) {
     vec4 g = cw ? gradColorsCW[0] : gradColors[0];

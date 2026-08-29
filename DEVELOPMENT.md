@@ -50,7 +50,7 @@ Hyprland adapter keys (what you see in generated lua /
 `angle_offset`, `base_color`, `gradient_positions`, `gradient_cw`,
 `gradient_positions_cw`, `col.a`, `col.b`, `active_only`, `pulse_hz`,
 `shimmer_hz`, `shimmer_deg`, `shimmer_scale_min`, `shimmer_scale_max`,
-`mirror`, `effect`, `ripple_freq`, `ripple_speed`, `ripple_gain`,
+`mirror`, `specular_halo`, `effect`, `ripple_freq`, `ripple_speed`, `ripple_gain`,
 `ripple_power`, `ripple_origin_x`, `ripple_origin_y`, `ripple_fade`.
 Hyphens in the Hyprland plugin prefix become underscores in Lua
 (`shiny_border`).

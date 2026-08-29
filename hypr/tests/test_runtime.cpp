@@ -581,6 +581,36 @@ static void checkEffectiveBorderSize() {
     CHECK(shinyEffectiveBorderSize(0, false) == 0);
 }
 
+static void checkHaloCoverage() {
+    const float localT = 2.f;
+    const float dOut   = 2.f;
+    const float dIn    = dOut + localT;
+    const float dWrap  = dOut + localT;
+
+    const float glowLit = shinyHaloGlow(dOut, localT, 1.f, 1.f);
+    CHECK(glowLit > 0.f);
+    CHECK(shinyCoverageCombine(shinyRingCoverage(dOut, dIn), glowLit) > 0.f);
+
+    CHECK(shinyHaloGlow(dOut, localT, 0.f, 1.f) == 0.f);
+    CHECK(shinyHaloGlow(dOut, localT, 1.f, 0.f) == 0.f);
+    CHECK(shinyHaloGlow(dOut, localT, 1.f, -1.f) == 0.f);
+
+    const float wrap = shinyWrapRingCoverage(dOut, dWrap);
+    CHECK(wrap < 0.002f);
+    CHECK(glowLit > wrap);
+    CHECK(shinyWrapRingCoverage(-0.5f, 0.5f) > 0.5f);
+
+    CHECK(shinyHaloBleedPx(2.f, 0.f) == 0.f);
+    CHECK(shinyHaloBleedPx(2.f, 1.f) > 0.f);
+    CHECK(shinyHaloExpandPx(2.f, 0.f) == 0);
+    CHECK(shinyHaloExpandPx(2.f, 1.f) > 0);
+
+    CHECK(shinyEffectiveBorderSize(2, true) == 2);
+    CHECK(shinyDamageExpandPx(2.f, 0.f) == 2);
+    CHECK(shinyDamageExpandPx(2.f, 1.f) > 2);
+    CHECK(shinyHaloExpandPx(2.f, 1.f) > 0);
+}
+
 static void checkUpdateWindowActions() {
     const ShinyGeoLatch geo{10.0, 20.0, 100.0, 200.0};
     const int           bs = 3;
@@ -804,6 +834,7 @@ int main() {
     checkGradientCache();
     checkWrapComposite();
     checkEffectiveBorderSize();
+    checkHaloCoverage();
     checkUpdateWindowActions();
     checkFallbackEmergencyPaint();
 

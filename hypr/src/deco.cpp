@@ -159,6 +159,7 @@ void CShinyBorder::syncExtents() {
 
 SDecorationPositioningInfo CShinyBorder::getPositioningInfo() {
     const int bs = effectiveBorderSize();
+    // Reserved inset is ring thickness only. Halo bleed is draw/damage, not padding.
     m_extents    = {{bs, bs}, {bs, bs}};
 
     SDecorationPositioningInfo info;
@@ -311,6 +312,9 @@ void CShinyBorder::draw(PHLMONITOR pMonitor, float const& a) {
         data.rippleOriginX = g_cfg.rippleOriginX ? sc<float>(g_cfg.rippleOriginX->value()) : 0.5f;
         data.rippleOriginY = g_cfg.rippleOriginY ? sc<float>(g_cfg.rippleOriginY->value()) : 0.5f;
         data.rippleFade    = g_cfg.rippleFade ? sc<float>(g_cfg.rippleFade->value()) : 0.f;
+        data.specularHalo  = g_cfg.specularHalo && g_cfg.specularHalo->value() ? 1.f : 0.f;
+        data.haloExpandPx  = shinyHaloExpandPx(
+            shinyShaderThick(sc<float>(BORDERSIZE), sc<float>(pMonitor->m_scale)) * thickScale, data.specularHalo);
         data.window      = m_window;
         g_pHyprRenderer->addPassElement(makeUnique<CShinyPassElement>(data));
         return;
@@ -379,7 +383,8 @@ void CShinyBorder::damageEntire() {
         return;
 
     const int pad = std::max(borderSize() + 6, 8);
-    CRegion   rg{dm.copy().expand(2)};
+    const float halo = g_cfg.specularHalo && g_cfg.specularHalo->value() ? 1.f : 0.f;
+    CRegion   rg{dm.copy().expand(shinyDamageExpandPx(sc<float>(borderSize()), halo))};
     CBox      hole = dm.copy().expand(-pad);
     if (hole.w > 1 && hole.h > 1)
         rg.subtract(hole);

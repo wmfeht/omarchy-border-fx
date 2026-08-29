@@ -8,6 +8,7 @@ import QtQuick
 import "Shimmer.js" as Shimmer
 import "Gradient.js" as Gradient
 import "Ripple.js" as Ripple
+import "Coverage.js" as Coverage
 
 Item {
   id: root
@@ -47,6 +48,10 @@ Item {
   property real rippleOriginX: 0.5
   property real rippleOriginY: 0.5
   property real rippleFade: 0
+  // Specular halo on lit/bright regions that bleeds outside the outer
+  // contour. Off keeps a hard border-thickness ring. Twin of
+  // plugin:shiny-border:specular_halo. Does not change borderSize inset.
+  property bool specularHalo: false
   property real roundingPower: 2
 
   // Wrapping ring stroke under the directional highlight. Both hosts
@@ -82,6 +87,8 @@ Item {
   readonly property real _thickScale: _shimmerOn
       ? Shimmer.thickScale(_shimmerScale)
       : 1
+  readonly property real _haloBleed: Coverage.bleedPx(
+      borderSize * dpr * _thickScale, specularHalo ? 1 : 0) / Math.max(dpr, 1)
   // On the RHI path, status often stays Uncompiled even while the shader
   // paints. Treat Error as the real failure; Compiled is a bonus.
   readonly property bool shaderOk: ring.status === ShaderEffect.Compiled
@@ -198,6 +205,7 @@ Item {
   ShaderEffect {
     id: ring
     anchors.fill: parent
+    anchors.margins: -root._haloBleed
     visible: status !== ShaderEffect.Error
     blending: true
     fragmentShader: root.shaderSource
@@ -216,6 +224,8 @@ Item {
     property real rippleOriginX: root.rippleOriginX
     property real rippleOriginY: root.rippleOriginY
     property real rippleFade: root.rippleFade
+    property real specularHalo: root.specularHalo ? 1 : 0
+    property real haloBleedPx: root._haloBleed * root.dpr
     property real range: root._drawnLobe
     property real angle: root._drawnAngle
     property int mirror: root.mirror ? 1 : 0

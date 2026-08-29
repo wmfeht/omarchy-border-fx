@@ -75,7 +75,13 @@ that light, projected along the axis using this window's width and height.
   Both fragments run `shinyWrapComposite` (premultiplied highlight over a
   border-thickness ring; glow excluded; `a <= 0` is off). The wrap does
   not use `decoration:shadow` and is not the last gradient stop. CPU twin
-  is `shinyWrapComposite` in `runtime.cpp`.
+  is `shinyWrapComposite` in `gradient.cpp`.
+- `specular_halo` (default off): gates the outside-glow mix on lit/bright
+  energy so the halo bleeds past the outer contour. Off keeps a hard ring.
+  Draw/damage expand by `shinyHaloExpandPx` / `shinyDamageExpandPx`; reserved
+  extents stay `shinyEffectiveBorderSize` (no extra client padding). CPU
+  twin is `shinyHaloGlow` / `shinyCoverageCombine` in `runtime.cpp`. The
+  fallback linear gradient does not paint the halo.
 
 `active_only` (default on) means only the focused window draws the ring and
 pulses. Unfocused windows have **no** ring, but they still reserve the same

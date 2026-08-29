@@ -124,7 +124,8 @@ All keys at their shared defaults (equivalent to
   "ripplePower": 8,
   "rippleOriginX": 0.5,
   "rippleOriginY": 0.5,
-  "rippleFade": 0
+  "rippleFade": 0,
+  "specularHalo": false
 }
 ```
 
@@ -196,6 +197,7 @@ only (chrome ignores the key).
 | `effect` | string | `"shiny"` | both | Renderer. `"shiny"` or `"ripple"` draws on chrome and windows. Anything else: everything off. |
 | `borderSize` | number (px) | `2` | both | Ring thickness. Chrome: overlay hidden when `≤ 0`. Hyprland clamps to `-1…20`; `-1` follows `general:border_size` on windows only. |
 | `baseColor` | color | `"rgba(0a3f47dd)"` | both | Wrapping stroke **under** the directional highlight, same thickness as the ring. Transparent (`a = 0`) = off. Not a shadow, not a gradient stop. The wrap is what still paints on the far side when the highlight fades out. |
+| `specularHalo` | bool | `false` | both | Specular halo on **bright** (lit) border regions — comet / ripple energy, not the wrapping stroke — that **bleeds outside** the ring's outer contour. Unlit / far regions stay hard-edged. Off (default) hides that outside halo. Does not change `borderSize` or reserved client padding. Hyprland and chrome both honor this. |
 | `pinDeg` | number (°) | `120` | both | Light heading, degrees CCW. `0` = from the right, `90` = from above. Hyprland clamps `-360…360`. |
 | `angleOffset` | number (°) | `0` | both | Added to `pinDeg` before drawing. Hyprland clamps `-180…180`. |
 | `lobe` | number | `0.16` | both | Lit-band **half-width** along the light axis. `0.5` = the whole window. Hyprland clamps config to `0.04…0.5`. Chrome clamps a walking lobe to that range, and a static lobe to at least `0.04`. |
@@ -304,6 +306,15 @@ Classic two-stop comet (`colA` / `colB`) instead of the default ramp:
   "gradient": [],
   "colA": "rgba(33ccffee)",
   "colB": "rgba(00ff99ee)"
+}
+```
+
+Specular halo on bright border areas, bleeding outside the stroke (padding unchanged):
+
+```json
+{
+  "id": "wmfeht.border-fx",
+  "specularHalo": true
 }
 ```
 

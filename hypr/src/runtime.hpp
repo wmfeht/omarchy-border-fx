@@ -151,3 +151,23 @@ float shinyShaderTime(bool pulseOn, bool rippleOn, double clockSeconds, float pu
 // active_only still skips unfocused. Not a ShinyEffect::RIPPLE.
 bool shinyTimerShouldRun(bool enabled, ShinyEffect mode, bool ripple, bool activeOnly, bool focused);
 int  shinyTimerTickMs(ShinyEffect mode, bool ripple, float pulseHz, float shimmerHz);
+
+// Twin of shaders/coverage.frag (shinyHaloGlow / shinyCoverageCombine).
+// halo <= 0 is off: no samples outside the outer contour. Wrap coverage
+// (shinyWrapRingCoverage) never includes the halo. Reserved client padding
+// stays shinyEffectiveBorderSize — bleed expands draw/damage only.
+inline constexpr float kShinyCoverageAA         = 1.25f;
+inline constexpr float kShinyHaloMix            = 0.65f;
+inline constexpr float kShinyHaloFalloff        = 1.35f;
+
+float shinySmoothstep(float edge0, float edge1, float x);
+float shinyRingCoverage(float dOut, float dIn);
+float shinyWrapRingCoverage(float dOut, float dWrap);
+float shinyHaloGlow(float dOut, float localT, float energy, float halo);
+float shinyCoverageCombine(float ring, float glow);
+// Extra samples outside the outer contour, same units as thick. 0 when off.
+float shinyHaloBleedPx(float thick, float halo);
+// ceil(bleed); 0 when off. Draw-quad expand in the same units as thick.
+int shinyHaloExpandPx(float thick, float halo);
+// Damage fringe: at least 2 px (existing AA pad), more when the halo is on.
+int shinyDamageExpandPx(float thick, float halo);

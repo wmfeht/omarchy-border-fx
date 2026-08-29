@@ -69,6 +69,7 @@ uniform vec4  gradColorsCW[MAX_STEPS];
 uniform float gradPosCW[MAX_STEPS];
 uniform int   gradCountCW;
 uniform int   mirror;            // 0 = facing-only comet; 1 = same lobe on the far side
+uniform float specularHalo;      // 0 = hard outer contour; 1 = lit-side halo bleed
 
 // Piecewise-linear chain over one half of the lit band: u 0 at the
 // facing support, 1 at the lobe edge. Mixes RGB and A. The 1e-4 guard
@@ -94,7 +95,27 @@ vec4 shinyRampColor(bool cw, float u) {
 //   GLES: shaders/shiny.gles.frag (CShader uniforms, gl_FragCoord, alpha)
 
 const float TAU = 6.28318530718;
-const float AA  = 1.25;
+
+// Shared ring / outside-halo coverage. Included by shiny-lighting.frag and
+// ripple-lighting.frag. Twin of qml/Coverage.js and shinyHalo* in runtime.cpp.
+// halo <= 0 turns the outside glow off; wrap coverage never includes it.
+
+const float AA                  = 1.25;
+const float SHINY_HALO_MIX      = 0.65;
+const float SHINY_HALO_FALLOFF  = 1.35;
+
+float shinyHaloGlow(float dOut, float localT, float energy, float halo) {
+    if (halo <= 0.0)
+        return 0.0;
+    return (1.0 - smoothstep(0.0, localT * SHINY_HALO_FALLOFF, dOut))
+         * smoothstep(-AA, AA, dOut)
+         * energy
+         * halo;
+}
+
+float shinyCoverageCombine(float ring, float glow) {
+    return ring + (1.0 - ring) * glow * SHINY_HALO_MIX;
+}
 
 // Pulse off (hz <= 0) is identity. Pulse on: the existing 0.5+0.5*sin
 // scales stop alpha. Twin of shinyPulseAlphaMul in runtime.cpp.
@@ -186,11 +207,12 @@ vec4 shinyLightingColor(vec2 p, vec2 size, float opacity) {
 
     // Ring: inside the outer contour, outside the inner contour.
     float ring = smoothstep(AA, -AA, dOut) * smoothstep(-AA, AA, dIn);
-    // Halo outside the rounded rect. Overlap the ring's outer ±AA so
-    // coverage does not hole between the stroke and the glow.
-    float glow = (1.0 - smoothstep(0.0, localT * 1.35, dOut)) * smoothstep(-AA, AA, dOut) * cone;
+    // Specular halo outside the rounded rect. Overlap the ring's outer
+    // ±AA so coverage does not hole between the stroke and the glow.
+    // specularHalo <= 0 is off (hard outer contour). Wrap never includes it.
+    float glow = shinyHaloGlow(dOut, localT, cone, specularHalo);
 
-    float cov = ring + (1.0 - ring) * glow * 0.65;
+    float cov = shinyCoverageCombine(ring, glow);
     if (cov < 0.002 && (baseColor.a <= 0.0 || wrapRing < 0.002))
         discard;
 
@@ -251,6 +273,7 @@ uniform vec4  gradColorsCW[MAX_STEPS];
 uniform float gradPosCW[MAX_STEPS];
 uniform int   gradCountCW;
 uniform int   mirror;
+uniform float specularHalo;
 
 vec4 shinyRampColor(bool cw, float u) {
     vec4 g = cw ? gradColorsCW[0] : gradColors[0];
@@ -273,7 +296,27 @@ vec4 shinyRampColor(bool cw, float u) {
 // rippleGain = 0 matches shiny. No textures, no UV/SDF warp, no caustics.
 
 const float TAU = 6.28318530718;
-const float AA  = 1.25;
+
+// Shared ring / outside-halo coverage. Included by shiny-lighting.frag and
+// ripple-lighting.frag. Twin of qml/Coverage.js and shinyHalo* in runtime.cpp.
+// halo <= 0 turns the outside glow off; wrap coverage never includes it.
+
+const float AA                  = 1.25;
+const float SHINY_HALO_MIX      = 0.65;
+const float SHINY_HALO_FALLOFF  = 1.35;
+
+float shinyHaloGlow(float dOut, float localT, float energy, float halo) {
+    if (halo <= 0.0)
+        return 0.0;
+    return (1.0 - smoothstep(0.0, localT * SHINY_HALO_FALLOFF, dOut))
+         * smoothstep(-AA, AA, dOut)
+         * energy
+         * halo;
+}
+
+float shinyCoverageCombine(float ring, float glow) {
+    return ring + (1.0 - ring) * glow * SHINY_HALO_MIX;
+}
 
 float shinyPulseAlphaMul(float hz, float t) {
     if (hz <= 0.0)
@@ -360,9 +403,9 @@ vec4 rippleLightingColor(vec2 p, vec2 size, float opacity) {
         discard;
 
     float ring = smoothstep(AA, -AA, dOut) * smoothstep(-AA, AA, dIn);
-    float glow = (1.0 - smoothstep(0.0, localT * 1.35, dOut)) * smoothstep(-AA, AA, dOut) * energy;
+    float glow = shinyHaloGlow(dOut, localT, energy, specularHalo);
 
-    float cov = ring + (1.0 - ring) * glow * 0.65;
+    float cov = shinyCoverageCombine(ring, glow);
     if (cov < 0.002 && (baseColor.a <= 0.0 || wrapRing < 0.002))
         discard;
 

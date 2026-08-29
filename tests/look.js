@@ -104,6 +104,8 @@ function checkDefaults() {
   check(d.rippleOriginX === 0.5, "default rippleOriginX is box center")
   check(d.rippleOriginY === 0.5, "default rippleOriginY is box center")
   check(d.rippleFade === 0, "default rippleFade is off")
+  check(d.specularHalo === false, "default specularHalo off")
+  check(Look.DEFAULTS.specularHalo === false, "DEFAULTS specularHalo is non-displaying")
   check(Look.effectDraws("shiny") === true, "effectDraws shiny")
   check(Look.effectDraws("ripple") === true, "effectDraws ripple")
   check(Look.effectDraws("") === true, "empty effect draws as shiny")
@@ -129,6 +131,13 @@ function checkMerge() {
 
   const nestedMirror = Look.merge({ mirror: false, shiny: { mirror: true } })
   check(nestedMirror.mirror === true, "nested shiny.mirror wins")
+
+  const haloOn = Look.merge({ specularHalo: true })
+  check(haloOn.specularHalo === true, "override specularHalo true")
+  const nestedHalo = Look.merge({ specularHalo: false, shiny: { specularHalo: true } })
+  check(nestedHalo.specularHalo === true, "nested shiny.specularHalo wins")
+  const rippleHalo = Look.merge({ effect: "ripple", specularHalo: false, ripple: { specularHalo: true } })
+  check(rippleHalo.specularHalo === true, "nested ripple.specularHalo wins")
   check(e.id === undefined, "id is not a look key")
 
   const emptyRamp = Look.merge({ gradient: [] })
@@ -263,6 +272,7 @@ function checkLookApply() {
   check(luaAssign(lua, "ripple_origin_x") === "0.5", "empty look lua origin X default")
   check(luaAssign(lua, "ripple_origin_y") === "0.5", "empty look lua origin Y default")
   check(luaAssign(lua, "ripple_fade") === "0", "empty look lua fade off")
+  check(luaAssign(lua, "specular_halo") === "false", "empty look lua specular_halo default off")
   check(lua.indexOf("hl.plugin.load") !== -1, "login load of session .so")
   check(lua.indexOf("hyprland.start") !== -1, "load on hyprland.start, not during parse")
   check(lua.indexOf("__wmfeht_border_fx_start") !== -1, "start guard uses wmfeht/border-fx name")
@@ -337,6 +347,16 @@ function checkLookApply() {
   )
   check(nestedMirrorLua.status === 0, "nested shiny.mirror look-apply")
   check(/mirror\s*=\s*true/.test(nestedMirrorLua.stdout), "nested shiny.mirror fans out")
+
+  const haloLua = lookApply({ specularHalo: true })
+  check(haloLua.status === 0, "specularHalo look-apply on: " + (haloLua.stderr || ""))
+  check(luaAssign(haloLua.stdout, "specular_halo") === "true", "specularHalo true fans out")
+  const haloOffLua = lookApply({ specularHalo: false })
+  check(haloOffLua.status === 0, "specularHalo look-apply off")
+  check(luaAssign(haloOffLua.stdout, "specular_halo") === "false", "specularHalo false fans out")
+  const nestedHaloLua = lookApply({ specularHalo: false, shiny: { specularHalo: true } })
+  check(nestedHaloLua.status === 0, "nested shiny.specularHalo look-apply")
+  check(luaAssign(nestedHaloLua.stdout, "specular_halo") === "true", "nested shiny.specularHalo fans out")
 
   const otherFx = spawnSync(
     "bash",
@@ -501,6 +521,7 @@ function checkPluginInitDefaults() {
   check(sameBool(hyprCtorDefault(init, "pulse"), d.pulse), "PLUGIN_INIT pulse == Look.DEFAULTS.pulse")
   check(sameBool(hyprCtorDefault(init, "shimmer"), d.shimmer), "PLUGIN_INIT shimmer == Look.DEFAULTS.shimmer")
   check(sameBool(hyprCtorDefault(init, "mirror"), d.mirror), "PLUGIN_INIT mirror == Look.DEFAULTS.mirror")
+  check(sameBool(hyprCtorDefault(init, "specular_halo"), d.specularHalo), "PLUGIN_INIT specular_halo == Look.DEFAULTS.specularHalo")
   check(sameBool(hyprCtorDefault(init, "active_only"), d.activeOnly), "PLUGIN_INIT active_only == Look.DEFAULTS.activeOnly")
 
   check(sameNumber(hyprCtorDefault(init, "pin_deg"), d.pinDeg), "PLUGIN_INIT pin_deg == Look.DEFAULTS.pinDeg")
@@ -602,22 +623,28 @@ function checkTypedCoerce() {
   check(strFalseShimmer.shimmer === true, "string \"false\" on default-true shimmer keeps default true")
   check(warnedKey(strFalseShimmerWarns, "shimmer"), "string \"false\" shimmer warns")
 
-  const realFalse = Look.merge({ shimmer: false, pulse: false, mirror: false })
+  const realFalse = Look.merge({ shimmer: false, pulse: false, mirror: false, specularHalo: false })
   takeWarnings()
   check(realFalse.shimmer === false, "real JSON false applies on shimmer")
   check(realFalse.pulse === false, "real JSON false applies on pulse")
   check(realFalse.mirror === false, "real JSON false applies on mirror")
+  check(realFalse.specularHalo === false, "real JSON false applies on specularHalo")
+
+  const strHalo = Look.merge({ specularHalo: "true" })
+  check(strHalo.specularHalo === false, "string \"true\" on default-false specularHalo keeps default false")
+  check(warnedKey(takeWarnings(), "specularHalo"), "string \"true\" specularHalo warns")
 
   const realTrue = Look.merge({ pulse: true, mirror: true, shimmer: true })
   takeWarnings()
   check(realTrue.pulse === true && realTrue.mirror === true && realTrue.shimmer === true,
     "real JSON true applies")
 
-  const oneZero = Look.merge({ pulse: 1, mirror: 0, shimmer: 0 })
+  const oneZero = Look.merge({ pulse: 1, mirror: 0, shimmer: 0, specularHalo: 1 })
   takeWarnings()
   check(oneZero.pulse === true, "numeric 1 is a valid bool true")
   check(oneZero.mirror === false, "numeric 0 is a valid bool false")
   check(oneZero.shimmer === false, "numeric 0 turns default-true shimmer off")
+  check(oneZero.specularHalo === true, "numeric 1 turns default-false specularHalo on")
 
   const infBorder = Look.merge({ borderSize: "inf" })
   const infWarns = takeWarnings()
@@ -797,13 +824,20 @@ function checkLookApplyTyped() {
   check(luaAssign(pyNan.stdout, "shimmer_hz") === "0.3" || luaAssign(pyNan.stdout, "shimmer_hz") === String(d.shimmerHz),
     "Python Infinity shimmerHz → default")
 
-  const typedOk = lookApply({ pulse: true, shimmer: false, mirror: 1, borderSize: 3, lobe: 0.2 })
+  const typedOk = lookApply({ pulse: true, shimmer: false, mirror: 1, borderSize: 3, lobe: 0.2, specularHalo: true })
   check(typedOk.status === 0, "look-apply well-typed exits 0")
   check(luaAssign(typedOk.stdout, "pulse") === "true", "lua real true pulse")
   check(luaAssign(typedOk.stdout, "shimmer") === "false", "lua real false shimmer")
   check(luaAssign(typedOk.stdout, "mirror") === "true", "lua numeric 1 mirror")
   check(luaAssign(typedOk.stdout, "border_size") === "3", "lua well-typed border_size")
   check(luaAssign(typedOk.stdout, "lobe") === "0.2", "lua well-typed lobe")
+  check(luaAssign(typedOk.stdout, "specular_halo") === "true", "lua well-typed specular_halo")
+
+  const haloStr = lookApply({ specularHalo: "true" })
+  check(haloStr.status === 0, "look-apply string specularHalo exits 0")
+  check(luaAssign(haloStr.stdout, "specular_halo") === "false", "lua string specularHalo keeps default off")
+  check(Look.merge({ specularHalo: "true" }).specularHalo === false,
+    "merge and lua agree on mistyped specularHalo")
 }
 
 function checkLookApplyEval() {

@@ -34,6 +34,7 @@ uniform vec4  gradColorsCW[MAX_STEPS];
 uniform float gradPosCW[MAX_STEPS];
 uniform int   gradCountCW;
 uniform int   mirror;            // 0 = facing-only comet; 1 = same lobe on the far side
+uniform float specularHalo;      // 0 = hard outer contour; 1 = lit-side halo bleed
 
 // Piecewise-linear chain over one half of the lit band: u 0 at the
 // facing support, 1 at the lobe edge. Mixes RGB and A. The 1e-4 guard

@@ -54,6 +54,8 @@ layout(std140, binding = 0) uniform buf {
     mat4  gradColorsCW1;
     vec4  gradPosCW0;
     vec4  gradPosCW1;
+    float specularHalo;      // 0 = hard outer contour; 1 = lit-side halo bleed
+    float haloBleedPx;       // extra samples outside the ring, device px; 0 when off
 };
 
 const int MAX_STEPS = 8;
@@ -104,6 +106,8 @@ vec4 shinyRampColor(bool cw, float u) {
 #include "shiny-lighting.frag"
 
 void main() {
-    vec2 p = (qt_TexCoord0 - vec2(0.5)) * vec2(widthPx, heightPx);
-    fragColor = shinyLightingColor(p, vec2(widthPx, heightPx), qt_Opacity);
+    vec2 ringSize = vec2(widthPx, heightPx);
+    vec2 itemSize = ringSize + vec2(2.0 * max(haloBleedPx, 0.0));
+    vec2 p = (qt_TexCoord0 - vec2(0.5)) * itemSize;
+    fragColor = shinyLightingColor(p, ringSize, qt_Opacity);
 }
