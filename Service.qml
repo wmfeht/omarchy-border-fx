@@ -12,8 +12,9 @@
 //
 // Does not patch qs.Ui. Walks shell.bar.moduleSlots, summoned panel
 // loaders, and the notifications service tree, finds the chrome card
-// (shallowest BorderSurface, not inner rows), hides the stock stroke,
-// and overlays ShinyBorder while visible.
+// (shallowest BorderSurface, not inner rows), and overlays ShinyBorder
+// as an extra child while visible. Host borderSpec/clip are not
+// JS-assigned (that would drop QML bindings).
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -21,6 +22,7 @@ import qs.Commons
 import "qml"
 import "qml/Look.js" as Look
 import "qml/EnsureStatus.js" as EnsureStatus
+import "qml/OverlayAttach.js" as OverlayAttach
 
 Item {
   id: root
@@ -42,50 +44,12 @@ Item {
 
   property bool lookApplyPending: false
   property bool hyprReady: false
-  // BorderSurface is a typed QML object — it will not take ad-hoc `_qsShiny*`
-  // properties. Stock specs live here, keyed by object identity.
-  property var stock: []
+  // Cards currently carrying a ShinyBorder child. Entries are
+  // {host, card}. Attach-once: a second sync on a member does not
+  // recreate the overlay or write host properties.
+  property var attached: []
+  property var hostWatches: []
   property bool warnedMissingToasts: false
-
-  function isBarPanelHost(obj) {
-    return obj
-        && obj.anchorItem !== undefined
-        && obj.contentWidth !== undefined
-        && obj.borderSpec !== undefined
-        && obj.open !== undefined
-  }
-
-  // omarchy.menu / clipboard / emojis: keepLoaded overlay with a centered
-  // BorderSurface card. `opened` is the plugin lifecycle flag (not `open`).
-  function isOverlayHost(obj) {
-    return obj
-        && obj.opened !== undefined
-        && obj.cardWidth !== undefined
-        && obj.borderSpec !== undefined
-  }
-
-  // NotificationCard is itself the BorderSurface. Duck-type the toast
-  // presentational API, not objectName — we do not patch that plugin.
-  function isNotificationCard(obj) {
-    return obj
-        && obj.cardBorderSpec !== undefined
-        && obj.summary !== undefined
-        && obj.urgency !== undefined
-        && obj.borderSpec !== undefined
-        && obj.padding !== undefined
-        && obj.radius !== undefined
-  }
-
-  function isHost(obj) {
-    return isBarPanelHost(obj) || isOverlayHost(obj) || isNotificationCard(obj)
-  }
-
-  function isChromeCard(obj) {
-    return obj
-        && obj.borderSpec !== undefined
-        && obj.padding !== undefined
-        && obj.radius !== undefined
-  }
 
   function eachChild(obj, fn) {
     if (!obj) return
@@ -125,7 +89,7 @@ Item {
   function collectHosts(node, out, seen) {
     if (!node || seen.indexOf(node) !== -1) return
     seen.push(node)
-    if (isHost(node)) {
+    if (OverlayAttach.isHost(node)) {
       if (out.indexOf(node) === -1) out.push(node)
       return
     }
@@ -134,7 +98,7 @@ Item {
 
   function findCard(host) {
     // The toast IS the card. Panel/overlay hosts wrap a BorderSurface child.
-    if (isChromeCard(host)) return host
+    if (OverlayAttach.isChromeCard(host)) return host
     // Shallowest BorderSurface. Menu/clipboard wrap the card in a
     // fullscreen PanelWindow; row cells are BorderSurfaces nested inside
     // the card and must not get a ring.
@@ -147,7 +111,7 @@ Item {
       var hit = null
       eachChild(node, function(ch) {
         if (hit) return
-        if (isChromeCard(ch)) hit = ch
+        if (OverlayAttach.isChromeCard(ch)) hit = ch
       })
       if (hit) return hit
       eachChild(node, function(ch) {
@@ -171,74 +135,12 @@ Item {
     return found
   }
 
-  function stockWidth(spec) {
-    var w = 0
-    if (typeof Border.uniformWidth === "function")
-      w = Number(Border.uniformWidth(spec)) || 0
-    if (w <= 0 && spec && spec.widths) {
-      w = Math.max(
-        Number(spec.widths.top) || 0,
-        Number(spec.widths.right) || 0,
-        Number(spec.widths.bottom) || 0,
-        Number(spec.widths.left) || 0
-      )
-    }
-    return w > 0 ? w : 2
-  }
-
-  function stockEntry(card) {
-    for (var i = 0; i < stock.length; i++) {
-      if (stock[i].card === card) return stock[i]
-    }
-    return null
-  }
-
   function alive(obj) {
     try {
       return !!(obj && obj.borderSpec !== undefined)
     } catch (e) {
       return false
     }
-  }
-
-  function hideStock(card) {
-    var entry = stockEntry(card)
-    var spec = entry ? entry.spec : card.borderSpec
-    if (!entry)
-      stock.push({ card: card, spec: spec, clip: card.clip })
-    // Keep the reserved width so content insets do not jump, but paint that
-    // strip as the card fill. A transparent native border insets the fill and
-    // punches a hole through to the scrim/wallpaper; the wrapping teal then
-    // composites over empty pixels instead of the chrome (preview has no hole
-    // — DemoCard fill goes to the edge).
-    // NotificationCard sets clip: true; that would scissor the ring at the
-    // rounded edge, so drop it while the overlay is on.
-    card.borderSpec = Border.flat(card.color, stockWidth(spec))
-    card.clip = false
-  }
-
-  function restoreStock(card) {
-    var entry = stockEntry(card)
-    if (!entry) return
-    if (!alive(card)) {
-      pruneStock()
-      return
-    }
-    card.borderSpec = entry.spec
-    if (entry.clip !== undefined) card.clip = entry.clip
-    var next = []
-    for (var i = 0; i < stock.length; i++) {
-      if (stock[i].card !== card) next.push(stock[i])
-    }
-    stock = next
-  }
-
-  function pruneStock() {
-    var next = []
-    for (var i = 0; i < stock.length; i++) {
-      if (alive(stock[i].card)) next.push(stock[i])
-    }
-    if (next.length !== stock.length) stock = next
   }
 
   function pluginRoot() {
@@ -289,47 +191,147 @@ Item {
     Quickshell.execDetached(["bash", scriptPath("hypr-teardown.sh")])
   }
 
-  function attach(host) {
-    if (!alive(host)) return
-    var card = findCard(host)
-    if (!card || !alive(card)) return
-    hideStock(card)
-    var shiny = existingShiny(card)
-    if (shiny && Number(shiny.overlayRev) !== root.overlayRev) {
+  function watchEntry(host) {
+    for (var i = 0; i < root.hostWatches.length; i++) {
+      if (root.hostWatches[i].host === host)
+        return root.hostWatches[i]
+    }
+    return null
+  }
+
+  function ensureWatch(host) {
+    if (!host || !alive(host))
+      return
+    if (watchEntry(host))
+      return
+    var w = hostWatchComp.createObject(root, { watchHost: host })
+    if (!w)
+      return
+    var next = []
+    for (var i = 0; i < root.hostWatches.length; i++)
+      next.push(root.hostWatches[i])
+    next.push({ host: host, watch: w })
+    root.hostWatches = next
+  }
+
+  function destroyAllWatches() {
+    for (var i = 0; i < root.hostWatches.length; i++) {
+      if (root.hostWatches[i].watch)
+        root.hostWatches[i].watch.destroy()
+    }
+    root.hostWatches = []
+  }
+
+  function pruneWatches() {
+    var next = []
+    for (var i = 0; i < root.hostWatches.length; i++) {
+      var e = root.hostWatches[i]
+      if (alive(e.host))
+        next.push(e)
+      else if (e.watch)
+        e.watch.destroy()
+    }
+    if (next.length !== root.hostWatches.length)
+      root.hostWatches = next
+  }
+
+  function pruneDeadAttached() {
+    var next = []
+    for (var i = 0; i < root.attached.length; i++) {
+      var card = OverlayAttach.entryCard(root.attached[i])
+      var host = OverlayAttach.entryHost(root.attached[i])
+      var cardOk = alive(card)
+      var hostOk = !host || alive(host)
+      if (cardOk && hostOk) {
+        next.push(root.attached[i])
+        continue
+      }
+      if (cardOk) {
+        var shiny = existingShiny(card)
+        if (shiny)
+          shiny.destroy()
+      }
+    }
+    if (next.length !== root.attached.length)
+      root.attached = next
+  }
+
+  function syncHost(host, opts) {
+    opts = opts || {}
+    var disable = opts.disable === true
+    var hostAlive = alive(host)
+    var card = null
+    var shiny = null
+    if (hostAlive) {
+      card = findCard(host)
+      if (card && !alive(card))
+        card = null
+      if (card)
+        shiny = existingShiny(card)
+    } else {
+      card = OverlayAttach.cardForHost(root.attached, host)
+      if (card && alive(card))
+        shiny = existingShiny(card)
+      else
+        card = null
+    }
+
+    var decision = OverlayAttach.decideHostSync({
+      host: hostAlive ? host : null,
+      card: card,
+      hostAlive: hostAlive,
+      hostDestroyed: !hostAlive,
+      effectIsShiny: root.effectIsShiny(),
+      attached: root.attached,
+      existingOverlayRev: shiny ? shiny.overlayRev : null,
+      currentOverlayRev: root.overlayRev,
+      disable: disable
+    })
+    var extra = { host: host, card: card }
+    var result = OverlayAttach.applyCardPolicy(root.attached, card, decision, extra)
+    var act = result.overlayAction
+
+    if ((act === "destroy" || act === "replace") && shiny) {
       shiny.destroy()
       shiny = null
     }
-    if (!shiny) {
-      shiny = shinyComp.createObject(card)
-      if (!shiny) return
-      shiny.radius = Qt.binding(function() { return card.radius })
+    var created = true
+    if (act === "create" || act === "replace") {
+      created = false
+      if (card && alive(card)) {
+        shiny = shinyComp.createObject(card)
+        created = !!shiny
+        if (shiny)
+          shiny.radius = Qt.binding(function() { return card.radius })
+      }
     }
+    if (created)
+      root.attached = result.attached
+
+    if (hostAlive && !disable)
+      ensureWatch(host)
   }
 
-  function detach(host) {
-    if (!alive(host)) {
-      pruneStock()
-      return
+  function teardownChrome() {
+    var entries = []
+    for (var i = 0; i < root.attached.length; i++)
+      entries.push(root.attached[i])
+    var gathered = gatherHosts()
+    for (var g = 0; g < gathered.length; g++)
+      syncHost(gathered[g], { disable: true })
+    for (var e = 0; e < entries.length; e++) {
+      var h = OverlayAttach.entryHost(entries[e])
+      var c = OverlayAttach.entryCard(entries[e])
+      if (h)
+        syncHost(h, { disable: true })
+      if (alive(c)) {
+        var shiny = existingShiny(c)
+        if (shiny)
+          shiny.destroy()
+      }
     }
-    var card = findCard(host)
-    if (!card) return
-    if (alive(card)) {
-      var shiny = existingShiny(card)
-      if (shiny) shiny.destroy()
-    }
-    restoreStock(card)
-  }
-
-  function hostShowing(host) {
-    if (!host) return false
-    if (isNotificationCard(host))
-      return host.visible !== false
-    if (host.opened === true) return true
-    if (host.open === true) return true
-    // KeyboardPanel stays mapped through the fade (`open || card.opacity > 0`).
-    if (host.open !== undefined)
-      return host.visible === true
-    return false
+    root.attached = []
+    destroyAllWatches()
   }
 
   function notificationsRoot() {
@@ -376,15 +378,15 @@ Item {
     return hosts
   }
 
-  function sweep() {
-    pruneStock()
+  function syncAll() {
+    pruneDeadAttached()
+    pruneWatches()
     bindNotificationWatch()
     var hosts = gatherHosts()
     var toastCount = 0
     for (var i = 0; i < hosts.length; i++) {
-      if (isNotificationCard(hosts[i])) toastCount++
-      if (hostShowing(hosts[i]) && root.effectIsShiny()) attach(hosts[i])
-      else detach(hosts[i])
+      if (OverlayAttach.isNotificationCard(hosts[i])) toastCount++
+      syncHost(hosts[i])
     }
     var expected = 0
     try {
@@ -465,40 +467,61 @@ Item {
     onTriggered: root.runLookApply()
   }
 
+  Component {
+    id: hostWatchComp
+    Connections {
+      id: conn
+      ignoreUnknownSignals: true
+      property var watchHost: null
+      target: watchHost
+      function onVisibleChanged() { if (conn.watchHost) root.syncHost(conn.watchHost) }
+      function onOpenedChanged() { if (conn.watchHost) root.syncHost(conn.watchHost) }
+      function onOpenChanged() { if (conn.watchHost) root.syncHost(conn.watchHost) }
+      function onTargetChanged() {
+        if (!conn.target && conn.watchHost)
+          root.syncHost(conn.watchHost)
+      }
+    }
+  }
+
   Timer {
+    id: discoverTimer
     interval: 200
     running: true
     repeat: true
-    onTriggered: root.sweep()
+    // Host discovery only. syncHost is attach-once and never assigns
+    // borderSpec/clip; already-attached showing cards are a no-op.
+    onTriggered: root.syncAll()
   }
 
   Connections {
     target: root.shell && root.shell.bar ? root.shell.bar : null
     ignoreUnknownSignals: true
-    function onActivePopoutChanged() { Qt.callLater(root.sweep) }
+    function onActivePopoutChanged() { Qt.callLater(root.syncAll) }
   }
 
   Connections {
     id: popupModelWatch
     target: null
     ignoreUnknownSignals: true
-    function onCountChanged() { Qt.callLater(root.sweep) }
-    function onRowsInserted() { Qt.callLater(root.sweep) }
-    function onRowsRemoved() { Qt.callLater(root.sweep) }
+    function onCountChanged() { Qt.callLater(root.syncAll) }
+    function onRowsInserted() { Qt.callLater(root.syncAll) }
+    function onRowsRemoved() { Qt.callLater(root.syncAll) }
   }
 
-  onShellChanged: Qt.callLater(root.sweep)
-  onLookChanged: if (root.hyprReady) lookApplyTimer.restart()
+  onShellChanged: Qt.callLater(root.syncAll)
+  onLookChanged: {
+    if (root.hyprReady) lookApplyTimer.restart()
+    Qt.callLater(root.syncAll)
+  }
 
   Component.onCompleted: {
-    Qt.callLater(root.sweep)
+    Qt.callLater(root.syncAll)
     Qt.callLater(root.runHyprEnsure)
   }
 
   Component.onDestruction: {
-    var hosts = gatherHosts()
-    for (var i = 0; i < hosts.length; i++)
-      detach(hosts[i])
+    root.teardownChrome()
     root.runHyprTeardown()
   }
 }

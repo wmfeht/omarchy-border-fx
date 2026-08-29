@@ -540,6 +540,319 @@ checkGradientLobeU()
 checkGradientCwSide()
 checkLightProjection()
 
+function instrumentCard(base) {
+  var spec = base.borderSpec
+  var clip = base.clip
+  var specWrites = 0
+  var clipWrites = 0
+  var card = {}
+  for (var k in base) {
+    if (!Object.prototype.hasOwnProperty.call(base, k))
+      continue
+    if (k === "borderSpec" || k === "clip")
+      continue
+    card[k] = base[k]
+  }
+  Object.defineProperty(card, "borderSpec", {
+    get: function () { return spec },
+    set: function (v) { specWrites++; spec = v },
+    enumerable: true,
+    configurable: true
+  })
+  Object.defineProperty(card, "clip", {
+    get: function () { return clip },
+    set: function (v) { clipWrites++; clip = v },
+    enumerable: true,
+    configurable: true
+  })
+  Object.defineProperty(card, "specWrites", {
+    get: function () { return specWrites },
+    enumerable: false
+  })
+  Object.defineProperty(card, "clipWrites", {
+    get: function () { return clipWrites },
+    enumerable: false
+  })
+  return card
+}
+
+function makeBarPanel(open, visible) {
+  var spec = { kind: "stock-bar" }
+  var host = instrumentCard({
+    anchorItem: {},
+    contentWidth: 220,
+    borderSpec: spec,
+    open: open,
+    visible: visible,
+    padding: 8,
+    radius: 12,
+    clip: true
+  })
+  return { host: host, card: host, spec: spec }
+}
+
+function makeOverlay(opened) {
+  var spec = { kind: "stock-overlay" }
+  var host = instrumentCard({
+    opened: opened,
+    cardWidth: 420,
+    borderSpec: spec,
+    padding: 10,
+    radius: 16,
+    clip: false
+  })
+  return { host: host, card: host, spec: spec }
+}
+
+function makeToast(visible) {
+  var spec = { kind: "stock-toast" }
+  var host = instrumentCard({
+    cardBorderSpec: {},
+    summary: "hello",
+    urgency: 1,
+    borderSpec: spec,
+    padding: 12,
+    radius: 10,
+    clip: true,
+    visible: visible
+  })
+  return { host: host, card: host, spec: spec }
+}
+
+function driveSync(OA, session, host, card, opts) {
+  opts = opts || {}
+  var overlay = session.overlayOf.get(card) || null
+  var decision = OA.decideHostSync({
+    host: opts.hostDestroyed ? null : host,
+    card: opts.hostDestroyed ? OA.cardForHost(session.attached, host) || card : card,
+    hostAlive: opts.hostAlive !== false && !opts.hostDestroyed,
+    hostDestroyed: !!opts.hostDestroyed,
+    effectIsShiny: opts.effectIsShiny !== false,
+    attached: session.attached,
+    existingOverlayRev: overlay ? overlay.overlayRev : null,
+    currentOverlayRev: session.overlayRev,
+    disable: !!opts.disable
+  })
+  var result = OA.applyCardPolicy(session.attached, card, decision, { host: host, card: card })
+  if (result.overlayAction === "destroy" || result.overlayAction === "replace")
+    session.overlayOf.delete(card)
+  if (result.overlayAction === "create" || result.overlayAction === "replace")
+    session.overlayOf.set(card, { overlayRev: session.overlayRev })
+  session.attached = result.attached
+  session.lastDecision = decision
+  session.lastResult = result
+  return { decision: decision, result: result, overlay: session.overlayOf.get(card) || null }
+}
+
+function checkOverlayAttach() {
+  const OA = loadPragmaLibrary("qml/OverlayAttach.js")
+  check(typeof OA.isBarPanelHost === "function", "OverlayAttach.isBarPanelHost is shipped")
+  check(typeof OA.isOverlayHost === "function", "OverlayAttach.isOverlayHost is shipped")
+  check(typeof OA.isNotificationCard === "function", "OverlayAttach.isNotificationCard is shipped")
+  check(typeof OA.isHost === "function", "OverlayAttach.isHost is shipped")
+  check(typeof OA.isChromeCard === "function", "OverlayAttach.isChromeCard is shipped")
+  check(typeof OA.hostShowing === "function", "OverlayAttach.hostShowing is shipped")
+  check(typeof OA.decideHostSync === "function", "OverlayAttach.decideHostSync is shipped")
+  check(typeof OA.applyCardPolicy === "function", "OverlayAttach.applyCardPolicy is shipped")
+  check(OA.ASSIGN_STOCK === false, "overlay-only: ASSIGN_STOCK is false")
+
+  const bar = makeBarPanel(true, true)
+  const overlay = makeOverlay(true)
+  const toast = makeToast(true)
+  check(OA.isBarPanelHost(bar.host) === true, "bar-panel host (anchorItem+contentWidth+borderSpec+open)")
+  check(OA.isOverlayHost(overlay.host) === true, "overlay host (opened+cardWidth+borderSpec)")
+  check(OA.isNotificationCard(toast.host) === true, "notification card (cardBorderSpec+summary+urgency+borderSpec+padding+radius)")
+  check(OA.isHost(bar.host) && OA.isHost(overlay.host) && OA.isHost(toast.host), "all three kinds are hosts")
+  check(OA.isChromeCard(bar.card) && OA.isChromeCard(overlay.card) && OA.isChromeCard(toast.card),
+        "chrome cards have borderSpec+padding+radius")
+
+  // Leftover opened+cardWidth+borderSpec is the overlay duck-type (gets a ring).
+  const leftoverDuck = { opened: true, cardWidth: 360, borderSpec: { kind: "leftover" } }
+  check(OA.isOverlayHost(leftoverDuck) === true, "leftover opened+cardWidth+borderSpec is overlay host")
+  check(OA.isHost(leftoverDuck) === true, "leftover overlay duck-type is a host")
+  check(OA.isBarPanelHost(leftoverDuck) === false, "leftover overlay duck-type is not a bar panel")
+  check(OA.isNotificationCard(leftoverDuck) === false, "leftover overlay duck-type is not a toast")
+  check(OA.hostShowing(leftoverDuck) === true, "leftover overlay duck-type with opened:true is showing")
+
+  const leftoverClosed = { opened: false, cardWidth: 360, borderSpec: {} }
+  check(OA.isOverlayHost(leftoverClosed) === true, "closed leftover overlay duck-type is still an overlay host")
+  check(OA.hostShowing(leftoverClosed) === false, "closed leftover overlay duck-type is not showing")
+
+  // Subset leftover keys are not a silent extra host kind.
+  const subsetNoWidth = { opened: true, borderSpec: {} }
+  const subsetNoOpened = { cardWidth: 360, borderSpec: {} }
+  const subsetNoSpec = { opened: true, cardWidth: 360 }
+  check(OA.isOverlayHost(subsetNoWidth) === false, "opened+borderSpec without cardWidth is not overlay host")
+  check(OA.isOverlayHost(subsetNoOpened) === false, "cardWidth+borderSpec without opened is not overlay host")
+  check(OA.isOverlayHost(subsetNoSpec) === false, "opened+cardWidth without borderSpec is not overlay host")
+  check(OA.isHost(subsetNoWidth) === false, "subset leftover is not a silent extra host")
+  check(OA.isHost(subsetNoOpened) === false, "cardWidth+borderSpec leftover is not a host")
+  check(OA.isHost({ anchorItem: {}, contentWidth: 1, open: true }) === false,
+        "bar-panel subset without borderSpec is not a host")
+  check(OA.isHost({
+    summary: "x",
+    urgency: 1,
+    borderSpec: {},
+    padding: 1,
+    radius: 1
+  }) === false, "toast subset without cardBorderSpec is not a host")
+  check(OA.isChromeCard({ borderSpec: {} }) === false, "borderSpec alone is not a chrome card")
+
+  check(OA.hostShowing(toast.host) === true, "toast visible is showing")
+  toast.host.visible = false
+  check(OA.hostShowing(toast.host) === false, "toast visible:false is hidden")
+  toast.host.visible = true
+
+  const hiddenOverlay = makeOverlay(false)
+  check(OA.hostShowing(hiddenOverlay.host) === false, "overlay opened:false is hidden")
+  check(OA.hostShowing(overlay.host) === true, "overlay opened:true is showing")
+
+  check(OA.hostShowing(bar.host) === true, "panel open:true is showing")
+  const fading = makeBarPanel(false, true)
+  check(OA.hostShowing(fading.host) === true, "panel fade-mapped visible with open:false is showing")
+  const closedPanel = makeBarPanel(false, false)
+  check(OA.hostShowing(closedPanel.host) === false, "panel open:false visible:false is hidden")
+
+  const session = { attached: [], overlayOf: new Map(), overlayRev: 12 }
+
+  const first = driveSync(OA, session, bar.host, bar.card)
+  check(first.decision.action === "attach", "showing shiny bar-panel attaches")
+  check(first.decision.assignStock === false, "first attach does not assign stock (overlay-only)")
+  check(first.result.overlayAction === "create", "first attach creates overlay")
+  check(OA.isAttached(session.attached, bar.card) === true, "attach-once: set membership grows")
+  check(session.attached.length === 1, "one attached card after first sync")
+  check(first.overlay && first.overlay.overlayRev === 12, "created overlay stamped with current overlayRev")
+  check(bar.card.specWrites === 0, "first attach does not write borderSpec")
+  check(bar.card.clipWrites === 0, "first attach does not write clip")
+  check(bar.card.borderSpec === bar.spec, "host borderSpec identity preserved on attach")
+
+  const second = driveSync(OA, session, bar.host, bar.card)
+  check(second.decision.action === "noop", "second sync on attached showing card is noop")
+  check(second.decision.assignStock === false, "second sync does not assign borderSpec/clip")
+  check(second.decision.createOverlay === false, "second sync does not recreate overlay")
+  check(second.result.overlayAction === "keep", "second sync keeps existing overlay")
+  check(session.attached.length === 1, "second sync does not grow the attached set")
+  check(bar.card.specWrites === 0, "second sync does not write borderSpec")
+  check(bar.card.clipWrites === 0, "second sync does not write clip")
+  check(bar.card.borderSpec === bar.spec, "borderSpec unchanged after second sync")
+  check(bar.card.clip === true, "clip unchanged after second sync")
+
+  const stale = { attached: [], overlayOf: new Map(), overlayRev: 12 }
+  stale.overlayOf.set(overlay.card, { overlayRev: 11 })
+  const replaced = driveSync(OA, stale, overlay.host, overlay.card)
+  check(replaced.decision.action === "replace", "stale overlayRev is drop-and-replace")
+  check(replaced.decision.dropLeftover === true, "stale stamp dropLeftover")
+  check(replaced.result.overlayAction === "replace", "stale stamp overlayAction replace")
+  check(replaced.overlay && replaced.overlay.overlayRev === 12, "replacement stamped with current overlayRev")
+  check(OA.isAttached(stale.attached, overlay.card) === true, "replace still attaches the card")
+  check(overlay.card.specWrites === 0, "leftover replace does not assign borderSpec")
+
+  const kept = driveSync(OA, stale, overlay.host, overlay.card)
+  check(kept.decision.action === "noop", "matching overlayRev is kept")
+  check(kept.decision.dropLeftover === false, "matching stamp is not dropped")
+  check(kept.result.overlayAction === "keep", "matching stamp overlayAction keep")
+  check(kept.overlay && kept.overlay.overlayRev === 12, "matching stamp overlay remains")
+
+  const sameRevLeftover = { attached: [], overlayOf: new Map(), overlayRev: 12 }
+  sameRevLeftover.overlayOf.set(toast.card, { overlayRev: 12 })
+  const join = driveSync(OA, sameRevLeftover, toast.host, toast.card)
+  check(join.decision.action === "attach", "matching leftover not in set is attach")
+  check(join.decision.createOverlay === false, "matching leftover keeps existing child")
+  check(join.decision.keepOverlay === true, "matching leftover keepOverlay")
+  check(sameRevLeftover.attached.length === 1, "matching leftover joins the attached set")
+  check(toast.card.specWrites === 0, "matching leftover join does not assign borderSpec")
+
+  bar.host.open = false
+  bar.host.visible = false
+  const hidden = driveSync(OA, session, bar.host, bar.card)
+  check(hidden.decision.action === "detach", "hide of attached host detaches")
+  check(hidden.result.overlayAction === "destroy", "hide destroys overlay child")
+  check(OA.isAttached(session.attached, bar.card) === false, "hide removes card from attached set")
+  check(session.attached.length === 0, "attached set empty after hide")
+  check(hidden.overlay === null, "overlay gone after hide")
+  check(bar.card.borderSpec === bar.spec, "hide leaves host borderSpec untouched (overlay-only)")
+  check(bar.card.clip === true, "hide leaves host clip untouched (overlay-only)")
+  check(bar.card.specWrites === 0 && bar.card.clipWrites === 0, "hide does not write stock properties")
+
+  bar.host.open = true
+  bar.host.visible = true
+  driveSync(OA, session, bar.host, bar.card)
+  check(session.attached.length === 1, "re-show attaches again")
+  const destroyed = driveSync(OA, session, bar.host, bar.card, { hostDestroyed: true })
+  check(destroyed.decision.action === "detach", "destroy of attached host detaches")
+  check(OA.isAttached(session.attached, bar.card) === false, "destroy removes card from attached set")
+  check(bar.card.borderSpec === bar.spec, "destroy leaves host borderSpec untouched")
+
+  const disableSess = { attached: [], overlayOf: new Map(), overlayRev: 12 }
+  driveSync(OA, disableSess, toast.host, toast.card)
+  check(disableSess.attached.length === 1, "toast attached before disable")
+  const disabled = driveSync(OA, disableSess, toast.host, toast.card, { disable: true })
+  check(disabled.decision.action === "detach", "disable teardown detaches")
+  check(disabled.result.overlayAction === "destroy", "disable destroys overlay")
+  check(disableSess.attached.length === 0, "disable clears attached set")
+  check(toast.card.borderSpec === toast.spec, "disable leaves host borderSpec untouched")
+  check(toast.card.clip === true, "disable leaves host clip untouched")
+
+  const notShiny = { attached: [], overlayOf: new Map(), overlayRev: 12 }
+  driveSync(OA, notShiny, overlay.host, overlay.card)
+  const off = driveSync(OA, notShiny, overlay.host, overlay.card, { effectIsShiny: false })
+  check(off.decision.action === "detach", "non-shiny effect detaches chrome")
+  check(notShiny.attached.length === 0, "non-shiny effect clears attached set")
+
+  const noAttach = driveSync(OA, { attached: [], overlayOf: new Map(), overlayRev: 12 },
+    leftoverClosed, leftoverClosed, { effectIsShiny: true })
+  check(noAttach.decision.action === "noop", "hidden leftover overlay duck-type does not attach")
+}
+
+function checkOverlayAttachWiring() {
+  const service = fs.readFileSync(path.join(root, "Service.qml"), "utf8")
+  check(
+    service.indexOf('import "qml/OverlayAttach.js" as OverlayAttach') !== -1,
+    "Service.qml imports shipped OverlayAttach"
+  )
+  check(service.indexOf("OverlayAttach.isHost") !== -1, "Service uses OverlayAttach.isHost")
+  check(service.indexOf("OverlayAttach.isChromeCard") !== -1, "Service uses OverlayAttach.isChromeCard")
+  check(service.indexOf("OverlayAttach.isNotificationCard") !== -1, "Service uses OverlayAttach.isNotificationCard")
+  check(service.indexOf("OverlayAttach.decideHostSync") !== -1, "Service uses OverlayAttach.decideHostSync")
+  check(service.indexOf("OverlayAttach.applyCardPolicy") !== -1, "Service uses OverlayAttach.applyCardPolicy")
+  check(service.indexOf("function isBarPanelHost") === -1, "no QML-only isBarPanelHost copy")
+  check(service.indexOf("function isOverlayHost") === -1, "no QML-only isOverlayHost copy")
+  check(service.indexOf("function isNotificationCard") === -1, "no QML-only isNotificationCard copy")
+  check(service.indexOf("function isHost") === -1, "no QML-only isHost copy")
+  check(service.indexOf("function isChromeCard") === -1, "no QML-only isChromeCard copy")
+  check(service.indexOf("function hostShowing") === -1, "no QML-only hostShowing copy")
+  check(service.indexOf("function hideStock") === -1, "Service does not hideStock")
+  check(service.indexOf("function restoreStock") === -1, "Service does not restoreStock")
+  check(!/card\.borderSpec\s*=/.test(service), "Service never JS-assigns card.borderSpec")
+  check(!/card\.clip\s*=/.test(service), "Service never JS-assigns card.clip")
+
+  check(/onActivePopoutChanged\(\)\s*\{\s*Qt\.callLater\(root\.syncAll\)/.test(service),
+        "onActivePopoutChanged invokes syncAll")
+  check(/onCountChanged\(\)\s*\{\s*Qt\.callLater\(root\.syncAll\)/.test(service),
+        "popup model onCountChanged invokes syncAll")
+  check(/onRowsInserted\(\)\s*\{\s*Qt\.callLater\(root\.syncAll\)/.test(service),
+        "popup model onRowsInserted invokes syncAll")
+  check(/onRowsRemoved\(\)\s*\{\s*Qt\.callLater\(root\.syncAll\)/.test(service),
+        "popup model onRowsRemoved invokes syncAll")
+  check(service.indexOf("onShellChanged: Qt.callLater(root.syncAll)") !== -1,
+        "onShellChanged invokes syncAll")
+  check(service.indexOf("function onVisibleChanged()") !== -1
+      && service.indexOf("function onOpenedChanged()") !== -1
+      && service.indexOf("function onOpenChanged()") !== -1,
+        "host hide/destroy watches bind visible/opened/open")
+  check(service.indexOf("root.teardownChrome()") !== -1, "service destruction tears down chrome overlays")
+  check(service.indexOf("Qt.callLater(root.syncAll)") !== -1, "completed/look path can invoke syncAll")
+
+  const discoverAt = service.indexOf("id: discoverTimer")
+  check(discoverAt !== -1, "repeating discover timer still exists for new-host discovery")
+  const discover = service.slice(discoverAt, service.indexOf("Connections {", discoverAt))
+  check(discover.indexOf("interval: 200") !== -1, "discover timer interval is 200")
+  check(discover.indexOf("repeat: true") !== -1, "discover timer repeats")
+  check(discover.indexOf("onTriggered: root.syncAll()") !== -1, "discover timer calls syncAll, not a borderSpec rewrite")
+  check(!/card\.borderSpec\s*=/.test(discover), "discover timer does not assign card.borderSpec")
+  check(!/card\.clip\s*=/.test(discover), "discover timer does not assign card.clip")
+}
+
 function checkEnsureStatusReady() {
   const EnsureStatus = loadPragmaLibrary("qml/EnsureStatus.js")
   check(typeof EnsureStatus.isEnsureSuccessStatus === "function", "EnsureStatus.isEnsureSuccessStatus is shipped")
@@ -591,6 +904,8 @@ function checkEnsureStatusReady() {
 checkWrapSource()
 checkEnsureStatusReady()
 checkGlowCoverage()
+checkOverlayAttach()
+checkOverlayAttachWiring()
 
 if (fails) {
   console.error(fails + " checks failed")
