@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Completely remove wmfeht.border-fx from this system, then reload this folder
 # through the Omarchy CLI (`omarchy plugin remove` + `omarchy plugin add`).
+# Keeps the existing plugins[] look in shell.json (disable/remove would drop it).
 # Includes uncommitted working-tree files. Does not use sudo.
 set -euo pipefail
 
@@ -9,6 +10,8 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 source "$root/scripts/paths.sh"
 # shellcheck source=hypr-session.sh
 source "$root/scripts/hypr-session.sh"
+# shellcheck source=shell-look.sh
+source "$root/scripts/shell-look.sh"
 # omarchy plugin add/remove always use this directory, not OMARCHY_PLUGIN_DIR.
 plugins_home="$HOME/.config/omarchy/plugins"
 dest="$plugins_home/$PLUGIN_ID"
@@ -24,6 +27,7 @@ need() {
 
 need omarchy
 need git
+need jq
 
 if [[ ! -f "$root/shaders/shiny.frag.qsb" ]]; then
   echo "missing shaders/shiny.frag.qsb — run: mise run bake" >&2
@@ -48,7 +52,14 @@ omarchy plugin validate "$root"
 
 snapshot=""
 add_url=""
+saved_look=""
+reinstall_finished=0
 cleanup() {
+  # disable/remove drop the plugins[] look. Put it back if we abort before
+  # add --enable, or if add failed after the entry was replaced with {id}.
+  if (( reinstall_finished == 0 )) && [[ -n ${saved_look:-} ]]; then
+    shell_look_restore "$saved_look" || true
+  fi
   if [[ -n ${snapshot:-} && -d "$snapshot" ]]; then
     rm -rf "$snapshot"
   fi
@@ -108,6 +119,13 @@ prepare_add_url
   exit 1
 }
 
+# omarchy plugin disable/remove splice the whole plugins[] object. Snapshot
+# the look before that so add --enable does not start from { "id": ... }.
+saved_look=$(shell_look_snapshot)
+if [[ -n $saved_look ]]; then
+  echo "reinstall: keeping existing look from shell.json"
+fi
+
 # Disable first so Service.onDestruction can still exec the installed
 # hypr-teardown.sh. Then purge the login-session copy from this tree.
 if [[ -e "$dest" || -L "$dest" ]]; then
@@ -145,12 +163,28 @@ fi
 echo "reinstall: omarchy restart shell"
 omarchy restart shell
 
+# Put the look back before enable so setEnabled sees an existing plugins[]
+# entry (and does not replace it with {id}) and Service starts with it.
+if [[ -n $saved_look ]]; then
+  echo "reinstall: restoring look into shell.json"
+  shell_look_restore "$saved_look"
+  shell_look_reload_shell
+fi
+
 echo "reinstall: omarchy plugin add $root --enable --yes"
 omarchy plugin add "$add_url" --enable --yes
+
+# enable clones in-memory shellConfig. If reloadConfig had not landed, it
+# still writes {id}; write the look again and reload.
+if [[ -n $saved_look ]]; then
+  shell_look_restore "$saved_look"
+  shell_look_reload_shell
+fi
 
 installed="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
 if [[ -d "$installed/.git" ]]; then
   git -C "$installed" remote set-url origin "$root" 2>/dev/null || true
 fi
 
+reinstall_finished=1
 echo "reinstalled $PLUGIN_ID from $root"

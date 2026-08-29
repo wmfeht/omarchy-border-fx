@@ -54,7 +54,7 @@ description = "Disable wmfeht.border-fx, purge the login-session .so, remove the
 run = "bash scripts/uninstall.sh"
 
 [tasks.reinstall]
-description = "Remove wmfeht.border-fx from this system, then omarchy plugin add this folder"
+description = "Remove wmfeht.border-fx, then omarchy plugin add this folder, keeping the shell.json look"
 depends = ["bake"]
 run = "bash scripts/reinstall.sh"
 

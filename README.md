@@ -56,7 +56,7 @@ Dev copy (not git-managed, not `omarchy plugin update`):
 ```sh
 mise run install     # copies into ~/.config/omarchy/plugins/wmfeht.border-fx
 mise run uninstall
-mise run reinstall   # purge the live .so, restart shell, then add this folder
+mise run reinstall   # purge the live .so, restart shell, add this folder; keeps shell.json look
 ```
 
 ### Already using hyprpm?
@@ -375,7 +375,7 @@ scripts/
   hypr-teardown.sh            # unload session copy; --purge deletes it
   look-apply.sh               # JSON look → border-fx.lua + hyprctl eval
   install.sh / uninstall.sh   # dev copy helpers
-  reinstall.sh                # purge, restart shell, then omarchy plugin add --enable
+  reinstall.sh                # purge, restart shell, add --enable; keeps shell.json look
 ```
 
 No symlinks inside the plugin folder (`omarchy plugin validate` refuses them).
@@ -394,7 +394,7 @@ mise run hypr-build  # hypr-shiny-border.so
 mise run hypr-test   # C++ logic tests
 mise run nest        # nested Hyprland crash sandbox
 mise run reload      # rebuild + load into the nest
-mise run reinstall   # purge live .so, restart shell, add this folder
+mise run reinstall   # purge live .so, restart shell, add this folder; keeps shell.json look
 ```
 
 Hyprland C++ iteration: [hypr/DEVELOPMENT.md](hypr/DEVELOPMENT.md). Chrome

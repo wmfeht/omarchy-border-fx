@@ -106,6 +106,7 @@ function checkScriptShape() {
   check(ensure.indexOf("look_effect_is_shiny") !== -1, "hypr-ensure reads look JSON effect")
 
   check(reinstall.indexOf("hypr-session.sh") !== -1, "reinstall sources hypr-session.sh")
+  check(reinstall.indexOf("shell-look.sh") !== -1, "reinstall sources shell-look.sh")
   check(reinstall.indexOf("wait_plugin_gone") !== -1, "reinstall waits until the plugin is gone")
   const restartAt = reinstall.indexOf("\nomarchy restart shell")
   const addAt = reinstall.indexOf("\nomarchy plugin add \"$add_url\"")
@@ -118,6 +119,21 @@ function checkScriptShape() {
   check(
     reinstall.indexOf("\nomarchy restart shell", addAt) === -1,
     "reinstall does not restart the shell after add --enable"
+  )
+  const snapshotAt = reinstall.indexOf("saved_look=$(shell_look_snapshot)")
+  const disableAt = reinstall.indexOf('omarchy plugin disable "$PLUGIN_ID"')
+  const restoreBeforeAdd = reinstall.indexOf("shell_look_restore \"$saved_look\"", restartAt)
+  const restoreAfterAdd = reinstall.indexOf("shell_look_restore \"$saved_look\"", addAt)
+  check(snapshotAt !== -1 && disableAt !== -1 && snapshotAt < disableAt, "reinstall snapshots look before disable")
+  check(
+    restoreBeforeAdd !== -1 && restoreBeforeAdd < addAt,
+    "reinstall restores look before add --enable"
+  )
+  check(restoreAfterAdd !== -1, "reinstall restores look after add --enable")
+  check(reinstall.indexOf("shell_look_reload_shell") !== -1, "reinstall reloads shell.json after restoring look")
+  check(
+    reinstall.indexOf("reinstall_finished") !== -1,
+    "reinstall restores look from cleanup if add --enable does not finish"
   )
 
   check(install.indexOf("hypr-session.sh") !== -1, "mise install copies hypr-session.sh")
@@ -1658,6 +1674,140 @@ function checkPluginctlRuntime() {
   }
 }
 
+function shellLookEnv(dir) {
+  return {
+    HOME: dir,
+    OMARCHY_SHELL_JSON: path.join(dir, ".config", "omarchy", "shell.json"),
+    PLUGIN_ID: "wmfeht.border-fx",
+    LEGACY_PLUGIN_ID: "qs.border-fx",
+    OLDER_LEGACY_PLUGIN_ID: "qs.shiny-border",
+  }
+}
+
+function writeShellJson(dir, obj) {
+  const f = path.join(dir, ".config", "omarchy", "shell.json")
+  fs.mkdirSync(path.dirname(f), { recursive: true })
+  fs.writeFileSync(f, JSON.stringify(obj, null, 2) + "\n")
+  return f
+}
+
+function readShellJson(dir) {
+  return JSON.parse(fs.readFileSync(path.join(dir, ".config", "omarchy", "shell.json"), "utf8"))
+}
+
+function runShellLook(body, dir, extraEnv) {
+  const script = [
+    "set -euo pipefail",
+    'source "' + path.join(root, "scripts/paths.sh") + '"',
+    'source "' + path.join(root, "scripts/shell-look.sh") + '"',
+    body,
+  ].join("\n")
+  return bash(script, Object.assign(shellLookEnv(dir), extraEnv || {}))
+}
+
+function pluginEntry(cfg, id) {
+  const plugins = (cfg && cfg.plugins) || []
+  return plugins.find(function (e) { return e && e.id === id }) || null
+}
+
+function checkReinstallPreservesLook() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "border-fx-shell-look-"))
+  try {
+    writeShellJson(dir, {
+      version: 1,
+      bar: { layout: { left: [{ id: "omarchy.menu" }] } },
+      plugins: [
+        { id: "other.plugin", keep: true },
+        {
+          id: "wmfeht.border-fx",
+          pinDeg: 105,
+          lobe: 0.1,
+          mirror: true,
+          gradient: ["rgba(ffffffff)", "rgba(ff0000ff)"],
+          gradientPositions: "0 10 99",
+        },
+      ],
+    })
+
+    const snap = runShellLook("shell_look_snapshot", dir)
+    check(snap.status === 0, "snapshot exits 0: " + (snap.stderr || snap.stdout || ""))
+    const saved = String(snap.stdout || "").trim()
+    check(saved.indexOf('"pinDeg":105') !== -1, "snapshot captures pinDeg")
+    check(saved.indexOf('"mirror":true') !== -1, "snapshot captures mirror")
+
+    // Omarchy disable/remove splices the whole entry; enable writes {id}.
+    writeShellJson(dir, {
+      version: 1,
+      bar: { layout: { left: [{ id: "omarchy.menu" }] } },
+      plugins: [
+        { id: "other.plugin", keep: true },
+        { id: "wmfeht.border-fx" },
+      ],
+    })
+    const restore = runShellLook('shell_look_restore "$LOOK_SAVED"', dir, { LOOK_SAVED: saved })
+    check(restore.status === 0, "restore exits 0: " + (restore.stderr || restore.stdout || ""))
+    let cfg = readShellJson(dir)
+    const entry = pluginEntry(cfg, "wmfeht.border-fx")
+    check(!!entry, "restore keeps wmfeht.border-fx in plugins[]")
+    check(entry && entry.pinDeg === 105, "restore puts pinDeg back")
+    check(entry && entry.mirror === true, "restore puts mirror back")
+    check(entry && entry.lobe === 0.1, "restore puts lobe back")
+    check(entry && Array.isArray(entry.gradient) && entry.gradient[0] === "rgba(ffffffff)", "restore puts gradient back")
+    check(pluginEntry(cfg, "other.plugin") && pluginEntry(cfg, "other.plugin").keep === true, "restore leaves other plugins alone")
+    check(cfg.bar.layout.left[0].id === "omarchy.menu", "restore leaves bar layout alone")
+
+    writeShellJson(dir, {
+      version: 1,
+      plugins: [
+        { id: "qs.shiny-border", pinDeg: 1 },
+        { id: "qs.border-fx", pinDeg: 30 },
+        { id: "wmfeht.border-fx", pinDeg: 105 },
+      ],
+    })
+    const prefer = runShellLook("shell_look_snapshot", dir)
+    check(String(prefer.stdout || "").indexOf('"pinDeg":105') !== -1, "snapshot prefers wmfeht.border-fx over legacy ids")
+
+    writeShellJson(dir, {
+      version: 1,
+      plugins: [{ id: "qs.border-fx", pinDeg: 30, shimmer: false }],
+    })
+    const legacySnap = runShellLook("shell_look_snapshot", dir)
+    const legacySaved = String(legacySnap.stdout || "").trim()
+    check(legacySaved.indexOf('"pinDeg":30') !== -1, "snapshot falls back to qs.border-fx")
+    writeShellJson(dir, { version: 1, plugins: [] })
+    const legacyRestore = runShellLook('shell_look_restore "$LOOK_SAVED"', dir, { LOOK_SAVED: legacySaved })
+    check(legacyRestore.status === 0, "legacy restore exits 0: " + (legacyRestore.stderr || ""))
+    cfg = readShellJson(dir)
+    check(!pluginEntry(cfg, "qs.border-fx"), "restore remaps off the legacy id")
+    const remapped = pluginEntry(cfg, "wmfeht.border-fx")
+    check(remapped && remapped.pinDeg === 30 && remapped.shimmer === false, "restore remaps legacy look onto wmfeht.border-fx")
+
+    const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), "border-fx-shell-look-empty-"))
+    try {
+      const emptySnap = runShellLook("shell_look_snapshot", emptyDir)
+      check(emptySnap.status === 0, "snapshot with missing shell.json exits 0")
+      check(String(emptySnap.stdout || "").trim() === "", "snapshot with missing shell.json is empty")
+      const emptyRestore = runShellLook('shell_look_restore "$LOOK_SAVED"', emptyDir, {
+        LOOK_SAVED: JSON.stringify({ id: "wmfeht.border-fx", pinDeg: 1 }),
+      })
+      check(emptyRestore.status === 0, "restore with missing shell.json exits 0")
+      check(!fs.existsSync(path.join(emptyDir, ".config", "omarchy", "shell.json")), "restore does not invent shell.json")
+    } finally {
+      fs.rmSync(emptyDir, { recursive: true, force: true })
+    }
+
+    writeShellJson(dir, { version: 1, plugins: [{ id: "wmfeht.border-fx" }] })
+    const noop = runShellLook("shell_look_restore ''", dir)
+    check(noop.status === 0, "restore empty snapshot exits 0")
+    cfg = readShellJson(dir)
+    check(Object.keys(pluginEntry(cfg, "wmfeht.border-fx")).length === 1, "empty restore does not invent look keys")
+
+    note("ensure", "reinstall preserves look pinDeg=" + (entry ? entry.pinDeg : "missing"))
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+}
+
 function writeEvidence() {
   const dir = process.env.HYPR_SESSION_EVIDENCE_DIR
   if (!dir)
@@ -1687,6 +1837,7 @@ checkAbiHelperPredicate()
 checkAbiEnsureMismatch()
 checkAbiLoadHashMismatch()
 checkMakefileCompilerRebuild()
+checkReinstallPreservesLook()
 writeEvidence()
 
 if (fails) {
