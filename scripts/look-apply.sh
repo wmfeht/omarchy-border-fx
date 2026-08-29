@@ -66,7 +66,7 @@ enabled=1
 (( disabled )) && enabled=0
 
 lua=$(LOOK_JSON="$look_json" SESSION_SO="$SESSION_SO" SHINY_LOAD="$load" SHINY_ENABLED="$enabled" PLUGIN_ID="$PLUGIN_ID" python3 - <<'PY'
-import json, os, re, sys
+import json, math, os, re, sys
 
 DEFAULTS = {
     "effect": "shiny",
@@ -126,12 +126,83 @@ if isinstance(nested, dict):
         if v is not None:
             merged_src[k] = v
 
+BOOL_KEYS = ("shimmer", "mirror", "activeOnly", "pulse")
+INT_RANGE = {
+    "borderSize": (0, 20),
+    "pinDeg": (-360, 360),
+    "angleOffset": (-180, 180),
+    "shimmerDeg": (0, 180),
+}
+FLOAT_RANGE = {
+    "shimmerHz": (0.0, 4.0),
+    "pulseHz": (0.0, 4.0),
+    "shimmerScaleMin": (0.2, 3.0),
+    "shimmerScaleMax": (0.2, 3.0),
+    "lobe": (0.04, 0.5),
+}
+
+def warn_look(key, why):
+    print(f"look: {key}: {why}, keeping default", file=sys.stderr)
+
+def coerce_bool(v):
+    if v is True or v is False:
+        return v
+    if type(v) is int and v in (0, 1):
+        return bool(v)
+    if type(v) is float and v in (0.0, 1.0):
+        return bool(int(v))
+    return None
+
+def coerce_num(v):
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)) and math.isfinite(v):
+        return float(v)
+    return None
+
+def js_round(n):
+    return int(math.floor(n + 0.5))
+
+def clamp_num(n, lo, hi):
+    if n < lo:
+        return lo
+    if n > hi:
+        return hi
+    return n
+
+def coerce_key(key, value, default):
+    if key in BOOL_KEYS:
+        b = coerce_bool(value)
+        if b is None:
+            warn_look(key, "invalid bool")
+            return default
+        return b
+    if key in INT_RANGE:
+        n = coerce_num(value)
+        if n is None:
+            warn_look(key, "invalid number")
+            return default
+        i = js_round(n)
+        if key == "borderSize" and i < 0:
+            warn_look(key, "illegal negative")
+            return default
+        lo, hi = INT_RANGE[key]
+        return clamp_num(i, lo, hi)
+    if key in FLOAT_RANGE:
+        n = coerce_num(value)
+        if n is None:
+            warn_look(key, "invalid number")
+            return default
+        lo, hi = FLOAT_RANGE[key]
+        return clamp_num(n, lo, hi)
+    return value
+
 look = {"effect": effect}
 for key, default in DEFAULTS.items():
     if key == "effect":
         continue
     if key in merged_src and merged_src[key] is not None:
-        look[key] = merged_src[key]
+        look[key] = coerce_key(key, merged_src[key], default)
     else:
         look[key] = default
 look["gradient"] = as_color_list(look.get("gradient"))
@@ -150,7 +221,7 @@ def parse_color(s):
             "a": 1.0 if s.get("a") is None else float(s.get("a") or 0),
         }
     text = str(s).strip()
-    m = re.match(r"^rgba?\(\s*([0-9a-fA-F]{6,8})\s*\)$", text)
+    m = re.match(r"^rgba?\(\s*([0-9a-fA-F]{6}|[0-9a-fA-F]{8})\s*\)$", text)
     if m:
         hexv = m.group(1)
         if len(hexv) == 6:
@@ -196,12 +267,17 @@ def lua_str(s):
     return '"' + str(s).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 def lua_bool(v):
-    return "true" if v else "false"
+    return "true" if v is True else "false"
 
 def lua_num(v):
     if isinstance(v, bool):
         return lua_bool(v)
-    n = float(v)
+    try:
+        n = float(v)
+    except (TypeError, ValueError):
+        return "0"
+    if not math.isfinite(n):
+        return "0"
     if n.is_integer():
         return str(int(n))
     return repr(n)

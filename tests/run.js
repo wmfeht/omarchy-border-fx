@@ -90,6 +90,14 @@ function checkTickMs() {
   check(Shimmer.tickMs(0) === 16, "hz 0 → min")
 }
 
+function checkClampDt() {
+  check(typeof Shimmer.clampDt === "function", "Shimmer.clampDt is shipped")
+  check(Shimmer.clampDt(1) === 0.25, "stall dt > 0.25 caps at 0.25")
+  check(Shimmer.clampDt(0.016) === 0.016, "normal dt is unchanged")
+  check(Shimmer.clampDt(0.25) === 0.25, "dt of 0.25 stays 0.25")
+  check(Shimmer.clampDt(0.249) === 0.249, "dt just under the cap is unchanged")
+}
+
 function checkShimmer() {
   const p = { hz: 0.6, angleRangeRad: 0.4363, scaleMin: 0.75, scaleMax: 1.35 }
 
@@ -466,6 +474,11 @@ function checkWrapSource() {
         "ShaderEffect time is driven when pulse is the active effect")
   check(qml.indexOf("root._shimmerOn || root._pulseOn") !== -1,
         "chrome timer runs for pulse, not only shimmer")
+  const stepAt = qml.indexOf("function stepShimmer()")
+  check(stepAt !== -1, "chrome has stepShimmer")
+  const stepBody = qml.slice(stepAt, qml.indexOf("function stepPulse()"))
+  check(stepBody.indexOf("Math.min(dt, 0.25)") !== -1,
+        "stepShimmer caps live dt with Math.min(dt, 0.25)")
 
   const service = fs.readFileSync(path.join(root, "Service.qml"), "utf8")
   check(service.indexOf("mirror: root.look.mirror") !== -1,
@@ -519,6 +532,7 @@ checkPulseAlphaMul()
 checkPulseUniforms()
 checkEffectMode()
 checkTickMs()
+checkClampDt()
 checkShimmer()
 checkGradient()
 checkGradientPositions()

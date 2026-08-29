@@ -157,6 +157,7 @@ Item {
       _shimmerState = Shimmer.makeState(Math.floor(Math.random() * 0xffffffff) || 1)
     var now = Date.now()
     var dt = _lastTickMs === 0 ? Shimmer.tickMs(shimmerHz) / 1000 : (now - _lastTickMs) / 1000
+    dt = Math.min(dt, 0.25)
     _lastTickMs = now
     Shimmer.step(_shimmerState, dt, {
       hz: shimmerHz,

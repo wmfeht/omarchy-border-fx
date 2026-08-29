@@ -85,6 +85,90 @@ function pickLookFields(src) {
   return out
 }
 
+// Hyprland CIntValue / CFloatValue ranges. Applied in merge so chrome and
+// look-apply emit the same numbers. borderSize < 0 is illegal in the look
+// document (keep default) — not a chrome-hide / follow-stock sentinel.
+var BOOL_KEYS = {
+  shimmer: true,
+  mirror: true,
+  activeOnly: true,
+  pulse: true
+}
+var INT_RANGE = {
+  borderSize: { min: 0, max: 20 },
+  pinDeg: { min: -360, max: 360 },
+  angleOffset: { min: -180, max: 180 },
+  shimmerDeg: { min: 0, max: 180 }
+}
+var FLOAT_RANGE = {
+  shimmerHz: { min: 0, max: 4 },
+  pulseHz: { min: 0, max: 4 },
+  shimmerScaleMin: { min: 0.2, max: 3 },
+  shimmerScaleMax: { min: 0.2, max: 3 },
+  lobe: { min: 0.04, max: 0.5 }
+}
+
+function warnLook(key, why) {
+  console.warn("look: " + key + ": " + why + ", keeping default")
+}
+
+function coerceBool(v) {
+  if (v === true || v === false)
+    return v
+  if (v === 1 || v === 0)
+    return v === 1
+  return null
+}
+
+function coerceFiniteNumber(v) {
+  if (typeof v === "boolean")
+    return null
+  if (typeof v !== "number" || !isFinite(v))
+    return null
+  return v
+}
+
+function clampNum(n, lo, hi) {
+  if (n < lo)
+    return lo
+  if (n > hi)
+    return hi
+  return n
+}
+
+function coerceKey(key, value, fallback) {
+  if (BOOL_KEYS[key]) {
+    var b = coerceBool(value)
+    if (b === null) {
+      warnLook(key, "invalid bool")
+      return fallback
+    }
+    return b
+  }
+  if (INT_RANGE[key]) {
+    var ni = coerceFiniteNumber(value)
+    if (ni === null) {
+      warnLook(key, "invalid number")
+      return fallback
+    }
+    var i = Math.round(ni)
+    if (key === "borderSize" && i < 0) {
+      warnLook(key, "illegal negative")
+      return fallback
+    }
+    return clampNum(i, INT_RANGE[key].min, INT_RANGE[key].max)
+  }
+  if (FLOAT_RANGE[key]) {
+    var nf = coerceFiniteNumber(value)
+    if (nf === null) {
+      warnLook(key, "invalid number")
+      return fallback
+    }
+    return clampNum(nf, FLOAT_RANGE[key].min, FLOAT_RANGE[key].max)
+  }
+  return value
+}
+
 function entryFromConfig(config, id) {
   var want = id || PLUGIN_ID
   if (!config || !config.plugins || !config.plugins.length)
@@ -130,7 +214,7 @@ function merge(entry) {
     if (k === "effect")
       continue
     if (Object.prototype.hasOwnProperty.call(picked, k))
-      out[k] = picked[k]
+      out[k] = coerceKey(k, picked[k], cloneValue(DEFAULTS[k]))
     else
       out[k] = cloneValue(DEFAULTS[k])
   }
@@ -165,7 +249,7 @@ function parseHyprColor(s) {
     }
   }
   var str = String(s).trim()
-  var m = /^rgba?\(\s*([0-9a-fA-F]{6,8})\s*\)$/.exec(str)
+  var m = /^rgba?\(\s*([0-9a-fA-F]{6}|[0-9a-fA-F]{8})\s*\)$/.exec(str)
   if (m) {
     var hex = m[1]
     if (hex.length === 6)

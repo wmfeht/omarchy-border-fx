@@ -54,6 +54,12 @@ function effectMode(pulse, pulseHz, shimmer, shimmerHz) {
   return "none"
 }
 
+// Twin of C++ std::clamp(dt, 0.f, 0.25f) on the live shimmer tick.
+// Chrome applies this in ShinyBorder.stepShimmer before Shimmer.step.
+function clampDt(dt) {
+  return Math.min(dt, 0.25)
+}
+
 function tickMs(hz) {
   var kMin = 16
   var kMax = 50
