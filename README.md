@@ -1,22 +1,15 @@
 # omarchy-border-fx
 
-One git tree, two renderers, one Omarchy plugin as the control plane.
+Animated border effects for [Omarchy](https://omarchy.org): a directional
+comet highlight (`shiny`) or a traveling ripple of light (`ripple`) drawn on
+a rounded-rect ring around **Hyprland windows** and **Omarchy shell chrome**
+(panels, notification toasts). One configuration drives both surfaces —
+change the look once in `shell.json` and windows and chrome update together.
 
-The same conic comet on a rounded-rect ring: **Hyprland window decorations**
-(`hypr-shiny-border.so`) and **Omarchy / Quickshell chrome** (panels,
-notification toasts). Changing the look in `shell.json` updates both.
-
-This is what `omarchy plugin add <url>` clones. The Hyprland `.so` is a
-compositor plugin, not a Quickshell plugin — Omarchy never compiles it. After
-enable, `Service.qml` runs `scripts/hypr-ensure.sh` (user-level, no sudo) to
-build/load `~/.local/lib/hypr/hypr-shiny-border.so`.
-
-| Name | Role |
-|---|---|
-| Omarchy id `wmfeht.border-fx` | Source of truth in `shell.json`; `omarchy plugin enable` |
-| `effect` (`shiny` / `ripple`) | Which renderer to drive |
-| Hyprland plugin `hypr-shiny-border` | Shiny window adapter (`hyprctl plugin list`, hyprpm, `PLUGIN_INIT`) |
-| Config keys `plugin:shiny-border:*` / Lua `shiny_border` | Shiny Hyprland adapter (hyphen → underscore) |
+> **Status: unfinished.** This project works but is still under active
+> development. Configuration keys and defaults may change between updates,
+> some cleanup steps are manual (see [Remove](#remove)), and rough edges
+> remain. Treat every option below as provisional.
 
 ## Install
 
@@ -24,45 +17,43 @@ build/load `~/.local/lib/hypr/hypr-shiny-border.so`.
 omarchy plugin add <git-url-of-this-repo> --enable --yes
 ```
 
-`omarchy plugin add` alone clones files; nothing is loaded until enable.
-`--enable` starts the service, which overlays chrome **and** ensures the
-window ring.
-
-The previous Omarchy id was `qs.border-fx` (and before that `qs.shiny-border`).
-Look reading still falls back to those entries if `wmfeht.border-fx` is missing.
-Enable the new id (and disable the old one) so `omarchy plugin` commands match
-the clone directory.
+`omarchy plugin add` alone only clones files; nothing draws until enable.
+`--enable` starts the service, which overlays the shell chrome **and**
+builds/loads the Hyprland window ring (user-level, no sudo).
 
 ```sh
 omarchy plugin enable wmfeht.border-fx    # chrome + window ring on
 omarchy plugin disable wmfeht.border-fx   # both off; clone kept
-omarchy plugin remove wmfeht.border-fx --yes
 omarchy plugin update wmfeht.border-fx --yes
 ```
 
-If the shell was not running during remove, also:
+Earlier versions used the Omarchy id `qs.border-fx` (and before that
+`qs.shiny-border`). Look reading still falls back to those entries, but you
+should enable the new id and disable the old one so `omarchy plugin`
+commands match the clone directory.
+
+### Remove
+
+```sh
+omarchy plugin remove wmfeht.border-fx --yes
+```
+
+If the shell was not running during remove, one manual step is left:
 
 ```sh
 ~/.config/omarchy/plugins/wmfeht.border-fx/scripts/hypr-teardown.sh --purge
-# or, from this tree:
+# or, from a checkout of this repo:
 bash scripts/hypr-teardown.sh --purge
 ```
 
 That deletes `~/.local/lib/hypr/hypr-shiny-border.so` and
 `~/.config/hypr/border-fx.lua`. It does **not** rewrite `looknfeel.lua`.
 
-Dev copy (not git-managed, not `omarchy plugin update`):
-
-```sh
-mise run install     # copies into ~/.config/omarchy/plugins/wmfeht.border-fx
-mise run uninstall
-mise run reinstall   # purge the live .so, restart shell, add this folder; keeps shell.json look
-```
-
 ### Already using hyprpm?
 
-Loading the plugin twice is a hard error. `hypr-ensure.sh` will reuse the
-hyprpm copy and notify you instead of stacking a second `.so`.
+Loading the Hyprland plugin twice is a hard error. The plugin detects an
+existing hyprpm copy, reuses it, and notifies you instead of stacking a
+second `.so` — but you should let the Omarchy plugin own the load:
 
 ```sh
 hyprpm disable hypr-shiny-border
@@ -71,15 +62,11 @@ hyprpm disable hypr-shiny-border
 omarchy plugin enable wmfeht.border-fx
 ```
 
-hyprpm remains the Hyprland **development** workflow (`mise run nest`).
-`hyprpm.toml` is at this repo root so `hyprpm add <same-url>` still builds.
-
 ### Hyprland headers
 
-The window ring is compiled against the running compositor. If `make` fails,
-chrome still runs and you get a notification. Fix: matching Hyprland headers,
-then re-enable (or `omarchy restart shell`). `PLUGIN_INIT` still refuses a
-header-hash mismatch.
+The window ring is compiled against the running compositor. If the build
+fails, chrome still runs and you get a notification. Fix: install matching
+Hyprland headers, then re-enable (or `omarchy restart shell`).
 
 ## Configuration
 
@@ -87,40 +74,45 @@ Source of truth: the `wmfeht.border-fx` entry in
 `~/.config/omarchy/shell.json` `plugins[]`. Settings are **inline on that
 object** — no `config:` / `settings:` wrapper, no extra JSON file. The
 plugin is on if and only if that id is present (`omarchy plugin enable` /
-`disable`). Look reading still falls back to leftover `qs.border-fx` or
-`qs.shiny-border` entries if `wmfeht.border-fx` is missing.
+`disable`).
 
-`effect` selects the renderer (`shiny` or `ripple`). Chrome overlays
-attach while `effect` is `shiny` or `ripple`. Any other value detaches
-chrome and fans out `enabled = false` to the Hyprland adapter (look
-keys still merge). Ripple is a lighting-only crest on the same ring:
-empty/`omitted` `effect` stays `"shiny"`.
+There is no settings UI. Edit `shell.json` and save:
 
-Missing or `null` look keys mean the **shared look** (pinned 120°,
-shimmer, 4-stop ramp, wrap stroke). Hyprland `PLUGIN_INIT` registers the
-same numbers, so first paint matches chrome. An empty `gradient` array is
-a real override (two-stop `colA`/`colB`), not “use the default ramp.”
+- **Chrome** (panels, toasts) hot-reloads immediately.
+- **Windows** follow a moment later (changes are debounced ~150 ms, then
+  fanned out to Hyprland).
 
-There is no settings UI for this service. Edit `shell.json` and save:
+Two files to leave alone:
 
-- **Chrome** (panels, toasts) hot-reloads from the same process.
-- **Windows** debounce ~150 ms, then `look-apply.sh` writes
-  `~/.config/hypr/border-fx.lua` and `hyprctl eval`s it if
-  `hypr-shiny-border` is loaded. If the `.so` is not loaded, the lua is
-  still written and eval is skipped until the next ensure.
+- `~/.config/hypr/border-fx.lua` is a generated **output** of this plugin,
+  not an input. Do not edit it.
+- If you still have a `shiny_border` block in `looknfeel.lua` from an older
+  manual install, it can fight plugin settings on config reload. Once the
+  plugin-driven look works, delete that block.
 
-A generated `~/.config/hypr/border-fx.lua` is an **output**, not an
-input. Do not edit it. `omarchy refresh hyprland` can drop the one-line
-`pcall(require, "hypr.border-fx")` from `hyprland.lua`; the next service
-start still `hyprctl plugin load`s.
+### Choosing an effect
 
-Until you delete the gated `shiny_border` block from `looknfeel.lua`, that
-file can fight plugin settings on `reloadConfig()`. Leave it until fan-out
-looks right, then remove it.
+`effect` selects the renderer:
+
+- `"shiny"` (default) — a directional comet highlight on the ring.
+- `"ripple"` — the same ring with crests of light traveling along it.
+- Any other value turns both surfaces off (look keys are kept but nothing
+  draws).
+
+An empty or omitted `effect` means `"shiny"`.
+
+### Defaults
+
+Missing or `null` keys mean the **shared look**: light pinned at 120°,
+shimmer on, a 4-stop teal ramp, and a faint wrapping stroke. Windows and
+chrome share these defaults, so first paint matches on both. An empty
+`gradient` array is a real override (falls back to the two-stop
+`colA`/`colB`), not "use the default ramp."
 
 ### Example
 
-All keys at their shared defaults (equivalent to `{ "id": "wmfeht.border-fx" }`):
+All keys at their shared defaults (equivalent to
+`{ "id": "wmfeht.border-fx" }`):
 
 ```json
 {
@@ -177,7 +169,7 @@ That look is `pinDeg` 45, `borderSize` 3, everything else default.
 
 Ripple is the same swap: `"effect": "ripple"` plus an optional nested
 `"ripple"` object. Nested keys win; missing ripple keys use dedicated
-defaults (not the shiny C++ numbers).
+defaults (not the shiny defaults).
 
 ```json
 {
@@ -189,8 +181,8 @@ defaults (not the shiny C++ numbers).
 
 ### Colors
 
-Canonical strings are Hyprland `rgba(RRGGBBAA)` (hex, no commas). The
-chrome adapter converts to Qt `#AARRGGBB`. Accepted on the way in:
+Canonical strings are Hyprland `rgba(RRGGBBAA)` (hex, no commas). Accepted
+on the way in:
 
 | Form | Example | Notes |
 |---|---|---|
@@ -206,38 +198,36 @@ A color list (`gradient`, `gradientCw`) may be a JSON array of those
 strings, or a Hyprland-style object `{ "colors": [ … ] }`. At most **8**
 stops are used; extra colors are dropped.
 
-### Merge rules
+### How your settings resolve
 
-1. Read the `plugins[]` entry whose `id` is `wmfeht.border-fx` (else
-   `qs.border-fx`, else `qs.shiny-border`).
+1. The plugin reads the `plugins[]` entry whose `id` is `wmfeht.border-fx`
+   (else the legacy `qs.border-fx`, else `qs.shiny-border`).
 2. `effect` empty / omitted → `"shiny"`.
-3. Pick known look keys from the entry (not `id`, not unknown fields).
-4. If `entry[effect]` is an object, overlay its look keys (nested wins).
+3. Known look keys are picked from the entry (not `id`, not unknown fields).
+4. If the entry has a nested object named after the effect, its look keys
+   overlay the top level (nested wins).
 5. Any still-missing key gets the shared default above.
 6. `gradient` / `gradientCw` are normalized to arrays.
 
-`id` is not a look key. Leftover `pin` and `quantizeDeg` are ignored —
-heading is always `pinDeg` + `angleOffset`. `pin: false` does **not**
-restore cursor tracking.
+`id` and `enabled` are not look keys. Leftover `pin` and `quantizeDeg` keys
+from old versions are ignored — heading is always `pinDeg` + `angleOffset`,
+and there is no cursor-tracking mode. `omarchy plugin disable` is the only
+off switch; it turns both surfaces off, and re-enable brings them back.
 
-`enabled` is not a look key either. `omarchy plugin disable wmfeht.border-fx`
-turns both rings off (`enabled = false` in the generated lua, chrome
-overlays destroyed). Re-enable to bring them back.
-
-### Look keys
+### Option reference
 
 **Hosts:** *both* = windows and chrome. *windows* = Hyprland decoration
 only (chrome ignores the key).
 
 | JSON key | Type | Default | Hosts | What it does |
 |---|---|---|---|---|
-| `effect` | string | `"shiny"` | both | Renderer. `"shiny"` or `"ripple"` draws on chrome and windows. Anything else: chrome off, `.so` not loaded / `enabled = false`. |
+| `effect` | string | `"shiny"` | both | Renderer. `"shiny"` or `"ripple"` draws on chrome and windows. Anything else: everything off. |
 | `borderSize` | number (px) | `2` | both | Ring thickness. Chrome: overlay hidden when `≤ 0`. Hyprland clamps to `-1…20`; `-1` follows `general:border_size` on windows only. |
-| `baseColor` | color | `"rgba(00687855)"` | both | Wrapping stroke **under** the directional highlight, same thickness as the ring. Transparent (`a = 0`) = off. Not Hyprland `decoration:shadow`, not a gradient stop. Far-side highlight uses the last stop’s alpha; the wrap is what still paints when that alpha is low. |
+| `baseColor` | color | `"rgba(00687855)"` | both | Wrapping stroke **under** the directional highlight, same thickness as the ring. Transparent (`a = 0`) = off. Not a shadow, not a gradient stop. The wrap is what still paints on the far side when the highlight fades out. |
 | `pinDeg` | number (°) | `120` | both | Light heading, degrees CCW. `0` = from the right, `90` = from above. Hyprland clamps `-360…360`. |
 | `angleOffset` | number (°) | `0` | both | Added to `pinDeg` before drawing. Hyprland clamps `-180…180`. |
 | `lobe` | number | `0.18` | both | Lit-band **half-width** along the light axis. `0.5` = the whole window. Hyprland clamps config to `0.04…0.5`. Chrome clamps a walking lobe to that range, and a static lobe to at least `0.04`. |
-| `mirror` | bool | `false` | both | Mirror the same lobe onto the **far side** of the light axis (two comet heads). Off keeps today’s facing-only comet. Cone, ramp, glow, and local thickness all follow the nearer-end distance. The clockwise vs primary half split is unchanged. |
+| `mirror` | bool | `false` | both | Mirror the same lobe onto the **far side** of the light axis (two comet heads). Off keeps the facing-only comet. |
 | `gradient` | color list | 4-stop teal ramp | both | Comet ramp, **facing support first**, last stop = edge of the lit band (`lobe`). Fewer than two colors turns the ramp off and uses `colA` / `colB`. |
 | `gradientPositions` | string | `"0 1 3 100"` | both | Stop positions for `gradient`. See [Gradient](#gradient). |
 | `gradientCw` | color list | `[]` | both | Optional colors for the **clockwise** half of the light axis. See [Clockwise half](#clockwise-half). |
@@ -250,31 +240,22 @@ only (chrome ignores the key).
 | `shimmerScaleMin` | number | `0.75` | both | Lower bound of the size walk. Swapped with max if inverted. Hyprland clamps `0.2…3`. |
 | `shimmerScaleMax` | number | `1.35` | both | Upper bound of the size walk. Scale also fattens/thins the stroke (~35% of the deviation from 1). Hyprland clamps `0.2…3`. |
 | `activeOnly` | bool | `true` | windows | Only the focused window draws / shimmers / pulses / ripples. Unfocused windows keep the reserved padding so layout does not jump. Chrome has no unfocused state, so it ignores this key. |
-| `pulse` | bool | `false` | both | Oscillate highlight **transparency** in the shader (`0.5+0.5*sin`). Does not change lobe width or thickness. Ignored while shimmer is running. |
+| `pulse` | bool | `false` | both | Oscillate highlight **transparency**. Does not change lobe width or thickness. Ignored while shimmer is running. |
 | `pulseHz` | number | `0.4` | both | Pulse rate. `0` disables. Hyprland clamps `0…4`. |
-| `rippleFreq` | number | `0.025` | both | Ripple spatial `k` (1/px). Dedicated default (modest). Hyprland clamps `0.001…0.2`. |
-| `rippleSpeed` | number | `2` | both | Ripple temporal speed. Dedicated default (slow). Hyprland clamps `0…40`. |
+| `rippleFreq` | number | `0.025` | both | Ripple spatial frequency (1/px). Hyprland clamps `0.001…0.2`. |
+| `rippleSpeed` | number | `2` | both | Ripple temporal speed. Hyprland clamps `0…40`. |
 | `rippleGain` | number | `0.85` | both | Blend from the shiny comet (`0`) to crest-only lighting (`1`). `0` matches shiny. Hyprland clamps `0…2`. |
-| `ripplePower` | number | `8` | both | `pow` on the sine lobe; higher = thinner bands. Hyprland clamps `1…16`. |
-| `rippleOriginX` | number | `0.5` | both | Ripple origin X in decoration-box UV (`0` = left, `1` = right). Default is the box center (today’s `length(pUp)` origin). Hyprland clamps `0…1`. |
-| `rippleOriginY` | number | `0.5` | both | Ripple origin Y in decoration-box UV (`0` = top, `1` = bottom). Hyprland clamps `0…1`. |
-| `rippleFade` | number | `0` | both | Spatial fade as a **proportion of the decoration-box perimeter** (`2 × (width + height)`). Envelope is 1 at the origin and 0 at/beyond `rippleFade × perimeter` pixels. `0` (or any non-positive value) is off. Hyprland clamps `0…1`. |
-
-Hyprland adapter keys (what you see in generated lua / `plugin:shiny-border:*`)
-use snake_case: `border_size`, `pin_deg`, `angle_offset`, `base_color`,
-`gradient_positions`, `gradient_cw`, `gradient_positions_cw`, `col.a`,
-`col.b`, `active_only`, `pulse_hz`, `shimmer_hz`, `shimmer_deg`,
-`shimmer_scale_min`, `shimmer_scale_max`, `mirror`, `effect`, `ripple_freq`,
-`ripple_speed`, `ripple_gain`, `ripple_power`, `ripple_origin_x`,
-`ripple_origin_y`, `ripple_fade`. Hyphens in the Hyprland plugin
-prefix become underscores in Lua (`shiny_border`).
+| `ripplePower` | number | `8` | both | Sharpens the crests; higher = thinner bands. Hyprland clamps `1…16`. |
+| `rippleOriginX` | number | `0.5` | both | Ripple origin X (`0` = left, `1` = right of the decoration box). Default is the center. Hyprland clamps `0…1`. |
+| `rippleOriginY` | number | `0.5` | both | Ripple origin Y (`0` = top, `1` = bottom). Hyprland clamps `0…1`. |
+| `rippleFade` | number | `0` | both | Spatial fade as a **proportion of the decoration-box perimeter**. Full brightness at the origin, zero at/beyond `rippleFade × perimeter` pixels. `0` (or any non-positive value) is off. Hyprland clamps `0…1`. |
 
 Not a look key (hardcoded or host-owned):
 
 | Thing | Where it lives |
 |---|---|
 | `roundingPower` | Chrome shader default `2`. Windows use each window’s Hyprland rounding. |
-| `enabled` | Omarchy plugin enable/disable, fanned out to `plugin:shiny-border:enabled`. |
+| `enabled` | Omarchy plugin enable/disable. |
 | Cursor / mouse follow | Removed. Heading is pin + offset (+ shimmer). |
 
 ### Gradient
@@ -284,28 +265,23 @@ sweep around the window center. A wide panel and a tall one with the same
 heading share a direction. Iso-lines are perpendicular to the light.
 
 Stops fill the **lit band** (`lobe`, including shimmer scale), not the
-full window. Highlight RGB and alpha come from the sampled stop; a
-specular/white core has to be a stop, not a shader mix toward white.
+full window:
 
 - **0** = facing support of this rounded rect (where the comet sits).
-- **100** = edge of the comet (`d0 = lobe`). Past that the last stop is
-  held (RGB and alpha).
-- `lobe` 0.5 (the whole window) is the same mapping as stretching 0…100
-  across the axis. Smaller lobes compress the same stop list into the
-  comet so every stop stays visible in the highlight.
+- **100** = edge of the comet. Past that the last stop is held (RGB and
+  alpha).
+- Smaller lobes compress the same stop list into the comet so every stop
+  stays visible in the highlight.
 - With `mirror` on, the same 0…100 band is also measured from the far
-  support, so both ends of the axis are comet heads. Mid-axis past both
-  lobe edges still holds the last stop.
-- Each half of the axis (facing → far, then the other flank) runs that
-  0…100 independently. Primary colors/positions paint one half;
-  clockwise colors/positions paint the other. Match first and last
-  colors between the halves to avoid a seam.
+  support, so both ends of the axis are comet heads.
+- Each half of the light axis runs 0…100 independently. Primary
+  colors/positions paint one half; clockwise colors/positions paint the
+  other. Match first and last colors between the halves to avoid a seam.
 
 `gradientPositions` / `gradientPositionsCw` are strings of one percentage
 **per color**, separated by spaces, tabs, or commas. A trailing `%` is
 allowed (`"0 70 100"` and `"0%, 70%, 100%"` are the same). Values are
-clamped to 0…100 and forced non-decreasing (a stop cannot sit before its
-predecessor).
+clamped to 0…100 and forced non-decreasing.
 
 The spec is all-or-nothing: token count must equal the color count (2…8),
 and every token must parse. Empty, junk, or a count mismatch → **even
@@ -329,16 +305,12 @@ edge (a hard comet head) and lands the dark teal at the comet tail.
 
 ### Heading and motion
 
-Heading in radians is `wrap( (pinDeg + angleOffset) × π/180 )`, then
-shimmer adds a wander in `±shimmerDeg` when shimmer is on.
-
-Shimmer is two independent CPU walks (not GLSL): angle and size. Each
-channel eases toward a random target, then picks a new target and
-duration (0.6–1.4 of `1/shimmerHz`) so they drift out of lockstep.
-Windows seed per decoration so overlapping windows do not walk in unison.
-
-When both shimmer and pulse could run, **shimmer wins**. Pulse uniforms
-are zeroed (`brightness` stays 0) until shimmer is off or its Hz is `≤ 0`.
+The light heading is `pinDeg + angleOffset`. When shimmer is on, the
+heading and the highlight size each drift on their own random walk (within
+`±shimmerDeg` and `shimmerScaleMin…Max`), retargeting about `shimmerHz`
+times per second. Windows are seeded individually so overlapping windows
+do not walk in unison. When both shimmer and pulse could run, **shimmer
+wins**; pulse stays off until shimmer is disabled or its Hz is `≤ 0`.
 
 ### Recipes
 
@@ -389,45 +361,11 @@ Different clockwise-half colors (keep endpoints aligned to hide the seam):
 }
 ```
 
-## Tree
+## Development and contributing
 
-```
-manifest.json                 # Omarchy id wmfeht.border-fx (clone root)
-Service.qml                   # chrome overlay + hypr-ensure + look fan-out
-qml/                          # ShinyBorder, Shimmer, Gradient, Look
-shaders/                      # shiny.frag + committed .qsb
-hypr/                         # shiny compositor plugin (src, Makefile, nest, tests)
-hyprpm.toml                   # clone root, so hyprpm add of this URL works
-scripts/
-  hypr-ensure.sh              # build/install/load ~/.local/lib/hypr/… (no sudo)
-  hypr-session.sh             # mapped-.so helpers; install via rename, not cp -f
-  hypr-teardown.sh            # unload session copy; --purge deletes it
-  look-apply.sh               # JSON look → border-fx.lua + hyprctl eval
-  install.sh / uninstall.sh   # dev copy helpers
-  reinstall.sh                # purge, restart shell, add --enable; keeps shell.json look
-```
-
-No symlinks inside the plugin folder (`omarchy plugin validate` refuses them).
-Build artifacts are gitignored; user builds write to
-`$XDG_CACHE_HOME/omarchy-border-fx`, not the checkout.
-
-## Dev
-
-```sh
-mise run bake        # shaders/shiny.frag → .qsb
-mise run test        # shimmer + gradient + look adapter (no compositor)
-mise run lint        # qmllint ShinyBorder.qml
-mise run check       # bake + lint + test
-mise run preview     # standalone qs window; does not touch omarchy-shell
-mise run hypr-build  # hypr-shiny-border.so
-mise run hypr-test   # C++ logic tests
-mise run nest        # nested Hyprland crash sandbox
-mise run reload      # rebuild + load into the nest
-mise run reinstall   # purge live .so, restart shell, add this folder; keeps shell.json look
-```
-
-Hyprland C++ iteration: [hypr/DEVELOPMENT.md](hypr/DEVELOPMENT.md). Chrome
-shader/QML details: `qml/ShinyBorder.qml`. Design notes:
-[docs/unified-project.md](docs/unified-project.md).
+Architecture, build tasks, and the development workflow live in
+[DEVELOPMENT.md](DEVELOPMENT.md). Before opening a change, read
+[CONTRIBUTING.md](CONTRIBUTING.md) — in particular the project's scope:
+a small, well-documented set of effects, not a growing option surface.
 
 MIT. See [LICENSE](LICENSE).
