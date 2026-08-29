@@ -33,10 +33,11 @@ echo "== Installing Debian/Ubuntu build dependencies =="
 sudo apt-get update -qq
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   build-essential g++-14 ninja-build meson pkg-config git cpio \
-  autoconf automake libtool xcb-proto python3-xcbgen xorg-sgml-doctools \
+  autoconf automake libtool xcb-proto python3-xcbgen xorg-sgml-doctools xutils-dev \
   bison flex libffi-dev libexpat1-dev libxml2-dev libreadline-dev \
   libpixman-1-dev libdrm-dev libcairo2-dev libpango1.0-dev \
-  libgbm-dev libgles2-mesa-dev libegl-dev libglvnd-dev \
+  libgbm-dev libgles2-mesa-dev libgles-dev libegl-dev libglvnd-dev \
+  libglib2.0-dev uuid-dev \
   libseat-dev libdisplay-info-dev liblcms2-dev libtomlplusplus-dev \
   libzip-dev librsvg2-dev libmagic-dev libspng-dev libjpeg-turbo8-dev libwebp-dev \
   libmtdev-dev libevdev-dev libwacom-dev libgudev-1.0-dev libudev-dev \
