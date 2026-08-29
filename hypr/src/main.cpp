@@ -42,11 +42,10 @@ APICALL EXPORT std::string PLUGIN_API_VERSION() {
 // re-seed when the key was not set by the user. gradient_cw stays one color
 // (unset).
 static constexpr uint64_t kLookDefaultGradient[] = {
-    0xee33ccff, // rgba(33ccffee)
-    0xee1ad4c0, // rgba(1ad4c0ee)
-    0xee007a48, // rgba(007a48ee)
-    0xaa004830, // rgba(004830aa)
+    0xeef7ffff, // rgba(f7ffffee)
+    0x000a3f47, // rgba(0a3f4700)
 };
+static constexpr std::size_t kLookDefaultGradientN = sizeof(kLookDefaultGradient) / sizeof(kLookDefaultGradient[0]);
 
 static void shinySeedGradientStops(const SP<Config::Values::CGradientValue>& slot, const uint64_t* colors, std::size_t n) {
     if (!slot || !colors || n < 2)
@@ -76,7 +75,7 @@ static void shinyApplyLookGradientDefault() {
         return;
     if (shinyGradientSetByUser())
         return;
-    shinySeedGradientStops(g_cfg.gradient, kLookDefaultGradient, 4);
+    shinySeedGradientStops(g_cfg.gradient, kLookDefaultGradient, kLookDefaultGradientN);
 }
 
 APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
@@ -106,19 +105,19 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
                                                                Config::Values::SIntValueOptions{.min = -180, .max = 180});
     g_cfg.pinDeg       = makeShared<Config::Values::CIntValue>("plugin:shiny-border:pin_deg", "Light heading, degrees CCW; 0 = right, 90 = up", 120,
                                                                Config::Values::SIntValueOptions{.min = -360, .max = 360});
-    g_cfg.shimmerDeg   = makeShared<Config::Values::CIntValue>("plugin:shiny-border:shimmer_deg", "Max shimmer wander each side of the heading, degrees", 20,
+    g_cfg.shimmerDeg   = makeShared<Config::Values::CIntValue>("plugin:shiny-border:shimmer_deg", "Max shimmer wander each side of the heading, degrees", 22,
                                                                Config::Values::SIntValueOptions{.min = 0, .max = 180});
     g_cfg.borderSize   = makeShared<Config::Values::CIntValue>("plugin:shiny-border:border_size", "Border px, -1 = general:border_size", 2,
                                                                Config::Values::SIntValueOptions{.min = -1, .max = 20});
     g_cfg.pulseHz      = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:pulse_hz", "Oscillation rate; 0 disables", 0.4,
                                                                  Config::Values::SFloatValueOptions{.min = 0.f, .max = 4.f});
-    g_cfg.shimmerHz    = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:shimmer_hz", "Average shimmer retargets per second; 0 disables", 0.3,
+    g_cfg.shimmerHz    = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:shimmer_hz", "Average shimmer retargets per second; 0 disables", 0.28,
                                                                  Config::Values::SFloatValueOptions{.min = 0.f, .max = 4.f});
-    g_cfg.shimmerScaleMin = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:shimmer_scale_min", "Lower bound of the shimmer size scale", 0.75,
+    g_cfg.shimmerScaleMin = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:shimmer_scale_min", "Lower bound of the shimmer size scale", 0.8,
                                                                     Config::Values::SFloatValueOptions{.min = 0.2f, .max = 3.f});
-    g_cfg.shimmerScaleMax = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:shimmer_scale_max", "Upper bound of the shimmer size scale", 1.35,
+    g_cfg.shimmerScaleMax = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:shimmer_scale_max", "Upper bound of the shimmer size scale", 1.4,
                                                                     Config::Values::SFloatValueOptions{.min = 0.2f, .max = 3.f});
-    g_cfg.lobe         = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:lobe", "Lit-band half-width along the light axis; 0.5 = the whole window", 0.18,
+    g_cfg.lobe         = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:lobe", "Lit-band half-width along the light axis; 0.5 = the whole window", 0.16,
                                                                 Config::Values::SFloatValueOptions{.min = 0.04, .max = 0.5});
     g_cfg.effect       = makeShared<Config::Values::CStringValue>("plugin:shiny-border:effect",
                                                                  "Renderer: shiny (directional comet) or ripple (radial lighting crests)", "shiny");
@@ -139,12 +138,12 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     g_cfg.rippleFade   = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:ripple_fade",
                                                                 "Ripple spatial fade as a proportion of the decoration-box perimeter; 0 = off", 0.f,
                                                                 Config::Values::SFloatValueOptions{.min = 0.f, .max = 1.f});
-    g_cfg.mirror       = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:mirror", "Mirror the lit-band lobe onto the far side of the border", false);
-    g_cfg.colA         = makeShared<Config::Values::CColorValue>("plugin:shiny-border:col.a", "Highlight head (ARGB)", 0xee33ccff);
-    g_cfg.colB         = makeShared<Config::Values::CColorValue>("plugin:shiny-border:col.b", "Highlight shoulder (ARGB)", 0xee00ff99);
+    g_cfg.mirror       = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:mirror", "Mirror the lit-band lobe onto the far side of the border", true);
+    g_cfg.colA         = makeShared<Config::Values::CColorValue>("plugin:shiny-border:col.a", "Highlight head (ARGB)", 0xeef7ffff);
+    g_cfg.colB         = makeShared<Config::Values::CColorValue>("plugin:shiny-border:col.b", "Highlight shoulder (ARGB)", 0x000a3f47);
     g_cfg.baseColor    = makeShared<Config::Values::CColorValue>("plugin:shiny-border:base_color",
-                                                                "Wrapping ring stroke under the highlight; transparent = off (ARGB)", 0x55006878);
-    // CGradientValue constructs from one color; seed the 4-stop Look.DEFAULTS
+                                                                "Wrapping ring stroke under the highlight; transparent = off (ARGB)", 0xdd0a3f47);
+    // CGradientValue constructs from one color; seed the 2-stop Look.DEFAULTS
     // ramp onto m_colors before register / reload. Angle is ignored: heading
     // is pin_deg + angle_offset.
     g_cfg.gradient     = makeShared<Config::Values::CGradientValue>("plugin:shiny-border:gradient",
@@ -152,12 +151,12 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
                                                                     CHyprColor{kLookDefaultGradient[0]});
     shinyApplyLookGradientDefault();
     g_cfg.gradientPositions = makeShared<Config::Values::CStringValue>("plugin:shiny-border:gradient_positions",
-                                                                       "Ramp position per gradient color, percent of the lit band (\"0 1 3 100\"); empty = even spacing",
-                                                                       "0 1 3 100");
+                                                                       "Ramp position per gradient color, percent of the lit band (\"0 99\"); empty = even spacing",
+                                                                       "0 99");
     // Unset: fewer than two colors mirrors the primary side.
     g_cfg.gradientCw        = makeShared<Config::Values::CGradientValue>("plugin:shiny-border:gradient_cw",
                                                                          "Clockwise-half colors; fewer than two mirrors gradient; match first/last colors to avoid seams",
-                                                                         CHyprColor{0xee33ccff});
+                                                                         CHyprColor{kLookDefaultGradient[0]});
     g_cfg.gradientPositionsCw = makeShared<Config::Values::CStringValue>("plugin:shiny-border:gradient_positions_cw",
                                                                          "Clockwise-half ramp positions, percent of the lit band (\"0 22 50 100\"); empty = mirror / even spacing",
                                                                          "0 22 50 100");
@@ -193,7 +192,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.gradientPositionsCw);
 
     // commence() binds the live CGradientValueData; seed it too so first paint
-    // is the 4-stop ramp, not the one-color constructor argument.
+    // is the 2-stop ramp, not the one-color constructor argument.
     shinyApplyLookGradientDefault();
 
     HyprlandAPI::reloadConfig();

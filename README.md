@@ -97,7 +97,7 @@ keys still merge). Ripple is a lighting-only crest on the same ring:
 empty/`omitted` `effect` stays `"shiny"`.
 
 Missing or `null` look keys mean the **shared look** (pinned 120°,
-shimmer, 4-stop ramp, wrap stroke). Hyprland `PLUGIN_INIT` registers the
+shimmer, 2-stop light glint, wrap stroke). Hyprland `PLUGIN_INIT` registers the
 same numbers, so first paint matches chrome. An empty `gradient` array is
 a real override (two-stop `colA`/`colB`), not “use the default ramp.”
 
@@ -128,26 +128,24 @@ All keys at their shared defaults (equivalent to `{ "id": "wmfeht.border-fx" }`)
   "effect": "shiny",
   "borderSize": 2,
   "shimmer": true,
-  "shimmerHz": 0.3,
-  "shimmerDeg": 20,
-  "shimmerScaleMin": 0.75,
-  "shimmerScaleMax": 1.35,
+  "shimmerHz": 0.28,
+  "shimmerDeg": 22,
+  "shimmerScaleMin": 0.8,
+  "shimmerScaleMax": 1.4,
   "pinDeg": 120,
   "angleOffset": 0,
-  "lobe": 0.18,
-  "mirror": false,
+  "lobe": 0.16,
+  "mirror": true,
   "gradient": [
-    "rgba(33ccffee)",
-    "rgba(1ad4c0ee)",
-    "rgba(007a48ee)",
-    "rgba(004830aa)"
+    "rgba(f7ffffee)",
+    "rgba(0a3f4700)"
   ],
-  "gradientPositions": "0 1 3 100",
+  "gradientPositions": "0 99",
   "gradientCw": [],
   "gradientPositionsCw": "0 22 50 100",
-  "colA": "rgba(33ccffee)",
-  "colB": "rgba(00ff99ee)",
-  "baseColor": "rgba(00687855)",
+  "colA": "rgba(f7ffffee)",
+  "colB": "rgba(0a3f4700)",
+  "baseColor": "rgba(0a3f47dd)",
   "activeOnly": true,
   "pulse": false,
   "pulseHz": 0.4,
@@ -233,22 +231,22 @@ only (chrome ignores the key).
 |---|---|---|---|---|
 | `effect` | string | `"shiny"` | both | Renderer. `"shiny"` or `"ripple"` draws on chrome and windows. Anything else: chrome off, `.so` not loaded / `enabled = false`. |
 | `borderSize` | number (px) | `2` | both | Ring thickness. Chrome: overlay hidden when `≤ 0`. Hyprland clamps to `-1…20`; `-1` follows `general:border_size` on windows only. |
-| `baseColor` | color | `"rgba(00687855)"` | both | Wrapping stroke **under** the directional highlight, same thickness as the ring. Transparent (`a = 0`) = off. Not Hyprland `decoration:shadow`, not a gradient stop. Far-side highlight uses the last stop’s alpha; the wrap is what still paints when that alpha is low. |
+| `baseColor` | color | `"rgba(0a3f47dd)"` | both | Wrapping stroke **under** the directional highlight, same thickness as the ring. Transparent (`a = 0`) = off. Not Hyprland `decoration:shadow`, not a gradient stop. Far-side highlight uses the last stop’s alpha; the wrap is what still paints when that alpha is low. |
 | `pinDeg` | number (°) | `120` | both | Light heading, degrees CCW. `0` = from the right, `90` = from above. Hyprland clamps `-360…360`. |
 | `angleOffset` | number (°) | `0` | both | Added to `pinDeg` before drawing. Hyprland clamps `-180…180`. |
-| `lobe` | number | `0.18` | both | Lit-band **half-width** along the light axis. `0.5` = the whole window. Hyprland clamps config to `0.04…0.5`. Chrome clamps a walking lobe to that range, and a static lobe to at least `0.04`. |
-| `mirror` | bool | `false` | both | Mirror the same lobe onto the **far side** of the light axis (two comet heads). Off keeps today’s facing-only comet. Cone, ramp, glow, and local thickness all follow the nearer-end distance. The clockwise vs primary half split is unchanged. |
-| `gradient` | color list | 4-stop teal ramp | both | Comet ramp, **facing support first**, last stop = edge of the lit band (`lobe`). Fewer than two colors turns the ramp off and uses `colA` / `colB`. |
-| `gradientPositions` | string | `"0 1 3 100"` | both | Stop positions for `gradient`. See [Gradient](#gradient). |
+| `lobe` | number | `0.16` | both | Lit-band **half-width** along the light axis. `0.5` = the whole window. Hyprland clamps config to `0.04…0.5`. Chrome clamps a walking lobe to that range, and a static lobe to at least `0.04`. |
+| `mirror` | bool | `true` | both | Mirror the same lobe onto the **far side** of the light axis (two comet heads). Off keeps a facing-only comet. Cone, ramp, glow, and local thickness all follow the nearer-end distance. The clockwise vs primary half split is unchanged. |
+| `gradient` | color list | 2-stop light glint | both | Comet ramp, **facing support first**, last stop = edge of the lit band (`lobe`). Fewer than two colors turns the ramp off and uses `colA` / `colB`. |
+| `gradientPositions` | string | `"0 99"` | both | Stop positions for `gradient`. See [Gradient](#gradient). |
 | `gradientCw` | color list | `[]` | both | Optional colors for the **clockwise** half of the light axis. See [Clockwise half](#clockwise-half). |
 | `gradientPositionsCw` | string | `"0 22 50 100"` | both | Stop positions for the clockwise half. |
-| `colA` | color | `"rgba(33ccffee)"` | both | Two-stop head. Used only when `gradient` has fewer than two colors. |
-| `colB` | color | `"rgba(00ff99ee)"` | both | Two-stop shoulder. Same condition as `colA`. |
+| `colA` | color | `"rgba(f7ffffee)"` | both | Two-stop head. Used only when `gradient` has fewer than two colors. |
+| `colB` | color | `"rgba(0a3f4700)"` | both | Two-stop shoulder. Same condition as `colA`. |
 | `shimmer` | bool | `true` | both | Random walk of heading and highlight size. Exclusive with `pulse` (**shimmer wins** if both are on and their Hz `> 0`). |
-| `shimmerHz` | number | `0.3` | both | Average retargets per second. `0` (or `shimmer: false`) freezes the walk. Hyprland clamps `0…4`. |
-| `shimmerDeg` | number | `20` | both | Max wander **each side** of the heading, degrees. Hyprland clamps `0…180`. |
-| `shimmerScaleMin` | number | `0.75` | both | Lower bound of the size walk. Swapped with max if inverted. Hyprland clamps `0.2…3`. |
-| `shimmerScaleMax` | number | `1.35` | both | Upper bound of the size walk. Scale also fattens/thins the stroke (~35% of the deviation from 1). Hyprland clamps `0.2…3`. |
+| `shimmerHz` | number | `0.28` | both | Average retargets per second. `0` (or `shimmer: false`) freezes the walk. Hyprland clamps `0…4`. |
+| `shimmerDeg` | number | `22` | both | Max wander **each side** of the heading, degrees. Hyprland clamps `0…180`. |
+| `shimmerScaleMin` | number | `0.8` | both | Lower bound of the size walk. Swapped with max if inverted. Hyprland clamps `0.2…3`. |
+| `shimmerScaleMax` | number | `1.4` | both | Upper bound of the size walk. Scale also fattens/thins the stroke (~35% of the deviation from 1). Hyprland clamps `0.2…3`. |
 | `activeOnly` | bool | `true` | windows | Only the focused window draws / shimmers / pulses / ripples. Unfocused windows keep the reserved padding so layout does not jump. Chrome has no unfocused state, so it ignores this key. |
 | `pulse` | bool | `false` | both | Oscillate highlight **transparency** in the shader (`0.5+0.5*sin`). Does not change lobe width or thickness. Ignored while shimmer is running. |
 | `pulseHz` | number | `0.4` | both | Pulse rate. `0` disables. Hyprland clamps `0…4`. |
@@ -312,8 +310,8 @@ and every token must parse. Empty, junk, or a count mismatch → **even
 spacing** (`0 … 100` in equal steps). That is why a 4-stop ramp with
 positions `"0 50"` silently even-spaces instead of stretching two numbers.
 
-Default `"0 1 3 100"` bunches the first three stops against the facing
-edge (a hard comet head) and lands the dark teal at the comet tail.
+Default `"0 99"` puts the white head at the facing edge and the
+transparent teal at the comet tail.
 
 ### Clockwise half
 
@@ -324,7 +322,7 @@ edge (a hard comet head) and lands the dark teal at the comet tail.
 |---|---|---|
 | ≥ 2 colors | valid spec matching that count | Own colors, own spacing. |
 | ≥ 2 colors | empty / invalid | Own colors, **even** spacing (not the primary positions). |
-| empty / fewer than 2 | valid spec matching primary count | Primary colors, reshaped. Default `"0 22 50 100"` is this case — same four colors, slightly different bunching on the clockwise flank. |
+| empty / fewer than 2 | valid spec matching primary count | Primary colors, reshaped. Default `"0 22 50 100"` is four tokens, so with the 2-stop ramp it mismatches and falls through to a mirror of the primary positions. |
 | empty / fewer than 2 | empty / invalid | Exact **mirror** of the primary positions. |
 
 ### Heading and motion
@@ -353,7 +351,7 @@ Thinner wrap-free ring, light from above:
 }
 ```
 
-Classic two-stop comet (`colA` / `colB`) instead of the 4-stop ramp:
+Classic two-stop comet (`colA` / `colB`) instead of the default ramp:
 
 ```json
 {
@@ -381,10 +379,10 @@ Different clockwise-half colors (keep endpoints aligned to hide the seam):
 {
   "id": "wmfeht.border-fx",
   "gradientCw": [
-    "rgba(33ccffee)",
+    "rgba(f7ffffee)",
     "rgba(c084fcee)",
     "rgba(7c3aedee)",
-    "rgba(004830aa)"
+    "rgba(0a3f4700)"
   ]
 }
 ```

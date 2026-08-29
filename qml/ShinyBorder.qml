@@ -22,19 +22,19 @@ Item {
   // plugin load. Must be a real property: typed QML items reject ad-hoc
   // assigns (same reason BorderSurface will not take `_qsShiny*`).
   property int overlayRev: 0
-  property color colA: "#ee33ccff"
-  property color colB: "#ee00ff99"
+  property color colA: "#eef7ffff"
+  property color colB: "#000a3f47"
   // Lit-band half-width along the light axis. 0.5 = the whole window.
-  property real lobe: 0.18
+  property real lobe: 0.16
   // Mirror that lobe onto the far support. Off = facing-only comet.
-  property bool mirror: false
+  property bool mirror: true
   property int pinDeg: 120
   property real angleOffset: 0
   property bool shimmer: true
-  property real shimmerHz: 0.3
-  property real shimmerDeg: 20
-  property real shimmerScaleMin: 0.75
-  property real shimmerScaleMax: 1.35
+  property real shimmerHz: 0.28
+  property real shimmerDeg: 22
+  property real shimmerScaleMin: 0.8
+  property real shimmerScaleMax: 1.4
   // Oscillate highlight transparency. Exclusive with shimmer (shimmer
   // wins). Twin of plugin:shiny-border:pulse / pulse_hz.
   property bool pulse: false
@@ -53,19 +53,17 @@ Item {
   // composite this in the fragment. Transparent = off. Not Hyprland
   // decoration:shadow, not a gradient stop. Far-side highlight uses the
   // last stop's alpha.
-  property color baseColor: "#55006878"
+  property color baseColor: "#dd0a3f47"
 
   // Multi-step ramp, facing support first. Fewer than two colors keeps
-  // colA/colB. Stops match looknfeel.lua (RRGGBBAA → Qt #AARRGGBB). Last
+  // colA/colB. Stops match Look.DEFAULTS (RRGGBBAA → Qt #AARRGGBB). Last
   // stop is the lobe edge of the comet, not the wrapping teal — that is
   // baseColor. The shader scales 0…100 onto the drawn lit band.
   property var gradient: [
-    "#ee33ccff",
-    "#ee1ad4c0",
-    "#ee007a48",
-    "#aa004830"
+    "#eef7ffff",
+    "#000a3f47"
   ]
-  property string gradientPositions: "0 1 3 100"
+  property string gradientPositions: "0 99"
   property var gradientCw: []
   property string gradientPositionsCw: "0 22 50 100"
 

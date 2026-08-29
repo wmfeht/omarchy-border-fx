@@ -35,14 +35,14 @@ struct SShinyConfig {
     SP<Config::Values::CColorValue> colA;
     SP<Config::Values::CColorValue> colB;
     // Wrapping ring stroke under the highlight. Transparent (a=0) = off.
-    // Packed ARGB; default matches the shared look rgba(00687855).
+    // Packed ARGB; default matches the shared look rgba(0a3f47dd).
     SP<Config::Values::CColorValue> baseColor;
-    // Multi-step ramp. PLUGIN_INIT default is the shared 4-stop look.
+    // Multi-step ramp. PLUGIN_INIT default is the shared 2-stop look.
     // Fewer than two colors keeps the classic col.a/col.b comet; two or
     // more colors replace it, first color at the head. The gradient's own
     // angle is ignored — the heading is pin_deg + angle_offset.
     SP<Config::Values::CGradientValue> gradient;
-    // Per-stop positions, one percentage per gradient color ("0 1 3 100"),
+    // Per-stop positions, one percentage per gradient color ("0 99"),
     // of the lit band (lobe), not the full window. Empty, count mismatch,
     // or junk = even spacing.
     SP<Config::Values::CStringValue>   gradientPositions;

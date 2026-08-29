@@ -3,8 +3,8 @@
 // Shared look: shell.json camelCase + Hyprland rgba() on the wmfeht.border-fx
 // plugins[] entry is the source of truth. `effect` selects the renderer
 // (`shiny` or `ripple`). Missing look keys mean DEFAULTS below (pinned 120°,
-// shimmer, 4-stop ramp). PLUGIN_INIT registers the same numbers so first
-// paint matches chrome.
+// shimmer, 2-stop light glint, wrap stroke). PLUGIN_INIT registers the same
+// numbers so first paint matches chrome.
 
 var PLUGIN_ID = "wmfeht.border-fx"
 var LEGACY_PLUGIN_ID = "qs.border-fx"
@@ -15,26 +15,24 @@ var DEFAULTS = {
   effect: "shiny",
   borderSize: 2,
   shimmer: true,
-  shimmerHz: 0.3,
-  shimmerDeg: 20,
-  shimmerScaleMin: 0.75,
-  shimmerScaleMax: 1.35,
+  shimmerHz: 0.28,
+  shimmerDeg: 22,
+  shimmerScaleMin: 0.8,
+  shimmerScaleMax: 1.4,
   pinDeg: 120,
   angleOffset: 0,
-  lobe: 0.18,
-  mirror: false,
+  lobe: 0.16,
+  mirror: true,
   gradient: [
-    "rgba(33ccffee)",
-    "rgba(1ad4c0ee)",
-    "rgba(007a48ee)",
-    "rgba(004830aa)"
+    "rgba(f7ffffee)",
+    "rgba(0a3f4700)"
   ],
-  gradientPositions: "0 1 3 100",
+  gradientPositions: "0 99",
   gradientCw: [],
   gradientPositionsCw: "0 22 50 100",
-  colA: "rgba(33ccffee)",
-  colB: "rgba(00ff99ee)",
-  baseColor: "rgba(00687855)",
+  colA: "rgba(f7ffffee)",
+  colB: "rgba(0a3f4700)",
+  baseColor: "rgba(0a3f47dd)",
   activeOnly: true,
   pulse: false,
   pulseHz: 0.4,
