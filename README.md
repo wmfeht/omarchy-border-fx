@@ -211,7 +211,7 @@ only (chrome ignores the key). Chrome never pulses.
 |---|---|---|---|---|
 | `effect` | string | `"shiny"` | both | Renderer. Only `"shiny"` draws today. Anything else: chrome off, shiny `.so` not loaded / `enabled = false`. |
 | `borderSize` | number (px) | `2` | both | Ring thickness. Chrome: overlay hidden when `≤ 0`. Hyprland clamps to `-1…20`; `-1` follows `general:border_size` on windows only. |
-| `baseColor` | color | `"rgba(00687855)"` | both | Wrapping stroke **under** the directional highlight, same thickness as the ring. Transparent (`a = 0`) = off. Not Hyprland `decoration:shadow`, not a gradient stop. Far-side highlight alpha is crushed to ~5.5%, so stuffing this hue into the last ramp stop never wraps. |
+| `baseColor` | color | `"rgba(00687855)"` | both | Wrapping stroke **under** the directional highlight, same thickness as the ring. Transparent (`a = 0`) = off. Not Hyprland `decoration:shadow`, not a gradient stop. Far-side highlight uses the last stop’s alpha; the wrap is what still paints when that alpha is low. |
 | `pinDeg` | number (°) | `120` | both | Light heading, degrees CCW. `0` = from the right, `90` = from above. Hyprland clamps `-360…360`. |
 | `angleOffset` | number (°) | `0` | both | Added to `pinDeg` before drawing. Hyprland clamps `-180…180`. |
 | `lobe` | number | `0.18` | both | Lit-band **half-width** along the light axis. `0.5` = the whole window. Hyprland clamps config to `0.04…0.5`. Chrome clamps a walking lobe to that range, and a static lobe to at least `0.04`. |
@@ -227,7 +227,7 @@ only (chrome ignores the key). Chrome never pulses.
 | `shimmerScaleMin` | number | `0.75` | both | Lower bound of the size walk. Swapped with max if inverted. Hyprland clamps `0.2…3`. |
 | `shimmerScaleMax` | number | `1.35` | both | Upper bound of the size walk. Scale also fattens/thins the stroke (~35% of the deviation from 1). Hyprland clamps `0.2…3`. |
 | `activeOnly` | bool | `true` | windows | Only the focused window draws / shimmers / pulses. Unfocused windows keep the reserved padding so layout does not jump. |
-| `pulse` | bool | `false` | windows | Oscillate highlight width and thickness in the window shader. No-op on chrome. Ignored while shimmer is running. |
+| `pulse` | bool | `false` | windows | Oscillate highlight **transparency** in the window shader (`0.5+0.5*sin`). Does not change lobe width or thickness. No-op on chrome. Ignored while shimmer is running. |
 | `pulseHz` | number | `0.4` | windows | Pulse rate. `0` disables. Hyprland clamps `0…4`. |
 
 Hyprland adapter keys (what you see in generated lua / `plugin:shiny-border:*`)
@@ -251,15 +251,16 @@ The ramp is a **parallel projection onto the light axis**, not a conic
 sweep around the window center. A wide panel and a tall one with the same
 heading share a direction. Iso-lines are perpendicular to the light.
 
-Stops fill the **lit band** (`lobe`, including shimmer scale and pulse
-spread), not the full window:
+Stops fill the **lit band** (`lobe`, including shimmer scale), not the
+full window. Highlight RGB and alpha come from the sampled stop; a
+specular/white core has to be a stop, not a shader mix toward white.
 
 - **0** = facing support of this rounded rect (where the comet sits).
 - **100** = edge of the comet (`d0 = lobe`). Past that the last stop is
-  held; far-side highlight alpha is still crushed to ~5.5%.
+  held (RGB and alpha).
 - `lobe` 0.5 (the whole window) is the same mapping as stretching 0…100
   across the axis. Smaller lobes compress the same stop list into the
-  comet so every stop stays visible as the highlight breathes.
+  comet so every stop stays visible in the highlight.
 - Each half of the axis (facing → far, then the other flank) runs that
   0…100 independently. Primary colors/positions paint one half;
   clockwise colors/positions paint the other. Match first and last

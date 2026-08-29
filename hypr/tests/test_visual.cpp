@@ -146,7 +146,7 @@ static void checkShaderSource() {
     CHECK(!frag.empty());
     CHECK(frag.find("heading = angle") != std::string::npos);
     CHECK(frag.find("max(roundingPower, 2.0)") == std::string::npos);
-    CHECK(frag.find("brightness <= 0.0") != std::string::npos);
+    CHECK(frag.find("shinyPulseAlphaMul") != std::string::npos);
     CHECK(frag.find("pointer_position") == std::string::npos);
     CHECK(frag.find("atan(-dir.y") == std::string::npos);
     CHECK(frag.find("atan(-p.y, p.x)") == std::string::npos);
@@ -190,6 +190,26 @@ static void checkShaderSource() {
     CHECK(qsFrag.find("shinyWrapComposite(highlight, baseColor, wrapRing)") != std::string::npos);
     CHECK(qsFrag.find("shinyRampColor(cw, uRamp)") != std::string::npos);
     CHECK(qsFrag.find("float uRamp = clamp(d0 / max(spread, 1.0e-4), 0.0, 1.0)") != std::string::npos);
+
+    // Highlight RGB/A from the stop; no white-mix, cone crush, or pulse of
+    // spread/thickness. Pulse is an alpha multiplier (identity when off).
+    auto checkLighting = [](const std::string& src) {
+        CHECK(src.find("vec3(1.0), hot * 0.95") == std::string::npos);
+        CHECK(src.find("mix(0.22, 1.0,") == std::string::npos);
+        CHECK(src.find("mix(0.055, 1.0,") == std::string::npos);
+        CHECK(src.find("range * 0.45") == std::string::npos);
+        CHECK(src.find("range * 1.35") == std::string::npos);
+        CHECK(src.find("mix(0.78, 1.18, pulse)") == std::string::npos);
+        CHECK(src.find("stop.a * cov") != std::string::npos);
+        CHECK(src.find("vec4  highlight = vec4(stop.rgb * a, a)") != std::string::npos);
+        CHECK(src.find("shinyPulseAlphaMul(brightness, time)") != std::string::npos);
+        CHECK(src.find("shinyRampColor(cw, uRamp)") != std::string::npos);
+        CHECK(src.find("float uRamp = clamp(d0 / max(spread, 1.0e-4), 0.0, 1.0)") != std::string::npos);
+        CHECK(src.find("shinyWrapComposite(highlight, baseColor, wrapRing)") != std::string::npos);
+        CHECK(src.find("mix(color, colorSRGB, uRamp)") != std::string::npos);
+    };
+    checkLighting(frag);
+    checkLighting(qsFrag);
 }
 
 static void checkProductionWiring() {
@@ -220,7 +240,7 @@ static void checkProductionWiring() {
     CHECK(pass.find("m_data.pointer") == std::string::npos);
 
     // Shimmer is CPU-modulated: the deco steps the walk and hands the pass a
-    // final angle / lobe / thickness scale; the shader stays pulse-or-nominal.
+    // final angle / lobe / thickness scale; shader pulse only scales alpha.
     CHECK(deco.find("shinyShimmerStep") != std::string::npos);
     CHECK(deco.find("shinyShimmerLobe") != std::string::npos);
     CHECK(deco.find("SHINY_EFFECT_PULSE") != std::string::npos);

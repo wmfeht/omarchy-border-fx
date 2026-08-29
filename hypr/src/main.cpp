@@ -52,7 +52,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     // ARGB ints. Defaults match Omarchy's two-stop active gradient.
     g_cfg.enabled      = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:enabled", "Master switch", true);
     g_cfg.activeOnly   = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:active_only", "Only the focused window draws the ring / pulses; unfocused keep padding", true);
-    g_cfg.pulse        = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:pulse", "Oscillate highlight width and thickness", true);
+    g_cfg.pulse        = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:pulse", "Oscillate highlight transparency", true);
     g_cfg.shimmer      = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:shimmer", "Randomly wander and resize the highlight; exclusive with pulse (shimmer wins)", false);
     g_cfg.angleOffset  = makeShared<Config::Values::CIntValue>("plugin:shiny-border:angle_offset", "Degrees added to the comet heading", 0,
                                                                Config::Values::SIntValueOptions{.min = -180, .max = 180});

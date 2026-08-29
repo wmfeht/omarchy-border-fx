@@ -23,6 +23,15 @@ function pinnedHeading(pinDeg, offsetDeg) {
 }
 
 // ~32 samples per 1/hz cycle, clamped 16–50 ms. Same as shinyPulseTickMs.
+// Shader twin: pulse off (brightness <= 0) is identity 1. Pulse on uses
+// the same 0.5+0.5*sin that used to breathe spread/thick, now as a
+// multiplier on sampled stop alpha. Twin of shinyPulseAlphaMul / GLSL.
+function pulseAlphaMul(brightness, time) {
+  if (!(Number(brightness) > 0))
+    return 1
+  return 0.5 + 0.5 * Math.sin(Number(time) * Number(brightness) * TAU)
+}
+
 function tickMs(hz) {
   var kMin = 16
   var kMax = 50

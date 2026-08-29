@@ -216,6 +216,13 @@ bool shinyPulseShouldRun(bool enabled, bool pulse, float pulseHz, bool activeOnl
     return true;
 }
 
+float shinyPulseAlphaMul(float brightness, float time) {
+    if (!(brightness > 0.f))
+        return 1.f;
+    constexpr float kTau = 6.28318530718f;
+    return 0.5f + 0.5f * std::sin(time * brightness * kTau);
+}
+
 ShinyPulseUniforms shinyPulseUniforms(bool pulse, double clockSeconds, float hz) {
     if (!pulse || hz <= 0.f)
         return {.time = 0.f, .pulseHz = 0.f};

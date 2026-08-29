@@ -46,6 +46,16 @@ function checkPinnedHeading() {
   check(Shimmer.wrapAngle(0) === 0, "wrap 0")
 }
 
+function checkPulseAlphaMul() {
+  check(Shimmer.pulseAlphaMul(0, 0) === 1, "pulse off identity")
+  check(Shimmer.pulseAlphaMul(0, 12.5) === 1, "pulse off ignores time")
+  check(Shimmer.pulseAlphaMul(-0.4, 0.25) === 1, "pulse hz <= 0 identity")
+  check(Shimmer.pulseAlphaMul(1, 0) === 0.5, "pulse on at t=0 is 0.5")
+  check(Shimmer.pulseAlphaMul(1, 0) !== 1, "pulse on is not identity")
+  check(approx(Shimmer.pulseAlphaMul(1, 0.25), 1), "pulse on at quarter period is 1")
+  check(approx(Shimmer.pulseAlphaMul(1, 0.75), 0), "pulse on at three-quarter is 0")
+}
+
 function checkTickMs() {
   check(Shimmer.tickMs(0.4) > 0, "tick > 0")
   check(Shimmer.tickMs(0.4) < 1000 / 0.4, "tick < cycle")
@@ -383,9 +393,20 @@ function checkWrapSource() {
   check(frag.indexOf("float uRamp = clamp(d0 / max(spread, 1.0e-4), 0.0, 1.0)") !== -1,
         "qs ramp scaled onto spread")
   check(frag.indexOf("shinyRampColor(cw, uRamp)") !== -1, "qs samples uRamp not full-axis u")
+  check(frag.indexOf("vec3(1.0), hot * 0.95") === -1, "qs does not blow RGB to white")
+  check(frag.indexOf("mix(0.22, 1.0,") === -1, "qs does not cone-dim RGB")
+  check(frag.indexOf("mix(0.055, 1.0,") === -1, "qs does not crush far-side alpha")
+  check(frag.indexOf("range * 0.45") === -1, "qs pulse does not breathe spread")
+  check(frag.indexOf("range * 1.35") === -1, "qs pulse does not stretch spread")
+  check(frag.indexOf("mix(0.78, 1.18, pulse)") === -1, "qs pulse does not breathe thickness")
+  check(frag.indexOf("stop.a * cov") !== -1, "qs highlight alpha from stop")
+  check(frag.indexOf("vec4  highlight = vec4(stop.rgb * a, a)") !== -1, "qs premul from stop")
+  check(frag.indexOf("shinyPulseAlphaMul(brightness, time)") !== -1, "qs pulse is alpha mul")
+  check(frag.indexOf("mix(color, colorSRGB, uRamp)") !== -1, "qs two-stop fallback along lobe")
 }
 
 checkPinnedHeading()
+checkPulseAlphaMul()
 checkTickMs()
 checkShimmer()
 checkGradient()

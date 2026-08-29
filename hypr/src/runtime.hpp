@@ -76,9 +76,9 @@ float shinyGradientStopPos(int i, int count);
 
 // Map full-axis u (0 = facing support, 1 = far side) onto the lit band.
 // Shader: d0 = u * 0.5, cone occupies d0 in [0, spread]. spread is the
-// applied lobe (config / shimmer-scaled range, pulse-modulated, floored
-// at 0.04). Returns 0 at the head, 1 at the lobe edge, and stays 1 past
-// it. lobe 0.5 is identity (uAxis maps to itself). Twin of uRamp in
+// applied lobe (config / shimmer-scaled range, floored at 0.04). Returns
+// 0 at the head, 1 at the lobe edge, and stays 1 past it. lobe 0.5 is
+// identity (uAxis maps to itself). Twin of uRamp in
 // SHINY_FRAG / shaders/shiny.frag.
 float shinyGradientLobeU(float uAxis, float spread);
 
@@ -191,6 +191,11 @@ struct ShinyPulseUniforms {
 };
 
 ShinyPulseUniforms shinyPulseUniforms(bool pulse, double clockSeconds, float hz);
+
+// Shader twin: pulse off (brightness <= 0) is identity 1. Pulse on uses
+// the same 0.5+0.5*sin(time * hz * tau) that used to breathe spread/thick,
+// now as a multiplier on sampled stop alpha. Twin of GLSL shinyPulseAlphaMul.
+float shinyPulseAlphaMul(float brightness, float time);
 
 // Re-arm period for per-deco pulse damage, milliseconds. Must be much
 // smaller than one sine cycle (1/pulseHz) so compositor-time sampling

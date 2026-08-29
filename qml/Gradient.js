@@ -30,8 +30,8 @@ function stopPos(i, count) {
 
 // Full-axis u (0 = facing, 1 = far side) → lit-band u (0 = head, 1 =
 // lobe edge). Twin of shinyGradientLobeU / shader uRamp. spread is the
-// applied lobe (already pulse-modulated in the shader); values below
-// 0.04 floor like max(range, 0.04).
+// applied lobe (config / shimmer-scaled range); values below 0.04 floor
+// like max(range, 0.04). Pulse no longer modulates spread.
 function lobeU(uAxis, spread) {
   var u = Number(uAxis) || 0
   if (u < 0)

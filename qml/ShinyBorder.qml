@@ -35,8 +35,9 @@ Item {
   property real roundingPower: 2
 
   // Wrapping ring stroke under the directional highlight. Both hosts
-  // composite this in the fragment (far-side highlight alpha stays crushed).
-  // Transparent = off. Not Hyprland decoration:shadow, not a gradient stop.
+  // composite this in the fragment. Transparent = off. Not Hyprland
+  // decoration:shadow, not a gradient stop. Far-side highlight uses the
+  // last stop's alpha.
   property color baseColor: "#55006878"
 
   // Multi-step ramp, facing support first. Fewer than two colors keeps

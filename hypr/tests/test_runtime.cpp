@@ -108,6 +108,15 @@ static void checkPulseDecisions() {
     CHECK(shinyPulseTickMs(0.4f) < static_cast<int>(1000.f / 0.4f));
     CHECK(shinyPulseTickMs(4.f) > 0);
     CHECK(shinyPulseTickMs(4.f) < static_cast<int>(1000.f / 4.f));
+
+    // Pulse alpha mul: off is identity; on is the 0.5+0.5*sin of the shader.
+    CHECK(shinyPulseAlphaMul(0.f, 0.f) == 1.f);
+    CHECK(shinyPulseAlphaMul(0.f, 12.5f) == 1.f);
+    CHECK(shinyPulseAlphaMul(-0.4f, 0.25f) == 1.f);
+    CHECK(shinyPulseAlphaMul(1.f, 0.f) == 0.5f);
+    CHECK(shinyPulseAlphaMul(1.f, 0.f) != 1.f);
+    CHECK(std::fabs(shinyPulseAlphaMul(1.f, 0.25f) - 1.f) < 1e-5f);
+    CHECK(std::fabs(shinyPulseAlphaMul(1.f, 0.75f) - 0.f) < 1e-5f);
 }
 
 static void checkEffectExclusivity() {
@@ -510,9 +519,9 @@ static void checkGradientLobeU() {
 }
 
 static void checkWrapComposite() {
-    // Far-side crushed highlight: ~5.5% alpha, premultiplied. Drive the
-    // shipped helper — do not hard-code the mix result.
-    const float hiA        = 0.055f;
+    // Translucent premultiplied highlight over wrapRing. Drive the shipped
+    // helper — do not hard-code the mix result.
+    const float hiA          = 0.55f;
     const float highlight[4] = {0.2f * hiA, 0.4f * hiA, 0.1f * hiA, hiA};
     float       out[4];
 
@@ -530,14 +539,23 @@ static void checkWrapComposite() {
     shinyWrapComposite(highlight, teal, 0.f, out);
     CHECK(out[0] == highlight[0] && out[1] == highlight[1] && out[2] == highlight[2] && out[3] == highlight[3]);
 
-    // Full ring + crushed highlight: wrap hue/alpha must show through.
-    // rgba(00687855) / Qt #55006878 — output is not the crushed highlight alone.
+    // Full ring + translucent highlight: wrap hue/alpha must show through.
+    // rgba(00687855) / Qt #55006878 — output is not the highlight alone.
     shinyWrapComposite(highlight, teal, 1.f, out);
     CHECK(out[0] != highlight[0] || out[1] != highlight[1] || out[2] != highlight[2] || out[3] != highlight[3]);
     CHECK(out[1] > highlight[1]);
     CHECK(out[2] > highlight[2]);
     CHECK(out[3] > highlight[3]);
     CHECK(out[3] < 1.f);
+
+    // Stop-authored highlight (straight red, stop alpha) still composites
+    // over wrapRing. RGB stays red-dominant — not blown toward white.
+    const float stopA    = 238.f / 255.f;
+    const float redHi[4] = {stopA, 0.f, 0.f, stopA};
+    shinyWrapComposite(redHi, teal, 1.f, out);
+    CHECK(out[3] > redHi[3]);
+    CHECK(out[3] < 1.f);
+    CHECK(out[0] > out[1] && out[0] > out[2]);
 
     // Opaque highlight covers the wrap completely.
     const float opaque[4] = {1.f, 1.f, 1.f, 1.f};

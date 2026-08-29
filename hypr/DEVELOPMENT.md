@@ -38,8 +38,10 @@ that light, projected along the axis using this window's width and height.
   shader gets `gradColors[8]` / `gradPos[8]` / `gradCount` — raw
   `glUniform*` uploads, since those names are not in `CShader`'s lookup
   table — and ramps piecewise-linearly from the facing support (stop 0) to
-  the lobe edge (`uRamp = d0 / spread`), keeping the classic brightness / alpha shaping;
-  `gradCount < 2` takes the untouched two-color branch. The fallback builds
+  the lobe edge (`uRamp = d0 / spread`). Highlight RGB/A is the sampled
+  stop (two-stop `col.a`/`col.b` along `uRamp` when `gradCount < 2`).
+  Pulse multiplies stop alpha (`shinyPulseAlphaMul`); it does not breathe
+  spread or thickness. The fallback builds
   a multi-stop `CGradientValueData` from the same list; custom positions
   are baked in by resampling the ramp at 8 even points, because Hyprland's
   border gradient only spaces stops evenly. `shinyGradientSample` in

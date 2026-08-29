@@ -45,7 +45,7 @@ uniform float thick;
 uniform float time;
 uniform float alpha;
 uniform float range;             // lit-band half-width along the light axis (0.04–0.5)
-uniform float brightness;        // pulse Hz; <= 0 is the nominal ring
+uniform float brightness;        // pulse Hz; <= 0 is identity alpha mul
 uniform float angle;             // light direction, radians: 0 = right, 90 = up
 
 // Multi-step ramp (plugin:shiny-border:gradient / gradient_positions,
@@ -67,20 +67,28 @@ const float TAU = 6.28318530718;
 const float AA  = 1.25;
 
 // Piecewise-linear chain over one half of the lit band: u 0 at the
-// facing support, 1 at the lobe edge. The 1e-4 guard turns coincident
-// stops into a hard step instead of a divide by zero.
-vec3 shinyRampColor(bool cw, float u) {
-    vec3 g = cw ? gradColorsCW[0].rgb : gradColors[0].rgb;
+// facing support, 1 at the lobe edge. Mixes RGB and A. The 1e-4 guard
+// turns coincident stops into a hard step instead of a divide by zero.
+vec4 shinyRampColor(bool cw, float u) {
+    vec4 g = cw ? gradColorsCW[0] : gradColors[0];
     int  n = cw ? gradCountCW : gradCount;
     for (int i = 1; i < MAX_STEPS; i++) {
         if (i >= n)
             break;
         float t0 = cw ? gradPosCW[i - 1] : gradPos[i - 1];
         float t1 = cw ? gradPosCW[i] : gradPos[i];
-        vec3  c  = cw ? gradColorsCW[i].rgb : gradColors[i].rgb;
+        vec4  c  = cw ? gradColorsCW[i] : gradColors[i];
         g = mix(g, c, clamp((u - t0) / max(t1 - t0, 1.0e-4), 0.0, 1.0));
     }
     return g;
+}
+
+// Pulse off (hz <= 0) is identity. Pulse on: the existing 0.5+0.5*sin
+// scales stop alpha. Twin of shinyPulseAlphaMul in runtime.cpp.
+float shinyPulseAlphaMul(float hz, float t) {
+    if (hz <= 0.0)
+        return 1.0;
+    return 0.5 + 0.5 * sin(t * hz * TAU);
 }
 
 // Premultiplied highlight over a straight-alpha wrap. Glow is not part of
@@ -128,24 +136,18 @@ void main() {
     // Negative cross = clockwise of the light axis (old t > 0.5 half).
     bool  cw = (light.x * pUp.y - light.y * pUp.x) < 0.0;
 
-    float pulse, spread, thickNow;
-    if (brightness <= 0.0) {
-        spread   = max(range, 0.04);
-        thickNow = thick;
-    } else {
-        pulse    = 0.5 + 0.5 * sin(time * brightness * TAU);
-        spread   = max(mix(range * 0.45, range * 1.35, pulse), 0.04);
-        thickNow = thick * mix(0.78, 1.18, pulse);
-    }
+    float spread   = max(range, 0.04);
+    float pulseMul = shinyPulseAlphaMul(brightness, time);
     // Stop list fills the comet: 0 at the facing support, 1 at spread.
-    // Past the lobe the last stop is held; cone alpha still crushes it.
+    // Past the lobe the last stop (RGB and A) is held.
     float uRamp = clamp(d0 / max(spread, 1.0e-4), 0.0, 1.0);
 
     float cone = 1.0 - smoothstep(0.0, spread, d0);
     cone       = pow(max(cone, 0.0), 1.65);
 
-    // Thickness breathes, and the lit side is locally thicker than the rest of the ring.
-    float localT = mix(thickNow * 0.38, thickNow, mix(0.15, 1.0, cone));
+    // Lit side is locally thicker than the rest of the ring. Pulse does
+    // not change thickness; shimmer already wrote thick on the CPU.
+    float localT = mix(thick * 0.38, thick, mix(0.15, 1.0, cone));
     localT       = max(localT, 1.0);
 
     float rIn = max(rOut - localT, 0.0);
@@ -176,22 +178,16 @@ void main() {
     if (cov < 0.002 && (baseColor.a <= 0.0 || wrapRing < 0.002))
         discard;
 
-    // Dim far side is a dark edge; the facing core blows toward white.
-    float hot = pow(cone, 2.6);
-    vec3  rgb;
+    // Highlight RGB/A from the stop (or colA→colB along the lobe). Specular
+    // white is a stop, not a mix toward vec3(1.0). Pulse scales alpha only.
+    vec4 stop;
     if (gradCount >= 2) {
-        // Stop 0 at the lit support, last stop at the lobe edge. Each half
-        // of the light axis runs facing → far, so the geometry itself is
-        // seamless; only mismatched endpoint colors between the halves
-        // can show a seam. Same brightness profile as the classic branch.
-        vec3 g = shinyRampColor(cw, uRamp);
-        rgb = mix(g * mix(0.22, 1.0, pow(cone, 0.9)), vec3(1.0), hot * 0.95);
+        stop = shinyRampColor(cw, uRamp);
     } else {
-        vec3 dim = colorSRGB.rgb * 0.22;
-        rgb      = mix(mix(dim, color.rgb, pow(cone, 0.9)), vec3(1.0), hot * 0.95);
+        stop = mix(color, colorSRGB, uRamp);
     }
-    float a            = cov * mix(0.055, 1.0, mix(pow(cone, 1.15), hot, 0.45));
-    vec4  highlight    = vec4(rgb * a, a);
+    float a         = clamp(stop.a * cov * pulseMul, 0.0, 1.0);
+    vec4  highlight = vec4(stop.rgb * a, a);
     fragColor          = shinyWrapComposite(highlight, baseColor, wrapRing);
     fragColor         *= alpha;
 }

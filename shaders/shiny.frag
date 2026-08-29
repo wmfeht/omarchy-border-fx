@@ -1,7 +1,9 @@
 #version 440
 
 // Directional-light ring: rounded-rect SDF, piecewise-linear ramp with a
-// clockwise-half override, dim shoulder, blow-to-white core, outside glow.
+// clockwise-half override, outside glow. Highlight RGB and alpha come from
+// the sampled stop (or colA/colB). Pulse scales stop alpha; it does not
+// breathe lobe width or thickness.
 //
 // `angle` is a light direction (same pin_deg convention as the sibling:
 // 0 = from the right, 90 = from above). The gradient is the pattern of
@@ -10,7 +12,7 @@
 // the same heading share a direction. Iso-lines are perpendicular to the
 // light; 0 is the facing support of this rounded rect. Coverage still
 // runs to the far side; the color ramp is scaled onto the lit band
-// (lobe / pulse spread) so stop 100 is the comet edge, not the far side.
+// (lobe) so stop 100 is the comet edge, not the far side.
 // The two halves of the light axis still pick primary vs clockwise ramps.
 //
 // Wrapper: Qt 6 ShaderEffect UBO, item-local Y-down coords.
@@ -19,8 +21,8 @@
 //
 // Gradient colors are packed as mat4 columns (std140-safe; ShaderEffect
 // array uniforms are a footgun). Positions are packed into two vec4s.
-// Nominal branch only for v1 (brightness <= 0); shimmer writes angle /
-// range / thick on the CPU.
+// brightness <= 0 is pulse identity (chrome always); shimmer writes
+// angle / range / thick on the CPU.
 
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
@@ -79,24 +81,32 @@ float shinyPosAt(vec4 p0, vec4 p1, int i) {
 }
 
 // Piecewise-linear chain over one half of the lit band: u 0 at the
-// facing support, 1 at the lobe edge. The 1e-4 guard turns coincident
-// stops into a hard step instead of a divide by zero.
-vec3 shinyRampColor(bool cw, float u) {
+// facing support, 1 at the lobe edge. Mixes RGB and A. The 1e-4 guard
+// turns coincident stops into a hard step instead of a divide by zero.
+vec4 shinyRampColor(bool cw, float u) {
     mat4 m0 = cw ? gradColorsCW0 : gradColors0;
     mat4 m1 = cw ? gradColorsCW1 : gradColors1;
     vec4 p0 = cw ? gradPosCW0 : gradPos0;
     vec4 p1 = cw ? gradPosCW1 : gradPos1;
     int  n  = cw ? gradCountCW : gradCount;
-    vec3 g  = shinyColAt(m0, m1, 0).rgb;
+    vec4 g  = shinyColAt(m0, m1, 0);
     for (int i = 1; i < MAX_STEPS; i++) {
         if (i >= n)
             break;
         float t0 = shinyPosAt(p0, p1, i - 1);
         float t1 = shinyPosAt(p0, p1, i);
-        vec3  c  = shinyColAt(m0, m1, i).rgb;
+        vec4  c  = shinyColAt(m0, m1, i);
         g = mix(g, c, clamp((u - t0) / max(t1 - t0, 1.0e-4), 0.0, 1.0));
     }
     return g;
+}
+
+// Pulse off (hz <= 0) is identity. Pulse on: the existing 0.5+0.5*sin
+// scales stop alpha. Twin of shinyPulseAlphaMul in runtime.cpp.
+float shinyPulseAlphaMul(float hz, float t) {
+    if (hz <= 0.0)
+        return 1.0;
+    return 0.5 + 0.5 * sin(t * hz * TAU);
 }
 
 // Premultiplied highlight over a straight-alpha wrap. Glow is not part of
@@ -143,24 +153,18 @@ void main() {
     // Negative cross = clockwise of the light axis (old t > 0.5 half).
     bool  cw = (light.x * pUp.y - light.y * pUp.x) < 0.0;
 
-    float pulse, spread, thickNow;
-    if (brightness <= 0.0) {
-        spread   = max(range, 0.04);
-        thickNow = thick;
-    } else {
-        pulse    = 0.5 + 0.5 * sin(time * brightness * TAU);
-        spread   = max(mix(range * 0.45, range * 1.35, pulse), 0.04);
-        thickNow = thick * mix(0.78, 1.18, pulse);
-    }
+    float spread   = max(range, 0.04);
+    float pulseMul = shinyPulseAlphaMul(brightness, time);
     // Stop list fills the comet: 0 at the facing support, 1 at spread.
-    // Past the lobe the last stop is held; cone alpha still crushes it.
+    // Past the lobe the last stop (RGB and A) is held.
     float uRamp = clamp(d0 / max(spread, 1.0e-4), 0.0, 1.0);
 
     float cone = 1.0 - smoothstep(0.0, spread, d0);
     cone       = pow(max(cone, 0.0), 1.65);
 
-    // Thickness breathes, and the lit side is locally thicker than the rest of the ring.
-    float localT = mix(thickNow * 0.38, thickNow, mix(0.15, 1.0, cone));
+    // Lit side is locally thicker than the rest of the ring. Pulse does
+    // not change thickness; shimmer already wrote thick on the CPU.
+    float localT = mix(thick * 0.38, thick, mix(0.15, 1.0, cone));
     localT       = max(localT, 1.0);
 
     float rIn = max(rOut - localT, 0.0);
@@ -191,22 +195,16 @@ void main() {
     if (cov < 0.002 && (baseColor.a <= 0.0 || wrapRing < 0.002))
         discard;
 
-    // Dim far side is a dark edge; the facing core blows toward white.
-    float hot = pow(cone, 2.6);
-    vec3  rgb;
+    // Highlight RGB/A from the stop (or colA→colB along the lobe). Specular
+    // white is a stop, not a mix toward vec3(1.0). Pulse scales alpha only.
+    vec4 stop;
     if (gradCount >= 2) {
-        // Stop 0 at the lit support, last stop at the lobe edge. Each half
-        // of the light axis runs facing → far, so the geometry itself is
-        // seamless; only mismatched endpoint colors between the halves
-        // can show a seam. Same brightness profile as the classic branch.
-        vec3 g = shinyRampColor(cw, uRamp);
-        rgb = mix(g * mix(0.22, 1.0, pow(cone, 0.9)), vec3(1.0), hot * 0.95);
+        stop = shinyRampColor(cw, uRamp);
     } else {
-        vec3 dim = colorSRGB.rgb * 0.22;
-        rgb      = mix(mix(dim, color.rgb, pow(cone, 0.9)), vec3(1.0), hot * 0.95);
+        stop = mix(color, colorSRGB, uRamp);
     }
-    float a            = cov * mix(0.055, 1.0, mix(pow(cone, 1.15), hot, 0.45));
-    vec4  highlight    = vec4(rgb * a, a);
+    float a         = clamp(stop.a * cov * pulseMul, 0.0, 1.0);
+    vec4  highlight = vec4(stop.rgb * a, a);
     fragColor          = shinyWrapComposite(highlight, baseColor, wrapRing);
     fragColor         *= qt_Opacity;
 }
