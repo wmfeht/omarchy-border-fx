@@ -705,8 +705,18 @@ static void checkRippleCrest() {
     CHECK(p8 < 0.1f * p1);
 
     CHECK(shinyRippleEnergy(0.3f, 0.8f, 0.f) == 0.3f);
-    CHECK(shinyRippleEnergy(0.3f, 0.8f, 1.f) == 0.8f);
-    CHECK(shinyRippleEnergy(0.9f, 0.8f, 1.f) == 0.9f);
+    CHECK(shinyRippleEnergy(0.9f, 0.2f, 0.f) == 0.9f);
+    CHECK(shinyRippleEnergy(0.9f, 0.2f, 1.f) == 0.2f);
+    CHECK(shinyRippleEnergy(0.9f, 0.2f, 1.f) < 0.9f);
+
+    CHECK(shinyRippleHighlightAlpha(0.f, 1.f, 0.8f, 0.85f, 1.f) > 0.f);
+    CHECK(shinyRippleHighlightAlpha(0.f, 1.f, 0.8f, 0.85f, 1.f) ==
+          shinyRippleEnergy(0.f, 0.8f, 0.85f));
+    CHECK(shinyRippleHighlightAlpha(0.f, 0.5f, 0.8f, 0.85f, 1.f) ==
+          shinyRippleEnergy(0.f, 0.8f, 0.85f) * 0.5f);
+    CHECK(shinyRippleHighlightAlpha(1.f, 0.4f, 0.2f, 0.85f, 1.f) ==
+          shinyRippleEnergy(1.f, 0.2f, 0.85f) * 0.4f);
+    CHECK(shinyRippleHighlightAlpha(0.9f, 1.f, 0.1f, 0.f, 1.f) == 0.9f);
 
     CHECK(shinyEffectDraws(nullptr));
     CHECK(shinyEffectDraws(""));

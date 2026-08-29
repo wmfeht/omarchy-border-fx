@@ -251,7 +251,7 @@ only (chrome ignores the key).
 | `pulseHz` | number | `0.4` | both | Pulse rate. `0` disables. Hyprland clamps `0…4`. |
 | `rippleFreq` | number | `0.025` | both | Ripple spatial `k` (1/px). Dedicated default (modest). Hyprland clamps `0.001…0.2`. |
 | `rippleSpeed` | number | `2` | both | Ripple temporal speed. Dedicated default (slow). Hyprland clamps `0…40`. |
-| `rippleGain` | number | `0.85` | both | Mix crests into cone/glow. `0` matches shiny lighting. Hyprland clamps `0…2`. |
+| `rippleGain` | number | `0.85` | both | Blend from the shiny comet (`0`) to crest-only lighting (`1`). `0` matches shiny. Hyprland clamps `0…2`. |
 | `ripplePower` | number | `8` | both | `pow` on the sine lobe; higher = thinner bands. Hyprland clamps `1…16`. |
 
 Hyprland adapter keys (what you see in generated lua / `plugin:shiny-border:*`)

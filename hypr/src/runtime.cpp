@@ -84,7 +84,15 @@ float shinyRippleCrest(float r, float t, float freq, float speed, float power) {
 }
 
 float shinyRippleEnergy(float cone, float crest, float gain) {
-    return std::max(cone, gain * crest);
+    const float g        = std::clamp(gain, 0.f, 1.f);
+    const float crestLit = std::clamp(gain * crest, 0.f, 1.f);
+    return cone * (1.f - g) + crestLit * g;
+}
+
+float shinyRippleHighlightAlpha(float stopA, float cov, float crest, float gain, float pulseMul) {
+    const float g        = std::clamp(gain, 0.f, 1.f);
+    const float crestLit = std::clamp(gain * crest, 0.f, 1.f);
+    return std::clamp((stopA * (1.f - g) + crestLit * g) * cov * pulseMul, 0.f, 1.f);
 }
 
 float shinyRippleTime(double clockSeconds) {

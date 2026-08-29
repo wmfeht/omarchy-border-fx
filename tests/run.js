@@ -451,7 +451,14 @@ function checkRippleCrest() {
   check(p8 < p1, "high power is sparser than power 1")
   check(p8 < 0.1 * p1, "power 8 is much thinner than power 1")
   check(Ripple.energy(0.3, 0.8, 0) === 0.3, "gain 0 energy matches cone (shiny)")
-  check(Ripple.energy(0.3, 0.8, 1) === 0.8, "gain 1 energy is max(cone, crest)")
+  check(Ripple.energy(0.9, 0.2, 1) === 0.2, "gain 1 replaces cone with crest")
+  check(Ripple.energy(0.9, 0.2, 1) < 0.9, "gain 1 does not keep the shiny cone")
+  check(Ripple.highlightAlpha(0, 1, 0.8, 0.85) > 0, "transparent stop still flashes from crest")
+  check(Ripple.highlightAlpha(0, 1, 0.8, 0.85) === Ripple.energy(0, 0.8, 0.85),
+        "transparent-stop alpha follows crest energy")
+  check(Ripple.highlightAlpha(1, 0.4, 0.2, 0.85) === Ripple.energy(1, 0.2, 0.85) * 0.4,
+        "opaque-stop alpha blends comet toward crest")
+  check(Ripple.highlightAlpha(0.9, 1, 0.1, 0) === 0.9, "gain 0 highlight alpha is stop.a * cov")
   check(Look.effectDraws("ripple") === true, "Look.effectDraws ripple")
   check(Look.effectDraws("other") === false, "Look.effectDraws unknown")
 }
@@ -483,7 +490,12 @@ function checkSharedShaderBake() {
   check(lighting.indexOf("rippleGain") === -1, "shiny lighting has no ripple uniforms")
   check(rippleLighting.indexOf("vec4 rippleLightingColor") !== -1, "ripple lighting defines rippleLightingColor")
   check(rippleLighting.indexOf("rippleGain * crest") !== -1, "ripple lighting mixes crest via gain")
-  check(rippleLighting.indexOf("max(cone,") !== -1, "ripple lighting uses max into cone energy")
+  check(rippleLighting.indexOf("mix(cone, crestLit, gBlend)") !== -1,
+        "ripple lighting blends cone to crest (swap, not max-stack)")
+  check(rippleLighting.indexOf("mix(stop.a, crestLit, gBlend)") !== -1,
+        "ripple lighting blends stop alpha to crest")
+  check(rippleLighting.indexOf("max(cone, rippleGain * crest)") === -1,
+        "ripple lighting does not stack crest on a full shiny cone")
   check(rippleLighting.indexOf("texture(") === -1, "ripple lighting does not texture()")
   check(rippleQt.indexOf('#include "ripple-lighting.frag"') !== -1, "ripple qt wrapper includes ripple lighting")
   check(rippleGles.indexOf('#include "ripple-lighting.frag"') !== -1, "ripple gles wrapper includes ripple lighting")

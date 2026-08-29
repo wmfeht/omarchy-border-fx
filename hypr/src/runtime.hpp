@@ -126,6 +126,7 @@ bool shinyEffectIsRipple(const char* effect);
 // energy = max(cone, gain * crest); gain 0 matches shiny lighting.
 float shinyRippleCrest(float r, float t, float freq, float speed, float power);
 float shinyRippleEnergy(float cone, float crest, float gain);
+float shinyRippleHighlightAlpha(float stopA, float cov, float crest, float gain, float pulseMul);
 
 // Live clock for crest (and for pulse-on-ripple). Wrap so float time
 // keeps sub-frame precision; not the pulse 1/hz wrap.

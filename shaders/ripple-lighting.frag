@@ -63,7 +63,12 @@ vec4 rippleLightingColor(vec2 p, vec2 size, float opacity) {
     float phase = rPx * rippleFreq - time * rippleSpeed;
     float wave  = sin(phase);
     float crest = pow(max(wave, 0.0), max(ripplePower, 1.0));
-    float energy = max(cone, rippleGain * crest);
+    // Swap, don't stack: gain 0 is the shiny comet, gain 1 is crest-only.
+    // max(cone, crest) left the facing lobe at full strength so both looks
+    // read as on at once.
+    float gBlend   = clamp(rippleGain, 0.0, 1.0);
+    float crestLit = clamp(rippleGain * crest, 0.0, 1.0);
+    float energy   = mix(cone, crestLit, gBlend);
 
     float rIn = max(rOut - localT, 0.0);
     vec2  bIn = max(bOut - vec2(localT), vec2(0.5));
@@ -93,8 +98,7 @@ vec4 rippleLightingColor(vec2 p, vec2 size, float opacity) {
     } else {
         stop = mix(color, colorSRGB, uRamp);
     }
-    float flash     = max(cov, rippleGain * crest * ring);
-    float a         = clamp(stop.a * flash * pulseMul, 0.0, 1.0);
+    float a         = clamp(mix(stop.a, crestLit, gBlend) * cov * pulseMul, 0.0, 1.0);
     vec4  highlight = vec4(stop.rgb * a, a);
     return shinyWrapComposite(highlight, baseColor, wrapRing) * opacity;
 }
