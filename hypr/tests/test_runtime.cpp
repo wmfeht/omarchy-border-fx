@@ -622,6 +622,63 @@ static void checkUpdateWindowActions() {
     CHECK(a.damage);
 }
 
+static void checkGradientCache() {
+    uint64_t stops[SHINY_MAX_GRADIENT_STEPS] = {0xffff0000ULL, 0xff00ff00ULL, 0xff0000ffULL};
+    ShinyGradientCache cache;
+
+    const auto a = shinyGradientCacheEnsure(cache, "0 70 100", 3, stops, nullptr, 0, "");
+    CHECK(cache.resolves == 1);
+    CHECK(a.customPos);
+    CHECK(std::fabs(a.stopPos[1] - 0.7f) < 1e-6f);
+    const float firstMid = a.stopPos[1];
+    const int   firstCw  = a.cw.count;
+
+    const auto b = shinyGradientCacheEnsure(cache, "0 70 100", 3, stops, nullptr, 0, "");
+    CHECK(cache.resolves == 1); // same spec → no re-tokenize
+    CHECK(b.stopPos[1] == firstMid);
+    CHECK(b.cw.count == firstCw);
+    CHECK(b.customPos == a.customPos);
+
+    const auto c = shinyGradientCacheEnsure(cache, "0 30 100", 3, stops, nullptr, 0, "");
+    CHECK(cache.resolves == 2);
+    CHECK(c.customPos);
+    CHECK(std::fabs(c.stopPos[1] - 0.3f) < 1e-6f);
+    CHECK(c.stopPos[1] != firstMid);
+
+    const uint64_t own[] = {0xffffffffULL, 0xff000000ULL};
+    const auto d = shinyGradientCacheEnsure(cache, "0 30 100", 3, stops, own, 2, "20 80");
+    CHECK(cache.resolves == 3);
+    CHECK(d.cw.count == 2);
+    CHECK(std::fabs(d.cw.pos[0] - 0.2f) < 1e-6f);
+    CHECK(std::fabs(d.cw.pos[1] - 0.8f) < 1e-6f);
+
+    const auto e = shinyGradientCacheEnsure(cache, "0 30 100", 3, stops, own, 2, "20 80");
+    CHECK(cache.resolves == 3);
+    CHECK(e.cw.count == d.cw.count);
+    CHECK(e.cw.pos[0] == d.cw.pos[0]);
+}
+
+static void checkFallbackEmergencyPaint() {
+    // Pulse off is identity. Pulse on uses the shipped pulse mul, not a
+    // second sine oracle, and is not identity.
+    const auto offU = shinyPulseUniforms(false, 12.5, 0.4f);
+    CHECK(shinyFallbackPassAlpha(0.8f, false, offU.time, offU.pulseHz) == 0.8f);
+
+    const auto onU = shinyPulseUniforms(true, 12.5, 0.4f);
+    CHECK(onU.pulseHz > 0.f);
+    const float onA = shinyFallbackPassAlpha(0.8f, true, onU.time, onU.pulseHz);
+    CHECK(onA != 0.8f);
+    CHECK(onA == 0.8f * shinyPulseAlphaMul(onU.pulseHz, onU.time));
+    CHECK(shinyFallbackPassAlpha(1.f, true, 0.f, 1.f) != 1.f);
+    CHECK(shinyFallbackPassAlpha(1.f, true, 0.f, 1.f) == shinyPulseAlphaMul(1.f, 0.f));
+
+    // Heading still reaches fallback via the shared pinned heading.
+    CHECK(shinyPinnedHeading(120, 0) != 0.f);
+
+    // wrap / baseColor, mirror two-head, and the clockwise half stay
+    // shader-only (the linear pass is not the shared look).
+}
+
 int main() {
     checkShippedDecisions();
     checkPulseDecisions();
@@ -632,9 +689,11 @@ int main() {
     checkGradientPositions();
     checkGradientLobeU();
     checkGradientCwSide();
+    checkGradientCache();
     checkWrapComposite();
     checkEffectiveBorderSize();
     checkUpdateWindowActions();
+    checkFallbackEmergencyPaint();
 
     if (g_fails) {
         std::fprintf(stderr, "%d checks failed\n", g_fails);

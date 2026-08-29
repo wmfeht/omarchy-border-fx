@@ -496,6 +496,7 @@ function checkShimmerParity() {
         bin,
         path.join(root, "hypr/tests/dump_shimmer.cpp"),
         path.join(root, "hypr/src/runtime.cpp"),
+        path.join(root, "hypr/src/shimmer.cpp"),
       ],
       { encoding: "utf8", timeout: 60000 }
     )
@@ -937,6 +938,8 @@ function checkOverlayAttachWiring() {
   check(service.indexOf("OverlayAttach.isNotificationCard") !== -1, "Service uses OverlayAttach.isNotificationCard")
   check(service.indexOf("OverlayAttach.decideHostSync") !== -1, "Service uses OverlayAttach.decideHostSync")
   check(service.indexOf("OverlayAttach.applyCardPolicy") !== -1, "Service uses OverlayAttach.applyCardPolicy")
+  check(service.indexOf('objectName === "qs-border-fx"') !== -1,
+        "leftover qs-border-fx chrome children are still discovered so they can be dropped")
   check(service.indexOf("function isBarPanelHost") === -1, "no QML-only isBarPanelHost copy")
   check(service.indexOf("function isOverlayHost") === -1, "no QML-only isOverlayHost copy")
   check(service.indexOf("function isNotificationCard") === -1, "no QML-only isNotificationCard copy")
@@ -973,6 +976,57 @@ function checkOverlayAttachWiring() {
   check(discover.indexOf("onTriggered: root.syncAll()") !== -1, "discover timer calls syncAll, not a borderSpec rewrite")
   check(!/card\.borderSpec\s*=/.test(discover), "discover timer does not assign card.borderSpec")
   check(!/card\.clip\s*=/.test(discover), "discover timer does not assign card.clip")
+}
+
+function checkOverlayRevStamp() {
+  const service = fs.readFileSync(path.join(root, "Service.qml"), "utf8")
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"))
+  const m = /readonly property int overlayRev:\s*(-?\d+)/.exec(service)
+  check(!!m, "overlayRev is a dedicated integer property")
+  const rev = m ? Number(m[1]) : NaN
+  check(Number.isInteger(rev), "overlayRev is an integer stamp")
+  check(service.indexOf("Number(manifest.version)") === -1, "overlayRev is not Number(manifest.version)")
+  check(String(rev) !== String(Number("1.1.0")), 'Number("1.1.0") is not the overlay stamp')
+  check(String(rev) !== String(Number(manifest.version)), "overlayRev is not package semver")
+
+  const OA = loadPragmaLibrary("qml/OverlayAttach.js")
+  const overlay = makeOverlay(true)
+  const current = { attached: [], overlayOf: new Map(), overlayRev: rev }
+  current.overlayOf.set(overlay.card, { overlayRev: rev - 1 })
+  const replaced = driveSync(OA, current, overlay.host, overlay.card)
+  check(replaced.decision.action === "replace", "stale vs current overlayRev still drop-and-replace")
+  check(replaced.result.overlayAction === "replace", "stale stamp overlayAction replace")
+  check(replaced.overlay && replaced.overlay.overlayRev === rev, "replacement uses the integer overlay stamp")
+}
+
+function checkCiConfig() {
+  const ghDir = path.join(root, ".github/workflows")
+  const gitlab = path.join(root, ".gitlab-ci.yml")
+  let text = ""
+  let found = ""
+  if (fs.existsSync(ghDir)) {
+    for (const f of fs.readdirSync(ghDir)) {
+      if (!/\.(yml|yaml)$/.test(f)) continue
+      const body = fs.readFileSync(path.join(ghDir, f), "utf8")
+      if (body.indexOf("mise run test") !== -1 || /node tests\//.test(body)) {
+        text = body
+        found = ".github/workflows/" + f
+        break
+      }
+    }
+  }
+  if (!text && fs.existsSync(gitlab)) {
+    const body = fs.readFileSync(gitlab, "utf8")
+    if (body.indexOf("mise run test") !== -1 || /node tests\//.test(body)) {
+      text = body
+      found = ".gitlab-ci.yml"
+    }
+  }
+  check(!!found, "repo has a CI config that runs compositor-free tests")
+  check(
+    text.indexOf("mise run test") !== -1 || /node tests\/(run|look|hypr-session)/.test(text),
+    "CI job invokes compositor-free tests (" + found + ")"
+  )
 }
 
 function checkEnsureStatusReady() {
@@ -1087,6 +1141,8 @@ checkEnsureStatusReady()
 checkGlowCoverage()
 checkOverlayAttach()
 checkOverlayAttachWiring()
+checkOverlayRevStamp()
+checkCiConfig()
 checkPluginRoot()
 
 if (fails) {

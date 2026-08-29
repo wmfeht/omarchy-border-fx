@@ -171,6 +171,10 @@ CShinyPassElement::~CShinyPassElement() {
 }
 
 std::vector<UP<IPassElement>> shinyLinearFallbackElements(const CShinyPassElement::SData& data, float monitorScale) {
+    // Emergency paint only. Heading is data.angle; pulse may scale alpha
+    // via shinyFallbackPassAlpha. wrap / baseColor, mirror two-head, and
+    // the clockwise half are shader-only — CBorderPassElement is a plain
+    // linear gradient of the primary side, not the shared look.
     const auto mapped    = shinyMapDrawBackends(data.shared, monitorScale);
     CBox       windowBox = data.box.copy().expand(-mapped.fallback.expandPx).round();
 
@@ -198,7 +202,7 @@ std::vector<UP<IPassElement>> shinyLinearFallbackElements(const CShinyPassElemen
     bd.round         = mapped.fallback.shared.rounding;
     bd.outerRound    = mapped.fallback.shared.outerRound;
     bd.roundingPower = mapped.fallback.shared.roundingPower;
-    bd.a             = mapped.fallback.shared.a;
+    bd.a             = shinyFallbackPassAlpha(mapped.fallback.shared.a, data.pulseHz > 0.f, data.time, data.pulseHz);
     bd.borderSize    = mapped.fallback.shared.borderSize;
     bd.window        = data.window;
 

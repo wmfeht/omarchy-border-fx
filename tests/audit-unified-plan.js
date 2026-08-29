@@ -42,7 +42,11 @@ check(st.size > 0, "plan is non-empty")
 check(planRel.endsWith(".md"), "plan path is markdown")
 check(Buffer.byteLength(text, "utf8") === st.size, "read the whole plan file")
 
-check(has(text, "qs-shiny-border"), "mentions qs-shiny-border")
+const manifestPath = path.join(root, "manifest.json")
+check(fs.existsSync(manifestPath), "manifest.json exists")
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+check(typeof manifest.id === "string" && manifest.id.length > 0, "manifest.json has a plugin id")
+check(has(text, manifest.id), "plan mentions shipped plugin id (" + manifest.id + ")")
 check(has(text, "hypr-shiny-border"), "mentions hypr-shiny-border")
 
 check(

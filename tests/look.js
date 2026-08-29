@@ -215,7 +215,8 @@ function checkLookApply() {
   check(/base_color\s*=\s*"rgba\(00687855\)"/.test(lua), "lua includes Hyprland adapter base_color")
   check(lua.indexOf("hl.plugin.load") !== -1, "login load of session .so")
   check(lua.indexOf("hyprland.start") !== -1, "load on hyprland.start, not during parse")
-  check(lua.indexOf("__qs_border_fx_start") !== -1, "start guard uses border-fx name")
+  check(lua.indexOf("__wmfeht_border_fx_start") !== -1, "start guard uses wmfeht/border-fx name")
+  check(lua.indexOf("__qs_border_fx_start") === -1, "start guard does not use leftover qs_ token")
   check(lua.indexOf("shinyLoaded") !== -1, "gated on loaded plugins")
   check(lua.indexOf("/tmp/omarchy-border-fx-test.so") !== -1, "session so path")
 

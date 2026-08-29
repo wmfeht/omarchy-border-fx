@@ -30,6 +30,8 @@ TEST_RELOAD   := tests/test_reload
 TEST_VISUAL   := tests/test_visual
 DUMP_SHIMMER  := tests/dump_shimmer
 TESTS         := $(TEST_TEARDOWN) $(TEST_RUNTIME) $(TEST_RELOAD) $(TEST_VISUAL) $(DUMP_SHIMMER)
+# Hyprland-free logic: geometry/VAO/backend + gradient + shimmer/pulse.
+LOGIC_OBJ     := $(OBJ_DIR)/runtime.o $(OBJ_DIR)/gradient.o $(OBJ_DIR)/shimmer.o
 
 # Compiler identity objects were built with. Recipe is forced so a different
 # $(CXX) -dumpmachine/-dumpversion rewrites the stamp and rebuilds .o files.
@@ -73,17 +75,17 @@ test: test-logic
 $(TEST_TEARDOWN): tests/test_teardown.cpp $(OBJ_DIR)/teardown.o
 	$(CXX) -std=gnu++26 -O2 -g -o $@ tests/test_teardown.cpp $(OBJ_DIR)/teardown.o
 
-$(TEST_RUNTIME): tests/test_runtime.cpp $(OBJ_DIR)/runtime.o
-	$(CXX) -std=gnu++26 -O2 -g -o $@ tests/test_runtime.cpp $(OBJ_DIR)/runtime.o
+$(TEST_RUNTIME): tests/test_runtime.cpp $(LOGIC_OBJ)
+	$(CXX) -std=gnu++26 -O2 -g -o $@ tests/test_runtime.cpp $(LOGIC_OBJ)
 
-$(TEST_RELOAD): tests/test_reload.cpp $(OBJ_DIR)/runtime.o
-	$(CXX) -std=gnu++26 -O2 -g -o $@ tests/test_reload.cpp $(OBJ_DIR)/runtime.o
+$(TEST_RELOAD): tests/test_reload.cpp $(LOGIC_OBJ)
+	$(CXX) -std=gnu++26 -O2 -g -o $@ tests/test_reload.cpp $(LOGIC_OBJ)
 
-$(TEST_VISUAL): tests/test_visual.cpp $(OBJ_DIR)/runtime.o
-	$(CXX) -std=gnu++26 -O2 -g -o $@ tests/test_visual.cpp $(OBJ_DIR)/runtime.o
+$(TEST_VISUAL): tests/test_visual.cpp $(LOGIC_OBJ)
+	$(CXX) -std=gnu++26 -O2 -g -o $@ tests/test_visual.cpp $(LOGIC_OBJ)
 
-$(DUMP_SHIMMER): tests/dump_shimmer.cpp $(OBJ_DIR)/runtime.o
-	$(CXX) -std=gnu++26 -O2 -g -o $@ tests/dump_shimmer.cpp $(OBJ_DIR)/runtime.o
+$(DUMP_SHIMMER): tests/dump_shimmer.cpp $(OBJ_DIR)/shimmer.o
+	$(CXX) -std=gnu++26 -O2 -g -o $@ tests/dump_shimmer.cpp $(OBJ_DIR)/shimmer.o
 
 clean:
 	rm -rf obj $(PLUGIN).so compile_flags.txt $(TESTS)

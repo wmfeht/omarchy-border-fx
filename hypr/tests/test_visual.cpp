@@ -442,13 +442,30 @@ static void checkProductionWiring() {
     const std::string plug    = readFile(sourceDir() + "/main.cpp");
     const std::string hdr     = readFile(sourceDir() + "/deco.hpp");
     const std::string cfg     = readFile(sourceDir() + "/globals.hpp");
-    const std::string runtime = readFile(sourceDir() + "/runtime.hpp");
+    const std::string runtime      = readFile(sourceDir() + "/runtime.hpp");
+    const std::string gradientHdr  = readFile(sourceDir() + "/gradient.hpp");
+    const std::string shimmerHdr   = readFile(sourceDir() + "/shimmer.hpp");
+    const std::string gradientCpp  = readFile(sourceDir() + "/gradient.cpp");
+    const std::string shimmerCpp   = readFile(sourceDir() + "/shimmer.cpp");
+    const std::string logicHdr     = runtime + gradientHdr + shimmerHdr;
     CHECK(!deco.empty());
     CHECK(!pass.empty());
     CHECK(!plug.empty());
     CHECK(!hdr.empty());
     CHECK(!cfg.empty());
     CHECK(!runtime.empty());
+    CHECK(!gradientHdr.empty());
+    CHECK(!shimmerHdr.empty());
+    CHECK(!gradientCpp.empty());
+    CHECK(!shimmerCpp.empty());
+
+    // Hyprland-free split mirrors qml/Gradient.js / qml/Shimmer.js.
+    CHECK(gradientHdr.find("shinyGradientResolvePositions") != std::string::npos);
+    CHECK(shimmerHdr.find("shinyShimmerStep") != std::string::npos);
+    CHECK(shimmerHdr.find("shinyPulseAlphaMul") != std::string::npos);
+    CHECK(runtime.find("bool shinyGradientResolvePositions(") == std::string::npos);
+    CHECK(runtime.find("void shinyShimmerStep(") == std::string::npos);
+    CHECK(runtime.find("float shinyPulseAlphaMul(") == std::string::npos);
 
     CHECK(deco.find("data.angle") != std::string::npos);
     CHECK(deco.find("m_angle") == std::string::npos);
@@ -490,10 +507,10 @@ static void checkProductionWiring() {
     CHECK(deco.find("shinyGpuHeading") == std::string::npos);
     CHECK(plug.find("shinyQuantizeHeading") == std::string::npos);
     CHECK(deco.find("shinyQuantizeHeading") == std::string::npos);
-    CHECK(runtime.find("shinyGpuHeading") == std::string::npos);
-    CHECK(runtime.find("shinyQuantizeHeading") == std::string::npos);
-    CHECK(runtime.find("shinyShouldDamageHeading") == std::string::npos);
-    CHECK(runtime.find("shinyPinnedHeading") != std::string::npos);
+    CHECK(logicHdr.find("shinyGpuHeading") == std::string::npos);
+    CHECK(logicHdr.find("shinyQuantizeHeading") == std::string::npos);
+    CHECK(logicHdr.find("shinyShouldDamageHeading") == std::string::npos);
+    CHECK(logicHdr.find("shinyPinnedHeading") != std::string::npos);
 
     // Gradient is one native gradient key, clamped through the shared count
     // helper, and the fallback consumes the same stop list as the shader.
@@ -505,24 +522,35 @@ static void checkProductionWiring() {
     CHECK(pass.find("gradCount") != std::string::npos);
     CHECK(pass.find("m_data.shared.stops") != std::string::npos);
 
-    // Stop positions: one string key resolved CPU-side (even or custom),
-    // uploaded as gradPos, and baked into the fallback by resampling.
+    // Stop positions: resolved on spec change (cached), copied into the
+    // draw payload, uploaded as gradPos, baked into fallback by resampling.
+    // deco draw() must not tokenize the raw position / CW strings.
     CHECK(plug.find("plugin:shiny-border:gradient_positions") != std::string::npos);
-    CHECK(deco.find("shinyGradientResolvePositions") != std::string::npos);
+    CHECK(deco.find("shinyGradientCacheEnsure") != std::string::npos);
+    CHECK(deco.find("shinyGradientResolvePositions") == std::string::npos);
+    CHECK(deco.find("strtof") == std::string::npos);
     CHECK(deco.find("shinyLinearFallbackElements") != std::string::npos);
     CHECK(pass.find("shinyGradientSample") != std::string::npos);
-    CHECK(runtime.find("shinyGradientLobeU") != std::string::npos);
+    CHECK(logicHdr.find("shinyGradientLobeU") != std::string::npos);
     CHECK(pass.find("glUniform1fv") != std::string::npos);
     CHECK(pass.find("m_data.shared.stopPos") != std::string::npos);
 
-    // Clockwise half: resolved through the shared helper in the deco and
-    // uploaded as its own uniform trio. The fallback linear gradient
-    // cannot represent asymmetry and stays primary-side.
+    // Clockwise half: cached with the primary spec, uploaded as its own
+    // uniform trio. The fallback linear gradient cannot represent
+    // asymmetry and stays primary-side (shader-only).
     CHECK(plug.find("plugin:shiny-border:gradient_cw") != std::string::npos);
     CHECK(plug.find("plugin:shiny-border:gradient_positions_cw") != std::string::npos);
-    CHECK(deco.find("shinyGradientResolveCwSide") != std::string::npos);
+    CHECK(deco.find("shinyGradientResolveCwSide") == std::string::npos);
     CHECK(pass.find("gradColorsCW") != std::string::npos);
     CHECK(pass.find("m_data.shared.stopsCW") != std::string::npos);
+
+    // Emergency fallback: heading (drawAngle) + pulse alpha. wrap /
+    // baseColor, mirror two-head, and CW stay shader-only.
+    CHECK(deco.find("fallback.angle") != std::string::npos);
+    CHECK(deco.find("drawAngle") != std::string::npos);
+    CHECK(pass.find("shinyFallbackPassAlpha") != std::string::npos);
+    CHECK(pass.find("shader-only") != std::string::npos);
+    CHECK(logicHdr.find("shader-only") != std::string::npos);
 
     // baseColor: config key + draw payload + raw glUniform (no CShader slot).
     CHECK(plug.find("plugin:shiny-border:base_color") != std::string::npos);

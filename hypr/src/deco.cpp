@@ -23,6 +23,9 @@
 using namespace Hyprutils::Memory;
 using namespace Desktop::View;
 
+// Positions / CW resolve on spec change, not every deco draw().
+static ShinyGradientCache g_gradCache;
+
 CShinyBorder::CShinyBorder(PHLWINDOW window) : IHyprWindowDecoration(window), m_window(window) {
     m_lastPos  = window->position(IGeometric::GEOMETRIC_CURRENT);
     m_lastSize = window->size(IGeometric::GEOMETRIC_CURRENT);
@@ -238,24 +241,26 @@ void CShinyBorder::draw(PHLMONITOR pMonitor, float const& a) {
     shared.stopCount        = shinyGradientStepCount(sc<int>(gradientCfg.m_colors.size()));
     for (int i = 0; i < shared.stopCount; i++)
         shared.stops[i] = sc<uint64_t>(gradientCfg.m_colors[sc<size_t>(i)].getAsHex());
-    const bool customPos = shinyGradientResolvePositions(g_cfg.gradientPositions->value().c_str(),
-                                                         shared.stopCount, shared.stopPos);
 
     // Clockwise half: mirrors the primary side unless gradient_cw /
     // gradient_positions_cw override it. Only the shader can draw the
     // asymmetry — the fallback linear gradient stays primary-side.
+    // Position / CW strings are resolved on spec change (cached), not
+    // tokenized from the raw spec on every draw().
     const auto& gradientCwCfg = g_cfg.gradientCw->value();
     uint64_t    cwColors[SHINY_MAX_GRADIENT_STEPS] = {};
     const int   cwColorCount = shinyGradientStepCount(sc<int>(gradientCwCfg.m_colors.size()));
     for (int i = 0; i < cwColorCount; i++)
         cwColors[i] = sc<uint64_t>(gradientCwCfg.m_colors[sc<size_t>(i)].getAsHex());
-    ShinyGradientSide cwSide;
-    shinyGradientResolveCwSide(shared.stops, shared.stopPos, shared.stopCount, cwColors, cwColorCount,
-                               g_cfg.gradientPositionsCw->value().c_str(), cwSide);
-    shared.stopCountCW = cwSide.count;
+    const auto ramp = shinyGradientCacheEnsure(g_gradCache, g_cfg.gradientPositions->value().c_str(),
+                                               shared.stopCount, shared.stops, cwColors, cwColorCount,
+                                               g_cfg.gradientPositionsCw->value().c_str());
+    const bool customPos = ramp.customPos;
+    shared.stopCountCW   = ramp.cw.count;
     for (int i = 0; i < SHINY_MAX_GRADIENT_STEPS; i++) {
-        shared.stopsCW[i]   = cwSide.stops[i];
-        shared.stopPosCW[i] = cwSide.pos[i];
+        shared.stopPos[i]   = ramp.stopPos[i];
+        shared.stopsCW[i]   = ramp.cw.stops[i];
+        shared.stopPosCW[i] = ramp.cw.pos[i];
     }
 
     const auto mapped = shinyMapDrawBackends(shared, pMonitor->m_scale);
@@ -273,31 +278,37 @@ void CShinyBorder::draw(PHLMONITOR pMonitor, float const& a) {
         thickScale = shinyShimmerThickScale(m_shimmer.scale.value);
     }
 
+    const double seconds =
+        std::chrono::duration<double>(Time::steadyNow() - g_pHyprRenderer->m_globalTimer.chrono()).count();
+    // Shimmer is exclusive with pulse: zero uniforms take the shader's
+    // nominal branch, and the shimmer channels modulate angle/lobe here.
+    const auto pulseU = shinyPulseUniforms(mode == SHINY_EFFECT_PULSE, seconds, sc<float>(g_cfg.pulseHz->value()));
+
     if (ensureShinyShader()) {
         CShinyPassElement::SData data;
-        data.shared = mapped.shader;
-        data.box    = outerBox;
-        data.angle  = drawAngle;
-        const double seconds =
-            std::chrono::duration<double>(Time::steadyNow() - g_pHyprRenderer->m_globalTimer.chrono()).count();
-        // Shimmer is exclusive with pulse: zero uniforms take the shader's
-        // nominal branch, and the shimmer channels modulate angle/lobe here.
-        const auto pulseU = shinyPulseUniforms(mode == SHINY_EFFECT_PULSE, seconds, sc<float>(g_cfg.pulseHz->value()));
-        data.time         = pulseU.time;
-        data.pulseHz      = pulseU.pulseHz;
-        data.lobe         = lobe;
-        data.thickScale   = thickScale;
-        data.mirror       = g_cfg.mirror->value();
-        data.customPos    = customPos;
-        data.window       = m_window;
+        data.shared     = mapped.shader;
+        data.box        = outerBox;
+        data.angle      = drawAngle;
+        data.time       = pulseU.time;
+        data.pulseHz    = pulseU.pulseHz;
+        data.lobe       = lobe;
+        data.thickScale = thickScale;
+        data.mirror     = g_cfg.mirror->value();
+        data.customPos  = customPos;
+        data.window     = m_window;
         g_pHyprRenderer->addPassElement(makeUnique<CShinyPassElement>(data));
         return;
     }
 
+    // Emergency linear paint: heading still reaches the fallback via
+    // drawAngle; pulse scales fallback alpha. wrap / baseColor, mirror
+    // two-head, and the clockwise half stay shader-only.
     CShinyPassElement::SData fallback;
     fallback.shared    = mapped.fallback.shared;
     fallback.box       = outerBox;
     fallback.angle     = drawAngle;
+    fallback.time      = pulseU.time;
+    fallback.pulseHz   = pulseU.pulseHz;
     fallback.customPos = customPos;
     fallback.window    = m_window;
     for (auto& el : shinyLinearFallbackElements(fallback, pMonitor->m_scale))

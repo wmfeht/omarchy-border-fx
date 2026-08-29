@@ -21,7 +21,7 @@ class CShinyPassElement : public IPassElement {
         CBox            box;      // scaled, monitor-local, outer; includes m_floatingOffset
         float           angle   = 0.f; // drawn heading, radians: pinDeg + offset, plus shimmer
         float           time    = 0.f;
-        float           pulseHz = 0.4f;
+        float           pulseHz = 0.f; // 0 = pulse off (identity alpha on fallback)
         float           lobe    = 0.18f; // effective half-width; shimmer scale already applied
         float           thickScale = 1.f; // shimmer thickness modulation; 1 when not shimmering
         bool            mirror     = false; // same lobe on the far support; off = facing-only

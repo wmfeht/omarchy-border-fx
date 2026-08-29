@@ -24,6 +24,7 @@ fi
 mkdir -p "$dest/qml" "$dest/shaders" "$dest/scripts" "$dest/hypr/src"
 cp -f "$root/manifest.json" "$root/Service.qml" "$dest/"
 cp -f "$root/qml/"*.qml "$root/qml/"*.js "$dest/qml/"
+cp -f "$root/shaders/shiny.frag" "$dest/shaders/"
 cp -f "$root/shaders/shiny.frag.qsb" "$dest/shaders/"
 cp -f "$root/scripts/paths.sh" \
       "$root/scripts/hypr-session.sh" \

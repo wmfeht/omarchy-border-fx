@@ -121,6 +121,50 @@ function checkScriptShape() {
   )
 
   check(install.indexOf("hypr-session.sh") !== -1, "mise install copies hypr-session.sh")
+  check(
+    /shaders\/shiny\.frag"/.test(install) && /shaders\/shiny\.frag\.qsb"/.test(install),
+    "install copies shaders/shiny.frag and shaders/shiny.frag.qsb"
+  )
+}
+
+function checkInstallCopiesFrag() {
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), "border-fx-install-"))
+  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "border-fx-install-bin-"))
+  try {
+    // omarchy lives in /usr/bin on this machine. A PATH of /usr/bin:/bin
+    // still sees it and would enable/restart the live shell. Expose only
+    // the copy tools so this is a real install-copy, not plugin add.
+    const tools = ["bash", "cp", "mkdir", "chmod", "realpath", "dirname", "id"]
+    for (const cmd of tools) {
+      const src = ["/usr/bin/" + cmd, "/bin/" + cmd].find((p) => fs.existsSync(p))
+      check(!!src, "install-copy PATH has " + cmd)
+      if (src)
+        fs.symlinkSync(src, path.join(binDir, cmd))
+    }
+    check(!fs.existsSync(path.join(binDir, "omarchy")), "install-copy PATH cannot see omarchy")
+    const r = spawnSync(path.join(binDir, "bash"), [path.join(root, "scripts/install.sh")], {
+      encoding: "utf8",
+      env: Object.assign({}, process.env, {
+        OMARCHY_PLUGIN_DIR: dest,
+        PATH: binDir,
+      }),
+    })
+    check(r.status === 0, "install.sh exits 0 without omarchy: " + (r.stderr || r.stdout || ""))
+    const srcFrag = path.join(root, "shaders/shiny.frag")
+    const destFrag = path.join(dest, "shaders/shiny.frag")
+    const destQsb = path.join(dest, "shaders/shiny.frag.qsb")
+    check(fs.existsSync(destFrag), "install dest has shaders/shiny.frag")
+    check(fs.existsSync(destQsb), "install dest still has shaders/shiny.frag.qsb")
+    if (fs.existsSync(destFrag) && fs.existsSync(srcFrag)) {
+      check(
+        Buffer.compare(fs.readFileSync(srcFrag), fs.readFileSync(destFrag)) === 0,
+        "install dest shiny.frag matches the source file"
+      )
+    }
+  } finally {
+    fs.rmSync(dest, { recursive: true, force: true })
+    fs.rmSync(binDir, { recursive: true, force: true })
+  }
 }
 
 function checkInstallSessionSo() {
@@ -1630,6 +1674,7 @@ function writeEvidence() {
 }
 
 checkScriptShape()
+checkInstallCopiesFrag()
 checkInstallSessionSo()
 checkWaitPluginGone()
 checkEnsureHyprlandLua()
