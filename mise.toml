@@ -7,6 +7,15 @@ min_version = "2025.8.0"
 [tools]
 node = "26.7.0"
 
+# Compile-only Hyprland plugin builds (`mise run hypr-build`) need the
+# hypr*/aquamarine and Wayland-stack .pc files. On the Arch/Omarchy target
+# these already live in the default pkg-config dirs; on Debian/Ubuntu,
+# `mise run hypr-headers` installs them under /usr/local. Listing the standard
+# dirs plus /usr/local keeps them searchable everywhere (missing dirs are
+# ignored), so this is a no-op on systems where Hyprland is packaged.
+[env]
+PKG_CONFIG_PATH = "/usr/local/lib/x86_64-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/share/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig"
+
 [tasks.bake]
 description = "Bake every Qt shaders/*.frag into .qsb and inline GLES shiny+ripple into hypr/src/shaders.hpp"
 run = "bash scripts/bake.sh"
@@ -57,6 +66,10 @@ run = "bash scripts/uninstall.sh"
 description = "Remove wmfeht.border-fx, then omarchy plugin add this folder, keeping the shell.json look"
 depends = ["bake"]
 run = "bash scripts/reinstall.sh"
+
+[tasks.hypr-headers]
+description = "Install Hyprland v0.56.2 dev headers + hypr*/aquamarine/Wayland deps for compile-only hypr-build (Debian/Ubuntu; Arch/Omarchy ships these)"
+run = "bash .cursor/hypr-headers.sh"
 
 [tasks.hypr-build]
 description = "Compile hypr-shiny-border.so against system Hyprland headers"

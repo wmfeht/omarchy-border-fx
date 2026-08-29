@@ -3,14 +3,16 @@
 #
 # Covers the headless, compositor-free development experience: the JS logic
 # suite (the CI contract, `mise run test`), shader baking (`mise run bake`,
-# needs qsb from qt6-shadertools), and the Hyprland C++ logic tests
-# (`mise run hypr-test`, needs g++ >= 14 for -std=gnu++26).
+# needs qsb from qt6-shadertools), the Hyprland C++ logic tests
+# (`mise run hypr-test`, needs g++ >= 14 for -std=gnu++26), and a compile-only
+# Hyprland plugin build (`mise run hypr-build`) against Hyprland v0.56.2 dev
+# headers built from source (see .cursor/hypr-headers.sh).
 #
-# Not covered here (they require the target Arch/Omarchy graphical stack — a
-# running Wayland compositor, GPU, the Quickshell `qs` binary, and Hyprland
-# dev headers matching the live compositor): `mise run lint` (needs Qt >= 6.6;
-# Ubuntu 24.04 ships 6.4.2), `mise run preview`/`smoke`, and
-# `mise run hypr-build`/`nest`/`reload`.
+# Not covered (they require the target Arch/Omarchy graphical stack — a running
+# Wayland compositor, GPU, and the Quickshell `qs` binary): `mise run lint`
+# (needs Qt >= 6.6; Ubuntu 24.04 ships 6.4.2), `mise run preview`/`smoke`, and
+# loading/running the plugin (`mise run nest`/`reload`/`load`). The compiled
+# .so cannot be loaded here: PLUGIN_INIT ABI-checks it against a live compositor.
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -74,6 +76,11 @@ fi
 echo "Installing pinned tools from mise.toml"
 mise install
 mise reshim >/dev/null 2>&1 || true
+
+# Hyprland v0.56.2 dev headers + deps for compile-only `mise run hypr-build`.
+# Idempotent and self-skipping once the headers are present.
+echo "Provisioning Hyprland plugin build headers"
+mise run hypr-headers
 
 echo ""
 echo "Toolchain ready:"
