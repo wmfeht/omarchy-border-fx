@@ -239,6 +239,9 @@ uniform float rippleFreq;
 uniform float rippleSpeed;
 uniform float rippleGain;
 uniform float ripplePower;
+uniform float rippleOriginX;
+uniform float rippleOriginY;
+uniform float rippleFade;
 
 const int MAX_STEPS = 8;
 uniform vec4  gradColors[MAX_STEPS];
@@ -265,7 +268,7 @@ vec4 shinyRampColor(bool cw, float u) {
 
 // Ripple lighting sibling of shiny-lighting.frag. Same coverage, interior
 // discard, ring + outside glow, directional cone, 8-stop ramp, wrap stroke.
-// Crest is a radial illumination scalar from the panel center mixed with
+// Crest is a radial illumination scalar from the look origin mixed with
 // max into cone/glow and highlight energy. localT does not follow crest.
 // rippleGain = 0 matches shiny. No textures, no UV/SDF warp, no caustics.
 
@@ -324,10 +327,16 @@ vec4 rippleLightingColor(vec2 p, vec2 size, float opacity) {
     float localT = mix(thick * 0.38, thick, mix(0.15, 1.0, cone));
     localT       = max(localT, 1.0);
 
-    float rPx   = length(pUp);
-    float phase = rPx * rippleFreq - time * rippleSpeed;
-    float wave  = sin(phase);
-    float crest = pow(max(wave, 0.0), max(ripplePower, 1.0));
+    vec2  originP = (vec2(rippleOriginX, rippleOriginY) - vec2(0.5)) * size;
+    float rPx     = length(p - originP);
+    float phase   = rPx * rippleFreq - time * rippleSpeed;
+    float wave    = sin(phase);
+    float crest   = pow(max(wave, 0.0), max(ripplePower, 1.0));
+    float fadePx  = rippleFade * 2.0 * (size.x + size.y);
+    float fade    = 1.0;
+    if (fadePx > 0.0)
+        fade = clamp(1.0 - rPx / fadePx, 0.0, 1.0);
+    crest *= fade;
     // Swap, don't stack: gain 0 is the shiny comet, gain 1 is crest-only.
     // max(cone, crest) left the facing lobe at full strength so both looks
     // read as on at once.

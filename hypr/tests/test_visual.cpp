@@ -172,6 +172,9 @@ static void checkShaderSource() {
     CHECK(frag.find("decoration:shadow") == std::string::npos);
     CHECK(frag.find("RIPPLE_FRAG") != std::string::npos);
     CHECK(frag.find("rippleFreq") != std::string::npos);
+    CHECK(frag.find("rippleOriginX") != std::string::npos);
+    CHECK(frag.find("rippleOriginY") != std::string::npos);
+    CHECK(frag.find("rippleFade") != std::string::npos);
     CHECK(frag.find("if (ripple)") == std::string::npos);
 }
 
@@ -398,6 +401,9 @@ static void checkPluginInitLookDefaults() {
     CHECK(tokNumber(hyprCtorDefault(init, "ripple_speed"), std::strtod(jsScalar(defaults, "rippleSpeed").c_str(), nullptr)));
     CHECK(tokNumber(hyprCtorDefault(init, "ripple_gain"), std::strtod(jsScalar(defaults, "rippleGain").c_str(), nullptr)));
     CHECK(tokNumber(hyprCtorDefault(init, "ripple_power"), std::strtod(jsScalar(defaults, "ripplePower").c_str(), nullptr)));
+    CHECK(tokNumber(hyprCtorDefault(init, "ripple_origin_x"), std::strtod(jsScalar(defaults, "rippleOriginX").c_str(), nullptr)));
+    CHECK(tokNumber(hyprCtorDefault(init, "ripple_origin_y"), std::strtod(jsScalar(defaults, "rippleOriginY").c_str(), nullptr)));
+    CHECK(tokNumber(hyprCtorDefault(init, "ripple_fade"), std::strtod(jsScalar(defaults, "rippleFade").c_str(), nullptr)));
 
     CHECK(hyprCtorDefault(init, "gradient_positions") == jsScalar(defaults, "gradientPositions"));
     CHECK(hyprCtorDefault(init, "gradient_positions_cw") == jsScalar(defaults, "gradientPositionsCw"));

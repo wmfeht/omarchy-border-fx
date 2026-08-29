@@ -304,10 +304,13 @@ void CShinyBorder::draw(PHLMONITOR pMonitor, float const& a) {
         data.mirror      = g_cfg.mirror->value();
         data.customPos   = customPos;
         data.ripple      = ripple;
-        data.rippleFreq  = g_cfg.rippleFreq ? sc<float>(g_cfg.rippleFreq->value()) : 0.025f;
-        data.rippleSpeed = g_cfg.rippleSpeed ? sc<float>(g_cfg.rippleSpeed->value()) : 2.f;
-        data.rippleGain  = g_cfg.rippleGain ? sc<float>(g_cfg.rippleGain->value()) : 0.85f;
-        data.ripplePower = g_cfg.ripplePower ? sc<float>(g_cfg.ripplePower->value()) : 8.f;
+        data.rippleFreq    = g_cfg.rippleFreq ? sc<float>(g_cfg.rippleFreq->value()) : 0.025f;
+        data.rippleSpeed   = g_cfg.rippleSpeed ? sc<float>(g_cfg.rippleSpeed->value()) : 2.f;
+        data.rippleGain    = g_cfg.rippleGain ? sc<float>(g_cfg.rippleGain->value()) : 0.85f;
+        data.ripplePower   = g_cfg.ripplePower ? sc<float>(g_cfg.ripplePower->value()) : 8.f;
+        data.rippleOriginX = g_cfg.rippleOriginX ? sc<float>(g_cfg.rippleOriginX->value()) : 0.5f;
+        data.rippleOriginY = g_cfg.rippleOriginY ? sc<float>(g_cfg.rippleOriginY->value()) : 0.5f;
+        data.rippleFade    = g_cfg.rippleFade ? sc<float>(g_cfg.rippleFade->value()) : 0.f;
         data.window      = m_window;
         g_pHyprRenderer->addPassElement(makeUnique<CShinyPassElement>(data));
         return;

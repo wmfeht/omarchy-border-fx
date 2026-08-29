@@ -36,10 +36,13 @@ struct ShinyUniformLocs {
     GLint gradCountCw  = -1;
     GLint baseColor    = -1;
     GLint mirror       = -1;
-    GLint rippleFreq   = -1;
-    GLint rippleSpeed  = -1;
-    GLint rippleGain   = -1;
-    GLint ripplePower  = -1;
+    GLint rippleFreq     = -1;
+    GLint rippleSpeed    = -1;
+    GLint rippleGain     = -1;
+    GLint ripplePower    = -1;
+    GLint rippleOriginX  = -1;
+    GLint rippleOriginY  = -1;
+    GLint rippleFade     = -1;
 };
 
 static ShinyUniformLocs g_shinyLocs;
@@ -64,10 +67,13 @@ static void cacheProgramUniforms(const SP<CShader>& shader, ShinyUniformLocs& lo
     locs.mirror       = glGetUniformLocation(prog, "mirror");
     if (!ripple)
         return;
-    locs.rippleFreq  = glGetUniformLocation(prog, "rippleFreq");
-    locs.rippleSpeed = glGetUniformLocation(prog, "rippleSpeed");
-    locs.rippleGain  = glGetUniformLocation(prog, "rippleGain");
-    locs.ripplePower = glGetUniformLocation(prog, "ripplePower");
+    locs.rippleFreq    = glGetUniformLocation(prog, "rippleFreq");
+    locs.rippleSpeed   = glGetUniformLocation(prog, "rippleSpeed");
+    locs.rippleGain    = glGetUniformLocation(prog, "rippleGain");
+    locs.ripplePower   = glGetUniformLocation(prog, "ripplePower");
+    locs.rippleOriginX = glGetUniformLocation(prog, "rippleOriginX");
+    locs.rippleOriginY = glGetUniformLocation(prog, "rippleOriginY");
+    locs.rippleFade    = glGetUniformLocation(prog, "rippleFade");
 }
 
 static bool hyprGlAlive() {
@@ -329,6 +335,9 @@ std::vector<UP<IPassElement>> CShinyPassElement::draw() {
         glUniform1f(locs.rippleSpeed, m_data.rippleSpeed);
         glUniform1f(locs.rippleGain, m_data.rippleGain);
         glUniform1f(locs.ripplePower, m_data.ripplePower);
+        glUniform1f(locs.rippleOriginX, m_data.rippleOriginX);
+        glUniform1f(locs.rippleOriginY, m_data.rippleOriginY);
+        glUniform1f(locs.rippleFade, m_data.rippleFade);
     }
 
     // Always upload the counts — uniforms persist per program, so a classic

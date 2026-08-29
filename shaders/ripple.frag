@@ -37,6 +37,9 @@ layout(std140, binding = 0) uniform buf {
     float rippleSpeed;
     float rippleGain;
     float ripplePower;
+    float rippleOriginX;
+    float rippleOriginY;
+    float rippleFade;
 };
 
 const int MAX_STEPS = 8;

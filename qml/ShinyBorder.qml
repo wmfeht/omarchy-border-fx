@@ -44,6 +44,9 @@ Item {
   property real rippleSpeed: 2
   property real rippleGain: 0.85
   property real ripplePower: 8
+  property real rippleOriginX: 0.5
+  property real rippleOriginY: 0.5
+  property real rippleFade: 0
   property real roundingPower: 2
 
   // Wrapping ring stroke under the directional highlight. Both hosts
@@ -212,6 +215,9 @@ Item {
     property real rippleSpeed: root.rippleSpeed
     property real rippleGain: root.rippleGain
     property real ripplePower: root.ripplePower
+    property real rippleOriginX: root.rippleOriginX
+    property real rippleOriginY: root.rippleOriginY
+    property real rippleFade: root.rippleFade
     property real range: root._drawnLobe
     property real angle: root._drawnAngle
     property int mirror: root.mirror ? 1 : 0

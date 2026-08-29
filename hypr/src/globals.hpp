@@ -29,6 +29,9 @@ struct SShinyConfig {
     SP<Config::Values::CFloatValue> rippleSpeed;
     SP<Config::Values::CFloatValue> rippleGain;
     SP<Config::Values::CFloatValue> ripplePower;
+    SP<Config::Values::CFloatValue> rippleOriginX;
+    SP<Config::Values::CFloatValue> rippleOriginY;
+    SP<Config::Values::CFloatValue> rippleFade;
     SP<Config::Values::CColorValue> colA;
     SP<Config::Values::CColorValue> colB;
     // Wrapping ring stroke under the highlight. Transparent (a=0) = off.

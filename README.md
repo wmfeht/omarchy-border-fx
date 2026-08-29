@@ -154,7 +154,10 @@ All keys at their shared defaults (equivalent to `{ "id": "wmfeht.border-fx" }`)
   "rippleFreq": 0.025,
   "rippleSpeed": 2,
   "rippleGain": 0.85,
-  "ripplePower": 8
+  "ripplePower": 8,
+  "rippleOriginX": 0.5,
+  "rippleOriginY": 0.5,
+  "rippleFade": 0
 }
 ```
 
@@ -180,7 +183,7 @@ defaults (not the shiny C++ numbers).
 {
   "id": "wmfeht.border-fx",
   "effect": "ripple",
-  "ripple": { "rippleFreq": 0.02, "rippleGain": 0.7 }
+  "ripple": { "rippleFreq": 0.02, "rippleGain": 0.7, "rippleOriginX": 0.5, "rippleFade": 0 }
 }
 ```
 
@@ -253,13 +256,17 @@ only (chrome ignores the key).
 | `rippleSpeed` | number | `2` | both | Ripple temporal speed. Dedicated default (slow). Hyprland clamps `0…40`. |
 | `rippleGain` | number | `0.85` | both | Blend from the shiny comet (`0`) to crest-only lighting (`1`). `0` matches shiny. Hyprland clamps `0…2`. |
 | `ripplePower` | number | `8` | both | `pow` on the sine lobe; higher = thinner bands. Hyprland clamps `1…16`. |
+| `rippleOriginX` | number | `0.5` | both | Ripple origin X in decoration-box UV (`0` = left, `1` = right). Default is the box center (today’s `length(pUp)` origin). Hyprland clamps `0…1`. |
+| `rippleOriginY` | number | `0.5` | both | Ripple origin Y in decoration-box UV (`0` = top, `1` = bottom). Hyprland clamps `0…1`. |
+| `rippleFade` | number | `0` | both | Spatial fade as a **proportion of the decoration-box perimeter** (`2 × (width + height)`). Envelope is 1 at the origin and 0 at/beyond `rippleFade × perimeter` pixels. `0` (or any non-positive value) is off. Hyprland clamps `0…1`. |
 
 Hyprland adapter keys (what you see in generated lua / `plugin:shiny-border:*`)
 use snake_case: `border_size`, `pin_deg`, `angle_offset`, `base_color`,
 `gradient_positions`, `gradient_cw`, `gradient_positions_cw`, `col.a`,
 `col.b`, `active_only`, `pulse_hz`, `shimmer_hz`, `shimmer_deg`,
 `shimmer_scale_min`, `shimmer_scale_max`, `mirror`, `effect`, `ripple_freq`,
-`ripple_speed`, `ripple_gain`, `ripple_power`. Hyphens in the Hyprland plugin
+`ripple_speed`, `ripple_gain`, `ripple_power`, `ripple_origin_x`,
+`ripple_origin_y`, `ripple_fade`. Hyphens in the Hyprland plugin
 prefix become underscores in Lua (`shiny_border`).
 
 Not a look key (hardcoded or host-owned):

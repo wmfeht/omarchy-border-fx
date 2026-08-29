@@ -22,6 +22,9 @@ uniform float rippleFreq;
 uniform float rippleSpeed;
 uniform float rippleGain;
 uniform float ripplePower;
+uniform float rippleOriginX;
+uniform float rippleOriginY;
+uniform float rippleFade;
 
 const int MAX_STEPS = 8;
 uniform vec4  gradColors[MAX_STEPS];

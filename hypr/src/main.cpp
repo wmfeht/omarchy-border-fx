@@ -130,6 +130,15 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
                                                                 Config::Values::SFloatValueOptions{.min = 0.f, .max = 2.f});
     g_cfg.ripplePower  = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:ripple_power", "Ripple sine-lobe power; higher = thinner crests", 8.f,
                                                                 Config::Values::SFloatValueOptions{.min = 1.f, .max = 16.f});
+    g_cfg.rippleOriginX = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:ripple_origin_x",
+                                                                 "Ripple origin X in decoration-box UV (0 = left, 1 = right)", 0.5f,
+                                                                 Config::Values::SFloatValueOptions{.min = 0.f, .max = 1.f});
+    g_cfg.rippleOriginY = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:ripple_origin_y",
+                                                                 "Ripple origin Y in decoration-box UV (0 = top, 1 = bottom)", 0.5f,
+                                                                 Config::Values::SFloatValueOptions{.min = 0.f, .max = 1.f});
+    g_cfg.rippleFade   = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:ripple_fade",
+                                                                "Ripple spatial fade as a proportion of the decoration-box perimeter; 0 = off", 0.f,
+                                                                Config::Values::SFloatValueOptions{.min = 0.f, .max = 1.f});
     g_cfg.mirror       = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:mirror", "Mirror the lit-band lobe onto the far side of the border", false);
     g_cfg.colA         = makeShared<Config::Values::CColorValue>("plugin:shiny-border:col.a", "Highlight head (ARGB)", 0xee33ccff);
     g_cfg.colB         = makeShared<Config::Values::CColorValue>("plugin:shiny-border:col.b", "Highlight shoulder (ARGB)", 0xee00ff99);
@@ -171,6 +180,9 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.rippleSpeed);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.rippleGain);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.ripplePower);
+    HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.rippleOriginX);
+    HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.rippleOriginY);
+    HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.rippleFade);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.mirror);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.colA);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.colB);

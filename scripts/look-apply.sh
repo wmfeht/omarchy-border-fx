@@ -99,6 +99,9 @@ DEFAULTS = {
     "rippleSpeed": 2,
     "rippleGain": 0.85,
     "ripplePower": 8,
+    "rippleOriginX": 0.5,
+    "rippleOriginY": 0.5,
+    "rippleFade": 0,
 }
 
 raw = os.environ.get("LOOK_JSON") or "{}"
@@ -147,6 +150,9 @@ FLOAT_RANGE = {
     "rippleSpeed": (0.0, 40.0),
     "rippleGain": (0.0, 2.0),
     "ripplePower": (1.0, 16.0),
+    "rippleOriginX": (0.0, 1.0),
+    "rippleOriginY": (0.0, 1.0),
+    "rippleFade": (0.0, 1.0),
 }
 
 def warn_look(key, why):
@@ -359,6 +365,9 @@ lines = [
     "        ripple_speed = " + lua_num(look["rippleSpeed"]) + ",",
     "        ripple_gain  = " + lua_num(look["rippleGain"]) + ",",
     "        ripple_power = " + lua_num(look["ripplePower"]) + ",",
+    "        ripple_origin_x = " + lua_num(look["rippleOriginX"]) + ",",
+    "        ripple_origin_y = " + lua_num(look["rippleOriginY"]) + ",",
+    "        ripple_fade  = " + lua_num(look["rippleFade"]) + ",",
     "        shimmer      = " + lua_bool(look["shimmer"]) + ",",
     "        shimmer_hz   = " + lua_num(look["shimmerHz"]) + ",",
     "        shimmer_deg  = " + lua_num(look["shimmerDeg"]) + ",",

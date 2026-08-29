@@ -463,6 +463,67 @@ function checkRippleCrest() {
   check(Look.effectDraws("other") === false, "Look.effectDraws unknown")
 }
 
+function checkRippleOriginFade() {
+  check(typeof Ripple.originR === "function", "Ripple.originR is shipped")
+  check(typeof Ripple.perimeter === "function", "Ripple.perimeter is shipped")
+  check(typeof Ripple.fadeDistance === "function", "Ripple.fadeDistance is shipped")
+  check(typeof Ripple.fadeEnvelope === "function", "Ripple.fadeEnvelope is shipped")
+
+  const w = 200
+  const h = 100
+  const px = 30
+  const py = -40
+  const rCenter = Ripple.originR(px, py, w, h, 0.5, 0.5)
+  check(approx(rCenter, Math.hypot(px, py)), "center origin r is distance from box center")
+  check(approx(Ripple.originR(0, 0, w, h, 0.5, 0.5), 0), "center origin r is 0 at the box center")
+
+  const rTopLeft = Ripple.originR(-w / 2, -h / 2, w, h, 0, 0)
+  check(approx(rTopLeft, 0), "offset origin r is 0 at the origin point")
+  check(Ripple.originR(0, 0, w, h, 0, 0) > 0, "offset origin r is > 0 at the box center")
+  check(
+    Ripple.originR(px, py, w, h, 0, 0) !== Ripple.originR(px, py, w, h, 0.5, 0.5),
+    "non-center origin changes r at a given pixel"
+  )
+
+  const rRight = Ripple.originR(-w / 2 + 10, -h / 2, w, h, 0, 0)
+  const rDown = Ripple.originR(-w / 2, -h / 2 + 10, w, h, 0, 0)
+  check(approx(rRight, rDown), "pixels the same distance from the origin share r")
+  check(rRight > 0, "shared-r samples are not the origin")
+
+  check(Ripple.fadeDistance(1, w, h) === Ripple.perimeter(w, h), "fade 1 is the full perimeter")
+  check(Ripple.fadeDistance(0, w, h) === 0, "fade 0 distance is 0 (off)")
+  check(Ripple.fadeDistance(-1, w, h) === 0, "non-positive fade distance is 0")
+  check(
+    Ripple.fadeDistance(0.5, w, h) + Ripple.fadeDistance(0.5, w, h) === Ripple.fadeDistance(1, w, h),
+    "half + half is the full perimeter distance"
+  )
+  check(
+    Ripple.fadeDistance(0.5, w, h) === Ripple.fadeDistance(0.5, h, w),
+    "same perimeter boxes share fade distance"
+  )
+  check(
+    Ripple.fadeDistance(0.5, w * 2, h * 2) > Ripple.fadeDistance(0.5, w, h),
+    "larger box yields a longer fade distance at the same proportion"
+  )
+
+  const d = Ripple.fadeDistance(0.5, w, h)
+  check(d > 0, "positive proportion has a positive pixel distance")
+  check(Ripple.fadeEnvelope(0, d) === 1, "envelope at origin is 1")
+  check(Ripple.fadeEnvelope(d, d) === 0, "envelope at fade distance is 0")
+  check(Ripple.fadeEnvelope(d + 10, d) === 0, "envelope beyond fade distance is 0")
+  check(Ripple.fadeEnvelope(40, Ripple.fadeDistance(0, w, h)) === 1, "envelope is identity when fade is 0")
+  check(Ripple.fadeEnvelope(40, -5) === 1, "envelope is identity when fade is not positive")
+
+  const freq = 0.02
+  const rPeak = (Math.PI * 0.5) / freq
+  const peak = Ripple.crest(rPeak, 0, freq, 2, 8)
+  const faded = peak * Ripple.fadeEnvelope(rPeak, Ripple.fadeDistance(0.5, w, h))
+  check(peak > 0.9, "live crest to scale")
+  check(faded < peak, "fade envelope scales a live crest down")
+  check(Ripple.energy(0.9, faded, 1) === faded, "gain 1 energy uses the faded crest")
+  check(Ripple.energy(0.9, faded, 0) === 0.9, "gain 0 energy stays the cone (fade is crest-only)")
+}
+
 function checkSharedShaderBake() {
   const lightingPath = path.join(root, "shaders/shiny-lighting.frag")
   const qtPath = path.join(root, "shaders/shiny.frag")
@@ -488,8 +549,23 @@ function checkSharedShaderBake() {
   check(gles.indexOf("vec4 shinyLightingColor") === -1, "gles wrapper does not hand-copy lighting")
   check(lighting.indexOf("if (ripple)") === -1, "shiny lighting has no if (ripple)")
   check(lighting.indexOf("rippleGain") === -1, "shiny lighting has no ripple uniforms")
+  check(lighting.indexOf("rippleOrigin") === -1, "shiny lighting has no ripple origin")
+  check(lighting.indexOf("rippleFade") === -1, "shiny lighting has no ripple fade")
   check(rippleLighting.indexOf("vec4 rippleLightingColor") !== -1, "ripple lighting defines rippleLightingColor")
   check(rippleLighting.indexOf("rippleGain * crest") !== -1, "ripple lighting mixes crest via gain")
+  check(rippleLighting.indexOf("rippleOriginX") !== -1, "ripple lighting uses origin X")
+  check(rippleLighting.indexOf("rippleOriginY") !== -1, "ripple lighting uses origin Y")
+  check(rippleLighting.indexOf("rippleFade") !== -1, "ripple lighting uses fade distance")
+  check(rippleLighting.indexOf("rippleFade * 2.0 * (size.x + size.y)") !== -1,
+        "ripple fade distance is a proportion of the box perimeter")
+  check(rippleLighting.indexOf("rPx / rippleFade") === -1,
+        "ripple fade is not a raw pixel divisor")
+  check(rippleLighting.indexOf("crest *= fade") !== -1, "ripple lighting scales crest by the fade envelope")
+  check(rippleLighting.indexOf("length(p - originP)") !== -1, "ripple r is distance from the look origin")
+  check(rippleQt.indexOf("float rippleOriginX") !== -1, "ripple qt wrapper declares origin X")
+  check(rippleGles.indexOf("uniform float rippleOriginX") !== -1, "ripple gles wrapper declares origin X")
+  check(rippleQt.indexOf("float rippleFade") !== -1, "ripple qt wrapper declares fade")
+  check(rippleGles.indexOf("uniform float rippleFade") !== -1, "ripple gles wrapper declares fade")
   check(rippleLighting.indexOf("mix(cone, crestLit, gBlend)") !== -1,
         "ripple lighting blends cone to crest (swap, not max-stack)")
   check(rippleLighting.indexOf("mix(stop.a, crestLit, gBlend)") !== -1,
@@ -661,6 +737,9 @@ function checkWrapSource() {
   check(qml.indexOf("ripple.frag.qsb") !== -1, "chrome binds the ripple fragment")
   check(qml.indexOf("property string effect") !== -1, "chrome overlay exposes effect")
   check(qml.indexOf("property real rippleFreq") !== -1, "chrome overlay exposes rippleFreq")
+  check(qml.indexOf("property real rippleOriginX") !== -1, "chrome overlay exposes rippleOriginX")
+  check(qml.indexOf("property real rippleOriginY") !== -1, "chrome overlay exposes rippleOriginY")
+  check(qml.indexOf("property real rippleFade") !== -1, "chrome overlay exposes rippleFade")
   check(qml.indexOf("Ripple.rippleTime") !== -1, "chrome ticks ripple from the shipped clock")
   const stepAt = qml.indexOf("function stepShimmer()")
   check(stepAt !== -1, "chrome has stepShimmer")
@@ -681,6 +760,12 @@ function checkWrapSource() {
         "chrome overlay binds merged look.effect")
   check(service.indexOf("rippleFreq: root.look.rippleFreq") !== -1,
         "chrome overlay binds merged look.rippleFreq")
+  check(service.indexOf("rippleOriginX: root.look.rippleOriginX") !== -1,
+        "chrome overlay binds merged look.rippleOriginX")
+  check(service.indexOf("rippleOriginY: root.look.rippleOriginY") !== -1,
+        "chrome overlay binds merged look.rippleOriginY")
+  check(service.indexOf("rippleFade: root.look.rippleFade") !== -1,
+        "chrome overlay binds merged look.rippleFade")
 }
 
 function checkGlowCoverage() {
@@ -723,6 +808,7 @@ function checkGlowCoverage() {
 
 checkPinnedHeading()
 checkRippleCrest()
+checkRippleOriginFade()
 checkPulseAlphaMul()
 checkPulseUniforms()
 checkEffectMode()

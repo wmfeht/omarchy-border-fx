@@ -27,10 +27,13 @@ class CShinyPassElement : public IPassElement {
         bool            mirror     = false; // same lobe on the far support; off = facing-only
         bool            customPos  = false; // gradient_positions applied; fallback resamples
         bool            ripple     = false; // pick RIPPLE_FRAG at draw(); time stays live
-        float           rippleFreq  = 0.025f;
-        float           rippleSpeed = 2.f;
-        float           rippleGain  = 0.85f;
-        float           ripplePower = 8.f;
+        float           rippleFreq    = 0.025f;
+        float           rippleSpeed   = 2.f;
+        float           rippleGain    = 0.85f;
+        float           ripplePower   = 8.f;
+        float           rippleOriginX = 0.5f;
+        float           rippleOriginY = 0.5f;
+        float           rippleFade    = 0.f;
         PHLWINDOWREF    window;             // CBorderPassElement fallback
     };
 

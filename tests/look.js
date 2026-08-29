@@ -95,6 +95,9 @@ function checkDefaults() {
   check(d.rippleSpeed === 2, "default rippleSpeed is dedicated")
   check(d.rippleGain === 0.85, "default rippleGain is dedicated")
   check(d.ripplePower === 8, "default ripplePower is dedicated")
+  check(d.rippleOriginX === 0.5, "default rippleOriginX is box center")
+  check(d.rippleOriginY === 0.5, "default rippleOriginY is box center")
+  check(d.rippleFade === 0, "default rippleFade is off")
   check(Look.effectDraws("shiny") === true, "effectDraws shiny")
   check(Look.effectDraws("ripple") === true, "effectDraws ripple")
   check(Look.effectDraws("") === true, "empty effect draws as shiny")
@@ -152,6 +155,19 @@ function checkMerge() {
   check(rippleOnlyEffect.effect === "ripple", "effect:ripple with no nested object")
   check(rippleOnlyEffect.rippleFreq === Look.DEFAULTS.rippleFreq, "ripple-only look gets dedicated freq")
   check(rippleOnlyEffect.rippleGain === Look.DEFAULTS.rippleGain, "ripple-only look gets dedicated gain")
+  check(rippleOnlyEffect.rippleOriginX === 0.5, "omitted origin X stays box center")
+  check(rippleOnlyEffect.rippleOriginY === 0.5, "omitted origin Y stays box center")
+  check(rippleOnlyEffect.rippleFade === 0, "omitted fade stays off")
+
+  const rippleOrigin = Look.merge({
+    effect: "ripple",
+    rippleOriginX: 0.1,
+    rippleFade: 0.2,
+    ripple: { rippleOriginX: 0.2, rippleOriginY: 0.8, rippleFade: 0.4 }
+  })
+  check(rippleOrigin.rippleOriginX === 0.2, "nested ripple.rippleOriginX wins")
+  check(rippleOrigin.rippleOriginY === 0.8, "nested ripple.rippleOriginY wins")
+  check(rippleOrigin.rippleFade === 0.4, "nested ripple.rippleFade wins")
 
   const leftoverPin = Look.merge({ pin: false, pinDeg: 90, quantizeDeg: 15 })
   check(!Object.prototype.hasOwnProperty.call(leftoverPin, "pin"), "leftover pin:false is not a look key")
@@ -238,6 +254,9 @@ function checkLookApply() {
   check(/mirror\s*=\s*false/.test(lua), "lua mirror = false")
   check(lua.indexOf("rgba(33ccffee)") !== -1, "lua keeps hypr rgba")
   check(/base_color\s*=\s*"rgba\(00687855\)"/.test(lua), "lua includes Hyprland adapter base_color")
+  check(luaAssign(lua, "ripple_origin_x") === "0.5", "empty look lua origin X default")
+  check(luaAssign(lua, "ripple_origin_y") === "0.5", "empty look lua origin Y default")
+  check(luaAssign(lua, "ripple_fade") === "0", "empty look lua fade off")
   check(lua.indexOf("hl.plugin.load") !== -1, "login load of session .so")
   check(lua.indexOf("hyprland.start") !== -1, "load on hyprland.start, not during parse")
   check(lua.indexOf("__wmfeht_border_fx_start") !== -1, "start guard uses wmfeht/border-fx name")
@@ -335,6 +354,9 @@ function checkLookApply() {
   check(luaAssign(rippleFx.stdout, "ripple_speed") === "2", "ripple look-apply dedicated speed")
   check(luaAssign(rippleFx.stdout, "ripple_gain") === "0.85", "ripple look-apply dedicated gain")
   check(luaAssign(rippleFx.stdout, "ripple_power") === "8", "ripple look-apply dedicated power")
+  check(luaAssign(rippleFx.stdout, "ripple_origin_x") === "0.5", "ripple look-apply dedicated origin X")
+  check(luaAssign(rippleFx.stdout, "ripple_origin_y") === "0.5", "ripple look-apply dedicated origin Y")
+  check(luaAssign(rippleFx.stdout, "ripple_fade") === "0", "ripple look-apply dedicated fade off")
 
   const rippleNested = spawnSync(
     "bash",
@@ -349,6 +371,27 @@ function checkLookApply() {
   check(/SHINY_LOAD = true/.test(rippleNested.stdout), "nested ripple still loads")
   check(luaAssign(rippleNested.stdout, "ripple_gain") === "0.5", "nested ripple.rippleGain fans out")
   check(luaAssign(rippleNested.stdout, "ripple_freq") === "0.04", "nested ripple.rippleFreq fans out")
+
+  const originNested = spawnSync(
+    "bash",
+    [script, "--stdout", "--look-json", JSON.stringify({
+      effect: "ripple",
+      rippleOriginX: 0.1,
+      rippleFade: 0.2,
+      ripple: { rippleOriginX: 0.25, rippleOriginY: 0.75, rippleFade: 0.5 }
+    })],
+    { encoding: "utf8", env: env }
+  )
+  check(originNested.status === 0, "nested origin/fade look-apply")
+  check(luaAssign(originNested.stdout, "ripple_origin_x") === "0.25", "nested ripple.rippleOriginX fans out")
+  check(luaAssign(originNested.stdout, "ripple_origin_y") === "0.75", "nested ripple.rippleOriginY fans out")
+  check(luaAssign(originNested.stdout, "ripple_fade") === "0.5", "nested ripple.rippleFade fans out")
+
+  const originClampLua = lookApply({ rippleOriginX: -1, rippleOriginY: 2, rippleFade: 4 })
+  check(originClampLua.status === 0, "origin/fade clamp look-apply: " + (originClampLua.stderr || ""))
+  check(luaAssign(originClampLua.stdout, "ripple_origin_x") === "0", "lua origin X -1 clamps to 0")
+  check(luaAssign(originClampLua.stdout, "ripple_origin_y") === "1", "lua origin Y 2 clamps to 1")
+  check(luaAssign(originClampLua.stdout, "ripple_fade") === "1", "lua fade 4 clamps to 1")
 }
 
 function pluginInitSection(src) {
@@ -468,6 +511,9 @@ function checkPluginInitDefaults() {
   check(sameNumber(hyprCtorDefault(init, "ripple_speed"), d.rippleSpeed), "PLUGIN_INIT ripple_speed == Look.DEFAULTS.rippleSpeed")
   check(sameNumber(hyprCtorDefault(init, "ripple_gain"), d.rippleGain), "PLUGIN_INIT ripple_gain == Look.DEFAULTS.rippleGain")
   check(sameNumber(hyprCtorDefault(init, "ripple_power"), d.ripplePower), "PLUGIN_INIT ripple_power == Look.DEFAULTS.ripplePower")
+  check(sameNumber(hyprCtorDefault(init, "ripple_origin_x"), d.rippleOriginX), "PLUGIN_INIT ripple_origin_x == Look.DEFAULTS.rippleOriginX")
+  check(sameNumber(hyprCtorDefault(init, "ripple_origin_y"), d.rippleOriginY), "PLUGIN_INIT ripple_origin_y == Look.DEFAULTS.rippleOriginY")
+  check(sameNumber(hyprCtorDefault(init, "ripple_fade"), d.rippleFade), "PLUGIN_INIT ripple_fade == Look.DEFAULTS.rippleFade")
 
   check(hyprCtorDefault(init, "gradient_positions") === d.gradientPositions,
     "PLUGIN_INIT gradient_positions == Look.DEFAULTS.gradientPositions")
@@ -659,6 +705,13 @@ function checkClamps() {
   check(rippleClamp.rippleGain === 0, "rippleGain clamps to 0")
   check(rippleClamp.ripplePower === 1, "ripplePower clamps to 1")
   check(rippleClamp.rippleSpeed === 40, "rippleSpeed clamps to 40")
+
+  const originClamp = Look.merge({ rippleOriginX: -1, rippleOriginY: 4, rippleFade: -10 })
+  check(originClamp.rippleOriginX === 0, "rippleOriginX clamps to 0")
+  check(originClamp.rippleOriginY === 1, "rippleOriginY clamps to 1")
+  check(originClamp.rippleFade === 0, "rippleFade clamps to 0")
+  const fadeHigh = Look.merge({ rippleFade: 4 })
+  check(fadeHigh.rippleFade === 1, "rippleFade clamps to 1")
 }
 
 function checkLookApplyTyped() {

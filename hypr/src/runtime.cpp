@@ -75,6 +75,28 @@ bool shinyEffectIsRipple(const char* effect) {
     return effect && std::strcmp(effect, "ripple") == 0;
 }
 
+float shinyRippleOriginR(float px, float py, float width, float height, float originX, float originY) {
+    const float dx = px - (originX - 0.5f) * width;
+    const float dy = py - (originY - 0.5f) * height;
+    return std::hypot(dx, dy);
+}
+
+float shinyRipplePerimeter(float width, float height) {
+    return 2.f * (width + height);
+}
+
+float shinyRippleFadeDistance(float fade, float width, float height) {
+    if (!(fade > 0.f))
+        return 0.f;
+    return fade * shinyRipplePerimeter(width, height);
+}
+
+float shinyRippleFadeEnvelope(float r, float fadePx) {
+    if (!(fadePx > 0.f))
+        return 1.f;
+    return std::clamp(1.f - r / fadePx, 0.f, 1.f);
+}
+
 float shinyRippleCrest(float r, float t, float freq, float speed, float power) {
     const float wave = std::sin(r * freq - t * speed);
     if (!(wave > 0.f))

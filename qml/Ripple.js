@@ -8,6 +8,42 @@
 
 var TIME_WRAP = 1024
 
+// Radial distance from origin UV (0,0 top-left, 1,1 bottom-right).
+// p is center-relative device pixels, same as fragment `p`. Default
+// origin (0.5, 0.5) is today's length(p) / length(pUp) case.
+function originR(px, py, width, height, originX, originY) {
+  var dx = Number(px) - (Number(originX) - 0.5) * Number(width)
+  var dy = Number(py) - (Number(originY) - 0.5) * Number(height)
+  return Math.hypot(dx, dy)
+}
+
+// Decoration-box perimeter. Fade look values are a proportion of this.
+function perimeter(width, height) {
+  return 2 * (Number(width) + Number(height))
+}
+
+// Pixel fade distance from a look proportion. Not-positive fade is 0 (off).
+function fadeDistance(fade, width, height) {
+  var d = Number(fade)
+  if (!(d > 0))
+    return 0
+  return d * perimeter(width, height)
+}
+
+// Spatial fade on crest amplitude: 1 at the origin, 0 at and beyond a
+// positive pixel fade distance. Not-positive distance is identity.
+function fadeEnvelope(r, fadePx) {
+  var d = Number(fadePx)
+  if (!(d > 0))
+    return 1
+  var t = 1 - Number(r) / d
+  if (t <= 0)
+    return 0
+  if (t > 1)
+    return 1
+  return t
+}
+
 function crest(r, t, freq, speed, power) {
   var wave = Math.sin(Number(r) * Number(freq) - Number(t) * Number(speed))
   if (!(wave > 0))

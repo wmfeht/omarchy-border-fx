@@ -744,11 +744,57 @@ static void checkRippleCrest() {
     CHECK(shinyTimerTickMs(SHINY_EFFECT_SHIMMER, true, 0.4f, 0.3f) == shinyPulseTickMs(0.3f));
 }
 
+static void checkRippleOriginFade() {
+    const float w  = 200.f;
+    const float h  = 100.f;
+    const float px = 30.f;
+    const float py = -40.f;
+
+    CHECK(shinyRippleOriginR(px, py, w, h, 0.5f, 0.5f) == std::hypot(px, py));
+    CHECK(shinyRippleOriginR(0.f, 0.f, w, h, 0.5f, 0.5f) == 0.f);
+
+    CHECK(shinyRippleOriginR(-w * 0.5f, -h * 0.5f, w, h, 0.f, 0.f) == 0.f);
+    CHECK(shinyRippleOriginR(0.f, 0.f, w, h, 0.f, 0.f) > 0.f);
+    CHECK(shinyRippleOriginR(px, py, w, h, 0.f, 0.f) != shinyRippleOriginR(px, py, w, h, 0.5f, 0.5f));
+
+    const float rRight = shinyRippleOriginR(-w * 0.5f + 10.f, -h * 0.5f, w, h, 0.f, 0.f);
+    const float rDown  = shinyRippleOriginR(-w * 0.5f, -h * 0.5f + 10.f, w, h, 0.f, 0.f);
+    CHECK(rRight == rDown);
+    CHECK(rRight > 0.f);
+
+    CHECK(shinyRippleFadeDistance(1.f, w, h) == shinyRipplePerimeter(w, h));
+    CHECK(shinyRippleFadeDistance(0.f, w, h) == 0.f);
+    CHECK(shinyRippleFadeDistance(-1.f, w, h) == 0.f);
+    CHECK(shinyRippleFadeDistance(0.5f, w, h) + shinyRippleFadeDistance(0.5f, w, h) ==
+          shinyRippleFadeDistance(1.f, w, h));
+    CHECK(shinyRippleFadeDistance(0.5f, w, h) == shinyRippleFadeDistance(0.5f, h, w));
+    CHECK(shinyRippleFadeDistance(0.5f, w * 2.f, h * 2.f) > shinyRippleFadeDistance(0.5f, w, h));
+
+    const float d = shinyRippleFadeDistance(0.5f, w, h);
+    CHECK(d > 0.f);
+    CHECK(shinyRippleFadeEnvelope(0.f, d) == 1.f);
+    CHECK(shinyRippleFadeEnvelope(d, d) == 0.f);
+    CHECK(shinyRippleFadeEnvelope(d + 10.f, d) == 0.f);
+    CHECK(shinyRippleFadeEnvelope(40.f, shinyRippleFadeDistance(0.f, w, h)) == 1.f);
+    CHECK(shinyRippleFadeEnvelope(40.f, -5.f) == 1.f);
+
+    const float freq  = 0.02f;
+    const float pi    = std::acos(-1.f);
+    const float rPeak = (pi * 0.5f) / freq;
+    const float peak  = shinyRippleCrest(rPeak, 0.f, freq, 2.f, 8.f);
+    const float faded = peak * shinyRippleFadeEnvelope(rPeak, shinyRippleFadeDistance(0.5f, w, h));
+    CHECK(peak > 0.9f);
+    CHECK(faded < peak);
+    CHECK(shinyRippleEnergy(0.9f, faded, 1.f) == faded);
+    CHECK(shinyRippleEnergy(0.9f, faded, 0.f) == 0.9f);
+}
+
 int main() {
     checkShippedDecisions();
     checkPulseDecisions();
     checkEffectExclusivity();
     checkRippleCrest();
+    checkRippleOriginFade();
     checkPinnedHeading();
     checkShimmer();
     checkGradient();

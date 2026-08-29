@@ -128,6 +128,17 @@ float shinyRippleCrest(float r, float t, float freq, float speed, float power);
 float shinyRippleEnergy(float cone, float crest, float gain);
 float shinyRippleHighlightAlpha(float stopA, float cov, float crest, float gain, float pulseMul);
 
+// Twin of fragment r: origin UV (0,0 top-left, 1,1 bottom-right), p is
+// center-relative device pixels. (0.5, 0.5) is today's length(pUp).
+float shinyRippleOriginR(float px, float py, float width, float height, float originX, float originY);
+// Decoration-box perimeter. Look `rippleFade` is a proportion of this.
+float shinyRipplePerimeter(float width, float height);
+// Pixel fade distance from a look proportion. Not-positive fade is 0 (off).
+float shinyRippleFadeDistance(float fade, float width, float height);
+// Twin of the fragment fade: 1 at r=0, 0 at/beyond a positive pixel
+// fade distance; identity when that distance is not positive.
+float shinyRippleFadeEnvelope(float r, float fadePx);
+
 // Live clock for crest (and for pulse-on-ripple). Wrap so float time
 // keeps sub-frame precision; not the pulse 1/hz wrap.
 float shinyRippleTime(double clockSeconds);

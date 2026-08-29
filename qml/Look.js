@@ -41,7 +41,10 @@ var DEFAULTS = {
   rippleFreq: 0.025,
   rippleSpeed: 2,
   rippleGain: 0.85,
-  ripplePower: 8
+  ripplePower: 8,
+  rippleOriginX: 0.5,
+  rippleOriginY: 0.5,
+  rippleFade: 0
 }
 
 function cloneValue(v) {
@@ -119,7 +122,10 @@ var FLOAT_RANGE = {
   rippleFreq: { min: 0.001, max: 0.2 },
   rippleSpeed: { min: 0, max: 40 },
   rippleGain: { min: 0, max: 2 },
-  ripplePower: { min: 1, max: 16 }
+  ripplePower: { min: 1, max: 16 },
+  rippleOriginX: { min: 0, max: 1 },
+  rippleOriginY: { min: 0, max: 1 },
+  rippleFade: { min: 0, max: 1 }
 }
 
 function warnLook(key, why) {
