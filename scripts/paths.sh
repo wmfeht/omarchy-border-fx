@@ -13,6 +13,10 @@ LEGACY_LUA_FILE="${LEGACY_LUA_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/shiny
 LUA_MODULE="${LUA_MODULE:-hypr.border-fx}"
 HYPRLAND_LUA="${HYPRLAND_LUA:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.lua}"
 BUILD_DIR="${BUILD_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/omarchy-border-fx}"
+# Identity the last session/cache .so was built against. Missing stamp is stale.
+HYPR_ABI_STAMP="${HYPR_ABI_STAMP:-$BUILD_DIR/abi-identity}"
+# Set when PLUGIN_INIT last failed compositor/client hash mismatch.
+HYPR_ABI_HASH_MISMATCH="${HYPR_ABI_HASH_MISMATCH:-$BUILD_DIR/hash-mismatch}"
 HYPRCTL_INSTANCE="${SHINY_INSTANCE:-0}"
 
 _paths_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

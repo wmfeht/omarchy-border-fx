@@ -67,6 +67,18 @@ function checkScriptShape() {
   check(session.indexOf("hypr_session_lock") !== -1, "hypr-session defines hypr_session_lock")
   check(session.indexOf("look_effect_is_shiny") !== -1, "hypr-session defines look_effect_is_shiny")
   check(session.indexOf("hypr_session_bump_ensure_gen") !== -1, "hypr-session defines ensure generation")
+  check(session.indexOf("hypr_abi_artifact_fresh") !== -1, "hypr-session defines hypr_abi_artifact_fresh")
+  check(session.indexOf("hypr_abi_delete_session_so") !== -1, "hypr-session defines hypr_abi_delete_session_so")
+  check(session.indexOf("hypr_abi_need_force_rebuild") !== -1, "hypr-session defines hypr_abi_need_force_rebuild")
+  check(session.indexOf("sources_newer_than") !== -1, "hypr-session defines sources_newer_than")
+  check(ensure.indexOf("hypr_abi_artifact_fresh") !== -1, "hypr-ensure uses ABI freshness")
+  check(ensure.indexOf("hypr_abi_delete_session_so") !== -1, "hypr-ensure deletes the stale session .so")
+  check(ensure.indexOf("hypr_abi_invalidate_objects") !== -1, "hypr-ensure wipes objects on ABI mismatch")
+  check(ensure.indexOf("function sources_newer_than") === -1, "hypr-ensure does not keep a private sources_newer_than")
+  const makefile = read("hypr/Makefile")
+  check(makefile.indexOf("-MD") !== -1, "Makefile records header dependencies (-MD)")
+  check(makefile.indexOf("COMPILER_STAMP") !== -1, "Makefile stamps compiler id")
+  check(makefile.indexOf("-include") !== -1, "Makefile includes generated header deps")
 
   check(teardown.indexOf("hypr-session.sh") !== -1, "hypr-teardown sources hypr-session.sh")
   check(teardown.indexOf("wait_plugin_gone") !== -1, "hypr-teardown waits for unmap")
@@ -224,6 +236,7 @@ STATE=${JSON.stringify(harness.stateDir)}
 UNLOAD_SLEEP=${Number(harness.unloadSleepSec || 0)}
 UNLOAD_EXIT=${Number(harness.unloadExit || 0)}
 LOAD_EXIT=${Number(harness.loadExit || 0)}
+LOAD_MSG=${JSON.stringify(harness.loadMessage || "")}
 stamp() { date +%s.%N; }
 echo "$(stamp) BEGIN $*" >> "$LOG"
 
@@ -286,7 +299,11 @@ fi
 
 if [[ $args == *plugin*load* ]]; then
   if [[ $LOAD_EXIT -ne 0 ]]; then
-    echo "load refused" >&2
+    if [[ -n $LOAD_MSG ]]; then
+      echo "$LOAD_MSG" >&2
+    else
+      echo "load refused" >&2
+    fi
     echo "$(stamp) END $*" >> "$LOG"
     exit "$LOAD_EXIT"
   fi
@@ -399,6 +416,19 @@ function createHarness(opts) {
   const luaFile = path.join(config, "hypr", "border-fx.lua")
   const logPath = path.join(dir, "hyprctl.log")
   const makeLog = path.join(dir, "make.log")
+  const buildDir = path.join(cache, "omarchy-border-fx")
+  fs.mkdirSync(buildDir, { recursive: true })
+  const abiStamp = path.join(buildDir, "abi-identity")
+  const abiMismatch = path.join(buildDir, "hash-mismatch")
+  const abiHash = opts.abiHash || "test-hash"
+  const abiHeaderMtime = opts.abiHeaderMtime != null ? String(opts.abiHeaderMtime) : "1"
+  const abiCompiler = opts.abiCompiler || "test-compiler"
+  if (opts.writeAbiStamp !== false) {
+    fs.writeFileSync(
+      abiStamp,
+      "hash=" + abiHash + "\nheader_mtime=" + abiHeaderMtime + "\ncompiler=" + abiCompiler + "\n"
+    )
+  }
   const harness = {
     dir: dir,
     binDir: binDir,
@@ -408,10 +438,14 @@ function createHarness(opts) {
     luaFile: luaFile,
     logPath: logPath,
     makeLog: makeLog,
+    buildDir: buildDir,
+    abiStamp: abiStamp,
+    abiMismatch: abiMismatch,
     unloadSleepSec: opts.unloadSleepSec || 0,
     unloadExit: opts.unloadExit || 0,
     makeExit: opts.makeExit === undefined ? 1 : Number(opts.makeExit),
     loadExit: opts.loadExit === undefined ? 0 : Number(opts.loadExit),
+    loadMessage: opts.loadMessage || "",
     mapper: null,
     mapperPid: 0,
   }
@@ -425,6 +459,12 @@ function createHarness(opts) {
     XDG_RUNTIME_DIR: runDir,
     LUA_FILE: luaFile,
     SESSION_SO: sessionSo,
+    BUILD_DIR: buildDir,
+    HYPR_ABI_STAMP: abiStamp,
+    HYPR_ABI_HASH_MISMATCH: abiMismatch,
+    HYPR_ABI_COMPOSITOR_HASH: abiHash,
+    HYPR_ABI_HEADER_MTIME: abiHeaderMtime,
+    HYPR_ABI_COMPILER_ID: abiCompiler,
     PATH: binDir + ":" + (process.env.PATH || "/usr/bin:/bin"),
   })
   if (opts.hyprSrc) {
@@ -481,7 +521,7 @@ function eventTimes(logText, needle) {
   return times
 }
 
-const evidenceChunks = { teardown: [], ensure: [], lock: [], hotReload: [] }
+const evidenceChunks = { teardown: [], ensure: [], lock: [], hotReload: [], abi: [] }
 
 function statusLines(stdout) {
   return String(stdout || "")
@@ -711,6 +751,7 @@ function checkEnsureTree() {
     check((r.stdout || "").indexOf("STATUS=load-failed") !== -1, "ensure cold load-fail STATUS=load-failed: " + (r.stdout || ""))
     check((r.stdout || "").indexOf("STATUS=ok") === -1, "ensure cold load-fail is not STATUS=ok")
     check(logHas(log, "plugin load"), "ensure cold load-fail still attempts plugin load")
+    check(fs.existsSync(h.sessionSo), "ensure generic load-fail does not delete the session .so")
     note("ensure", "cold load-fail: status=" + statusLines(r.stdout).join(",") + " load=" + logHas(log, "plugin load"))
   } finally {
     stopHarness(h)
@@ -918,6 +959,417 @@ function checkTeardownEnsureLock() {
   )
 }
 
+function plantStaleSo(file, contents) {
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, contents)
+  const future = new Date(Date.now() + 86400000)
+  fs.utimesSync(file, future, future)
+}
+
+function writeAbiStampValues(stampPath, hash, mtime, compiler) {
+  fs.mkdirSync(path.dirname(stampPath), { recursive: true })
+  fs.writeFileSync(
+    stampPath,
+    "hash=" + hash + "\nheader_mtime=" + mtime + "\ncompiler=" + compiler + "\n"
+  )
+}
+
+function applyAbiKind(h, kind) {
+  if (kind === "hash")
+    h.env.HYPR_ABI_COMPOSITOR_HASH = "upgraded-hash"
+  else if (kind === "header")
+    h.env.HYPR_ABI_HEADER_MTIME = "999999"
+  else if (kind === "compiler")
+    h.env.HYPR_ABI_COMPILER_ID = "other-compiler"
+  else if (kind === "flag")
+    fs.writeFileSync(h.abiMismatch, "1\n")
+  else
+    throw new Error("unknown abi kind " + kind)
+}
+
+function checkAbiHelperPredicate() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hypr-abi-helper-"))
+  const so = path.join(dir, "hypr-shiny-border.so")
+  const stamp = path.join(dir, "abi-identity")
+  const flag = path.join(dir, "hash-mismatch")
+  const srcDir = path.join(dir, "src")
+  fs.mkdirSync(srcDir)
+  fs.writeFileSync(path.join(srcDir, "main.cpp"), "// old\n")
+  const past = new Date(Date.now() - 86400000)
+  fs.utimesSync(path.join(srcDir, "main.cpp"), past, past)
+  touchFuture(so)
+  fs.writeFileSync(stamp, "hash=aaa\nheader_mtime=10\ncompiler=gcc-1\n")
+  const env = {
+    ROOT: root,
+    SESSION_SO: so,
+    HYPR_SRC: dir,
+    HYPR_ABI_STAMP: stamp,
+    HYPR_ABI_HASH_MISMATCH: flag,
+    HYPR_ABI_COMPOSITOR_HASH: "aaa",
+    HYPR_ABI_HEADER_MTIME: "10",
+    HYPR_ABI_COMPILER_ID: "gcc-1",
+  }
+
+  function probe(extraEnv) {
+    const r = bash(
+      'source "$ROOT/scripts/paths.sh"; source "$ROOT/scripts/hypr-session.sh"; if hypr_abi_artifact_fresh "$SESSION_SO"; then echo FRESH; else echo STALE; fi',
+      Object.assign({}, env, extraEnv || {})
+    )
+    check(r.status === 0, "artifact_fresh probe exits 0: " + (r.stderr || r.stdout || ""))
+    return String(r.stdout || "").trim()
+  }
+
+  check(probe() === "FRESH", "matching identity is fresh")
+  check(probe({ HYPR_ABI_COMPOSITOR_HASH: "bbb" }) === "STALE", "compositor hash mismatch is stale")
+  check(probe({ HYPR_ABI_HEADER_MTIME: "99" }) === "STALE", "header mtime mismatch is stale")
+  check(probe({ HYPR_ABI_COMPILER_ID: "gcc-2" }) === "STALE", "compiler id mismatch is stale")
+  fs.writeFileSync(flag, "1\n")
+  check(probe() === "STALE", "recorded hash-mismatch flag is stale")
+  fs.rmSync(flag, { force: true })
+  check(probe() === "FRESH", "cleared hash-mismatch flag is fresh again")
+
+  const force = bash(
+    'source "$ROOT/scripts/paths.sh"; source "$ROOT/scripts/hypr-session.sh"; if hypr_abi_need_force_rebuild; then echo FORCE; else echo NOFORCE; fi',
+    Object.assign({}, env, { HYPR_ABI_COMPOSITOR_HASH: "bbb" })
+  )
+  check(force.status === 0 && String(force.stdout || "").trim() === "FORCE", "hash mismatch needs force rebuild")
+
+  const del = bash(
+    'source "$ROOT/scripts/paths.sh"; source "$ROOT/scripts/hypr-session.sh"; hypr_abi_delete_session_so; test ! -e "$SESSION_SO"',
+    env
+  )
+  check(del.status === 0, "hypr_abi_delete_session_so unlinks SESSION_SO")
+  fs.rmSync(dir, { recursive: true, force: true })
+}
+
+function runAbiEnsureMismatchOnce(kind) {
+  const hyprSrc = fs.mkdtempSync(path.join(os.tmpdir(), "hypr-abi-src-"))
+  fs.mkdirSync(path.join(hyprSrc, "src"), { recursive: true })
+  const srcFile = path.join(hyprSrc, "src", "main.cpp")
+  fs.writeFileSync(srcFile, "// plugin source\n")
+  const past = new Date(Date.now() - 86400000)
+  fs.utimesSync(srcFile, past, past)
+  const h = createHarness({ hyprSrc: hyprSrc, makeExit: 0 })
+  try {
+    applyAbiKind(h, kind)
+    plantStaleSo(h.sessionSo, "STALE-SESSION-SO")
+    const oldStat = fs.statSync(h.sessionSo)
+    const cacheSo = path.join(h.buildDir, "hypr-shiny-border.so")
+    plantStaleSo(cacheSo, "STALE-CACHE-SO")
+    const objDir = path.join(h.buildDir, "obj")
+    fs.mkdirSync(objDir, { recursive: true })
+    fs.writeFileSync(path.join(objDir, "main.o"), "OLD-OBJECT")
+
+    const r1 = runEnsure(h, "{}")
+    const make1 = readLog(h.makeLog)
+    const after1 = fs.existsSync(h.sessionSo) ? fs.readFileSync(h.sessionSo, "utf8") : ""
+    const ino1 = fs.existsSync(h.sessionSo) ? fs.statSync(h.sessionSo).ino : 0
+    let objAfter = ""
+    if (fs.existsSync(path.join(objDir, "main.o")))
+      objAfter = fs.readFileSync(path.join(objDir, "main.o"), "utf8")
+    const cacheAfter = fs.existsSync(cacheSo) ? fs.readFileSync(cacheSo, "utf8") : ""
+
+    // First load left the stub "listed". Cold-start the same mismatch fixture
+    // so the next ensure cannot skip via STATUS=reuse / unknown path.
+    fs.writeFileSync(path.join(h.stateDir, "listed"), "[]\n")
+    plantStaleSo(h.sessionSo, "STALE-SESSION-SO-AGAIN")
+    writeAbiStampValues(h.abiStamp, "test-hash", "1", "test-compiler")
+    if (kind === "flag")
+      fs.writeFileSync(h.abiMismatch, "1\n")
+    plantStaleSo(cacheSo, "STALE-CACHE-SO-AGAIN")
+    fs.mkdirSync(objDir, { recursive: true })
+    fs.writeFileSync(path.join(objDir, "main.o"), "OLD-OBJECT-AGAIN")
+    const r2 = runEnsure(h, "{}")
+    const make2 = readLog(h.makeLog)
+    const after2 = fs.existsSync(h.sessionSo) ? fs.readFileSync(h.sessionSo, "utf8") : ""
+    const obj2 = fs.existsSync(path.join(objDir, "main.o"))
+      ? fs.readFileSync(path.join(objDir, "main.o"), "utf8")
+      : ""
+
+    return {
+      kind: kind,
+      status1: r1.status,
+      stdout1: String(r1.stdout || ""),
+      stderr1: String(r1.stderr || ""),
+      log1: readLog(h.logPath),
+      make1: make1,
+      after1: after1,
+      ino1: ino1,
+      oldIno: oldStat.ino,
+      objAfter: objAfter,
+      cacheAfter: cacheAfter,
+      status2: r2.status,
+      stdout2: String(r2.stdout || ""),
+      make2: make2,
+      after2: after2,
+      obj2: obj2,
+    }
+  } finally {
+    stopHarness(h)
+    fs.rmSync(hyprSrc, { recursive: true, force: true })
+  }
+}
+
+function checkAbiEnsureMismatch() {
+  const kinds = ["hash", "header", "compiler", "flag"]
+  for (let i = 0; i < kinds.length; i++) {
+    const kind = kinds[i]
+    const a = runAbiEnsureMismatchOnce(kind)
+    const b = runAbiEnsureMismatchOnce(kind)
+
+    function summarize(run, label) {
+      const msg =
+        label +
+        " status1=" +
+        run.status1 +
+        " STATUS=" +
+        statusLines(run.stdout1).join(",") +
+        " make1=" +
+        (run.make1.length > 0) +
+        " session=" +
+        JSON.stringify(run.after1) +
+        " inoChanged=" +
+        (run.ino1 !== run.oldIno) +
+        " obj=" +
+        JSON.stringify(run.objAfter) +
+        " cache=" +
+        JSON.stringify(run.cacheAfter) +
+        " status2=" +
+        run.status2 +
+        " makeGrew=" +
+        (run.make2.length > run.make1.length) +
+        " session2=" +
+        JSON.stringify(run.after2)
+      note("abi", msg)
+      return msg
+    }
+
+    summarize(a, kind + " run1")
+    summarize(b, kind + " run2")
+
+    function assertMismatch(run, label) {
+      check(run.status1 === 0, label + " first ensure exits 0: " + (run.stderr1 || run.stdout1 || ""))
+      check(run.stdout1.indexOf("STATUS=ok") !== -1, label + " first ensure STATUS=ok: " + run.stdout1)
+      check(run.make1.length > 0, label + " first ensure rebuilds (make invoked)")
+      check(logHas(run.log1, "plugin load"), label + " first ensure plugin loads")
+      check(run.after1 === "BUILT-SO", label + " first ensure session .so is newly built, not stale: " + JSON.stringify(run.after1))
+      check(run.ino1 !== run.oldIno, label + " first ensure replaced the session .so inode")
+      check(run.objAfter !== "OLD-OBJECT", label + " first ensure does not relink old objects")
+      check(run.cacheAfter !== "STALE-CACHE-SO", label + " first ensure does not reuse stale cache .so")
+      check(run.stderr1.indexOf("not relinking stale objects") !== -1, label + " first ensure force-rebuilds objects")
+      check(run.status2 === 0, label + " second ensure exits 0")
+      check(run.stdout2.indexOf("STATUS=ok") !== -1, label + " second ensure STATUS=ok: " + run.stdout2)
+      check(run.make2.length > run.make1.length, label + " second ensure cannot reuse restored stale bytes without rebuilding")
+      check(run.after2 === "BUILT-SO", label + " second ensure session .so is newly built, not restored stale")
+      check(run.obj2 !== "OLD-OBJECT-AGAIN", label + " second ensure does not relink restored old objects")
+    }
+
+    assertMismatch(a, kind + " run1")
+    assertMismatch(b, kind + " run2")
+    check(
+      (a.stdout1.indexOf("STATUS=ok") !== -1) === (b.stdout1.indexOf("STATUS=ok") !== -1) &&
+        (a.make1.length > 0) === (b.make1.length > 0) &&
+        (a.after1 === "BUILT-SO") === (b.after1 === "BUILT-SO") &&
+        (a.make2.length > a.make1.length) === (b.make2.length > b.make1.length) &&
+        (a.after2 === "BUILT-SO") === (b.after2 === "BUILT-SO"),
+      kind + " both runs agree"
+    )
+  }
+}
+
+function runAbiLoadHashMismatchOnce() {
+  const hyprSrc = fs.mkdtempSync(path.join(os.tmpdir(), "hypr-abi-load-"))
+  fs.mkdirSync(path.join(hyprSrc, "src"), { recursive: true })
+  const srcFile = path.join(hyprSrc, "src", "main.cpp")
+  fs.writeFileSync(srcFile, "// plugin source\n")
+  const past = new Date(Date.now() - 86400000)
+  fs.utimesSync(srcFile, past, past)
+  const h = createHarness({
+    hyprSrc: hyprSrc,
+    makeExit: 0,
+    loadExit: 1,
+    loadMessage: "[shiny-border] version mismatch",
+  })
+  try {
+    plantStaleSo(h.sessionSo, "STALE-SESSION-SO")
+    const r1 = runEnsure(h, "{}")
+    const make1 = readLog(h.makeLog)
+    const exists1 = fs.existsSync(h.sessionSo)
+    const flag1 = fs.existsSync(h.abiMismatch)
+    const r2 = runEnsure(h, "{}")
+    const make2 = readLog(h.makeLog)
+    const exists2 = fs.existsSync(h.sessionSo)
+    return {
+      status1: r1.status,
+      stdout1: String(r1.stdout || ""),
+      stderr1: String(r1.stderr || ""),
+      log1: readLog(h.logPath),
+      make1: make1,
+      exists1: exists1,
+      flag1: flag1,
+      status2: r2.status,
+      stdout2: String(r2.stdout || ""),
+      make2: make2,
+      exists2: exists2,
+    }
+  } finally {
+    stopHarness(h)
+    fs.rmSync(hyprSrc, { recursive: true, force: true })
+  }
+}
+
+function checkAbiLoadHashMismatch() {
+  const a = runAbiLoadHashMismatchOnce()
+  const b = runAbiLoadHashMismatchOnce()
+
+  function summarize(run, label) {
+    const msg =
+      label +
+      " status1=" +
+      run.status1 +
+      " STATUS=" +
+      statusLines(run.stdout1).join(",") +
+      " make1=" +
+      (run.make1.length > 0) +
+      " sessionGone1=" +
+      (!run.exists1) +
+      " flag=" +
+      run.flag1 +
+      " status2=" +
+      run.status2 +
+      " make2=" +
+      (run.make2.length > 0) +
+      " sessionGone2=" +
+      (!run.exists2)
+    note("abi", msg)
+    return msg
+  }
+  summarize(a, "load-mismatch run1")
+  summarize(b, "load-mismatch run2")
+
+  function assertFail(run, label) {
+    check(run.status1 === 0, label + " first ensure exits 0")
+    check(run.stdout1.indexOf("STATUS=load-failed") !== -1, label + " first ensure STATUS=load-failed: " + run.stdout1)
+    check(run.make1.length === 0, label + " first ensure reused the session .so (load then hash-mismatch)")
+    check(logHas(run.log1, "plugin load"), label + " first ensure attempted plugin load")
+    check(!run.exists1, label + " first ensure deleted SESSION_SO after hash-mismatch")
+    check(run.flag1, label + " first ensure recorded hash-mismatch")
+    check(run.status2 === 0, label + " second ensure exits 0")
+    check(run.stdout2.indexOf("STATUS=load-failed") !== -1, label + " second ensure STATUS=load-failed")
+    check(run.make2.length > 0, label + " second ensure cannot reuse deleted session .so; rebuilds")
+    check(!run.exists2, label + " second ensure deleted SESSION_SO again after hash-mismatch")
+  }
+  assertFail(a, "load-mismatch run1")
+  assertFail(b, "load-mismatch run2")
+  check(
+    (a.stdout1.indexOf("STATUS=load-failed") !== -1) === (b.stdout1.indexOf("STATUS=load-failed") !== -1) &&
+      a.exists1 === b.exists1 &&
+      (a.make2.length > 0) === (b.make2.length > 0) &&
+      a.exists2 === b.exists2,
+    "both load-mismatch runs agree"
+  )
+}
+
+function checkMakefileCompilerRebuild() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hypr-make-abi-"))
+  const buildDir = path.join(dir, "build")
+  const binDir = path.join(dir, "bin")
+  const log = path.join(dir, "cxx.log")
+  fs.mkdirSync(binDir)
+  const cxx = path.join(binDir, "cxx-stub")
+  fs.writeFileSync(
+    cxx,
+    [
+      "#!/usr/bin/env bash",
+      "LOG=" + JSON.stringify(log),
+      "VER=${STUB_CXX_VER:-1}",
+      'echo "$*" >> "$LOG"',
+      'if [[ $1 == -dumpmachine ]]; then echo x86_64-test-linux-gnu; exit 0; fi',
+      'if [[ $1 == -dumpversion ]]; then echo "$VER"; exit 0; fi',
+      'out=""; compile=0; mf=""; prev=""',
+      'for a in "$@"; do',
+      '  if [[ $prev == -o ]]; then out="$a"; fi',
+      '  if [[ $prev == -MF ]]; then mf="$a"; fi',
+      '  if [[ $a == -c ]]; then compile=1; fi',
+      '  prev="$a"',
+      "done",
+      'if [[ -z $out ]]; then echo "cxx-stub: no -o" >&2; exit 1; fi',
+      'mkdir -p "$(dirname "$out")"',
+      "if [[ $compile -eq 1 ]]; then",
+      '  echo COMPILE >> "$LOG"',
+      '  printf "obj\\n" > "$out"',
+      '  if [[ -n $mf ]]; then',
+      '    mkdir -p "$(dirname "$mf")"',
+      '    printf "%s:\\n" "$out" > "$mf"',
+      "  fi",
+      "else",
+      '  echo LINK >> "$LOG"',
+      '  printf "so\\n" > "$out"',
+      "fi",
+      "exit 0",
+    ].join("\n") + "\n"
+  )
+  fs.chmodSync(cxx, 0o755)
+
+  function compileCount() {
+    return (readLog(log).match(/^COMPILE$/gm) || []).length
+  }
+
+  function runMake(ver) {
+    return spawnSync(
+      "make",
+      ["-C", path.join(root, "hypr"), "all", "BUILD_DIR=" + buildDir, "CXX=" + cxx],
+      {
+        encoding: "utf8",
+        env: Object.assign({}, process.env, { STUB_CXX_VER: String(ver) }),
+        timeout: 30000,
+      }
+    )
+  }
+
+  try {
+    const r1 = runMake(1)
+    check(r1.status === 0, "makefile first build exits 0: " + (r1.stderr || r1.stdout || ""))
+    const c1 = compileCount()
+    check(c1 > 0, "makefile first build compiles objects: " + c1)
+    note("abi", "makefile first compileCount=" + c1)
+
+    const r2 = runMake(1)
+    check(r2.status === 0, "makefile second same-compiler build exits 0: " + (r2.stderr || r2.stdout || ""))
+    const c2 = compileCount()
+    check(c2 === c1, "makefile same compiler does not recompile: c1=" + c1 + " c2=" + c2)
+
+    const hdr = path.join(dir, "hyprland-version.h")
+    fs.writeFileSync(hdr, "/* fixture header */\n")
+    const objDir = path.join(buildDir, "obj")
+    const dFiles = fs.existsSync(objDir)
+      ? fs.readdirSync(objDir).filter((n) => n.endsWith(".d"))
+      : []
+    check(dFiles.length > 0, "makefile wrote .d header-dep files")
+    if (dFiles.length > 0) {
+      const dPath = path.join(objDir, dFiles[0])
+      const objFile = dPath.slice(0, -2) + ".o"
+      fs.writeFileSync(dPath, objFile + ": " + hdr + "\n")
+      const future = new Date(Date.now() + 86400000)
+      fs.utimesSync(hdr, future, future)
+      const rH = runMake(1)
+      check(rH.status === 0, "makefile header-mtime rebuild exits 0: " + (rH.stderr || rH.stdout || ""))
+      const cH = compileCount()
+      check(cH > c2, "makefile header mtime change recompiles, not relink-only: " + c2 + " -> " + cH)
+      note("abi", "makefile header-mtime compileCount=" + cH)
+    }
+
+    const cBeforeCompiler = compileCount()
+    const r3 = runMake(2)
+    check(r3.status === 0, "makefile compiler-id change exits 0: " + (r3.stderr || r3.stdout || ""))
+    const c3 = compileCount()
+    check(c3 > cBeforeCompiler, "makefile compiler-id change recompiles objects, not relink-only: " + cBeforeCompiler + " -> " + c3)
+    note("abi", "makefile compiler-id compileCount=" + c3)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+}
+
 function writeEvidence() {
   const dir = process.env.HYPR_SESSION_EVIDENCE_DIR
   if (!dir)
@@ -930,6 +1382,7 @@ function writeEvidence() {
     path.join(dir, "ensure-hot-reload-load-failed.log"),
     evidenceChunks.hotReload.join("\n") + "\n"
   )
+  fs.writeFileSync(path.join(dir, "ensure-abi-freshness.log"), evidenceChunks.abi.join("\n") + "\n")
 }
 
 checkScriptShape()
@@ -939,6 +1392,10 @@ checkTeardownPersist()
 checkEnsureTree()
 checkEnsureHotReloadLoadFailed()
 checkTeardownEnsureLock()
+checkAbiHelperPredicate()
+checkAbiEnsureMismatch()
+checkAbiLoadHashMismatch()
+checkMakefileCompilerRebuild()
 writeEvidence()
 
 if (fails) {

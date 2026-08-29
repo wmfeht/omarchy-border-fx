@@ -58,28 +58,22 @@ ensure_hyprland_require() {
   fi
 }
 
-sources_newer_than() {
-  local so="$1"
-  [[ -f $so ]] || return 0
-  [[ -d $HYPR_SRC/src ]] || return 1
-  local newest so_t
-  newest=$(find "$HYPR_SRC/src" -type f \( -name '*.cpp' -o -name '*.hpp' \) -printf '%T@\n' 2>/dev/null | sort -n | tail -1)
-  [[ -n $newest ]] || return 1
-  so_t=$(stat -c '%Y' "$so")
-  python3 -c "import sys; sys.exit(0 if float('$newest') > float('$so_t') else 1)"
-}
-
 build_so() {
   if [[ ! -f $HYPR_SRC/Makefile ]]; then
     notify "window ring needs Hyprland headers; chrome is on. This checkout has no hypr/ sources."
     return 1
   fi
   mkdir -p "$BUILD_DIR"
+  if hypr_abi_need_force_rebuild; then
+    echo "hypr-ensure: compositor/header/compiler identity changed; not relinking stale objects" >&2
+    hypr_abi_invalidate_objects
+  fi
   if ! make -C "$HYPR_SRC" all BUILD_DIR="$BUILD_DIR" >&2; then
     notify "window ring needs Hyprland headers; chrome is on. Fix: install matching Hyprland headers and re-enable, or: make -C hypr all"
     return 1
   fi
-  [[ -f $BUILD_DIR/hypr-shiny-border.so ]]
+  [[ -f $BUILD_DIR/hypr-shiny-border.so ]] || return 1
+  hypr_abi_stamp_write
 }
 
 copy_session_so() {
@@ -87,7 +81,21 @@ copy_session_so() {
 }
 
 load_session_so() {
-  hyprctl -i "$HYPRCTL_INSTANCE" plugin load "$SESSION_SO"
+  local out rc
+  rc=0
+  out=$(hyprctl -i "$HYPRCTL_INSTANCE" plugin load "$SESSION_SO" 2>&1) || rc=$?
+  if [[ -n $out ]]; then
+    printf '%s\n' "$out" >&2
+  fi
+  if (( rc != 0 )); then
+    if grep -qiE 'version mismatch|hash mismatch|Header/compositor hash' <<<"$out"; then
+      hypr_abi_record_hash_mismatch
+      hypr_abi_delete_session_so || true
+    fi
+    return "$rc"
+  fi
+  hypr_abi_clear_hash_mismatch
+  return 0
 }
 
 # Load the session copy. Fail closed: STATUS=load-failed, chrome stays on.
@@ -144,9 +152,10 @@ if plugin_listed; then
     exit 0
   fi
   if [[ $path == "$SESSION_SO" ]]; then
-    if sources_newer_than "$SESSION_SO"; then
+    if ! hypr_abi_artifact_fresh "$SESSION_SO"; then
       if build_so; then
         if unload_session_so; then
+          hypr_abi_delete_session_so || true
           copy_session_so "$BUILD_DIR/hypr-shiny-border.so"
           load_session_so_or_fail
         else
@@ -180,12 +189,16 @@ if plugin_mapped; then
   exit 0
 fi
 
+if [[ -f $SESSION_SO ]] && ! hypr_abi_artifact_fresh "$SESSION_SO"; then
+  hypr_abi_delete_session_so || true
+fi
+
 built=""
-if [[ -f $SESSION_SO ]] && ! sources_newer_than "$SESSION_SO"; then
+if hypr_abi_artifact_fresh "$SESSION_SO"; then
   built="$SESSION_SO"
-elif [[ -f $BUILD_DIR/hypr-shiny-border.so ]] && ! sources_newer_than "$BUILD_DIR/hypr-shiny-border.so"; then
+elif hypr_abi_artifact_fresh "$BUILD_DIR/hypr-shiny-border.so"; then
   built="$BUILD_DIR/hypr-shiny-border.so"
-elif [[ -f $HYPR_SRC/hypr-shiny-border.so ]] && ! sources_newer_than "$HYPR_SRC/hypr-shiny-border.so"; then
+elif hypr_abi_artifact_fresh "$HYPR_SRC/hypr-shiny-border.so"; then
   built="$HYPR_SRC/hypr-shiny-border.so"
 fi
 

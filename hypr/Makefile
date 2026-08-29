@@ -30,17 +30,34 @@ TEST_RELOAD   := tests/test_reload
 TEST_VISUAL   := tests/test_visual
 TESTS         := $(TEST_TEARDOWN) $(TEST_RUNTIME) $(TEST_RELOAD) $(TEST_VISUAL)
 
-.PHONY: all clean clangd test test-logic test-full
+# Compiler identity objects were built with. Recipe is forced so a different
+# $(CXX) -dumpmachine/-dumpversion rewrites the stamp and rebuilds .o files.
+COMPILER_ID    := $(shell $(CXX) -dumpmachine 2>/dev/null)-$(shell $(CXX) -dumpversion 2>/dev/null)
+COMPILER_STAMP := $(OBJ_DIR)/.compiler-id
+DEP            := $(OBJ:.o=.d)
+
+.PHONY: all clean clangd test test-logic test-full _hypr_compiler_id
 
 all: $(SO)
 
-$(OBJ_DIR)/%.o: src/%.cpp src/*.hpp
+$(COMPILER_STAMP): _hypr_compiler_id
 	@mkdir -p "$(OBJ_DIR)"
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
+	@printf '%s\n' "$(COMPILER_ID)" > "$(COMPILER_STAMP).tmp"
+	@if [ ! -f "$(COMPILER_STAMP)" ] || ! cmp -s "$(COMPILER_STAMP).tmp" "$(COMPILER_STAMP)"; then \
+	  mv -f "$(COMPILER_STAMP).tmp" "$(COMPILER_STAMP)"; \
+	else \
+	  rm -f "$(COMPILER_STAMP).tmp"; \
+	fi
+
+$(OBJ_DIR)/%.o: src/%.cpp src/*.hpp $(COMPILER_STAMP)
+	@mkdir -p "$(OBJ_DIR)"
+	$(CXX) $(CXXFLAGS) -MD -MP -MF $(OBJ_DIR)/$*.d -c -o $@ $<
 
 $(SO): $(OBJ)
 	@mkdir -p "$(BUILD_DIR)"
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+-include $(DEP)
 
 test-logic: $(TEST_TEARDOWN) $(TEST_RUNTIME) $(TEST_VISUAL)
 	$(TEST_TEARDOWN)
