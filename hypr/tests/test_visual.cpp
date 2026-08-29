@@ -207,6 +207,10 @@ static void checkShaderSource() {
         CHECK(src.find("float uRamp = clamp(d0 / max(spread, 1.0e-4), 0.0, 1.0)") != std::string::npos);
         CHECK(src.find("shinyWrapComposite(highlight, baseColor, wrapRing)") != std::string::npos);
         CHECK(src.find("mix(color, colorSRGB, uRamp)") != std::string::npos);
+        CHECK(src.find("smoothstep(0.0, AA, dOut)") == std::string::npos);
+        CHECK(src.find("smoothstep(-AA, AA, dOut) * cone") != std::string::npos);
+        CHECK(src.find("max(ring, glow * 0.65)") == std::string::npos);
+        CHECK(src.find("ring + (1.0 - ring) * glow * 0.65") != std::string::npos);
         CHECK(src.find("float d0 = u * 0.5;") != std::string::npos);
         CHECK(src.find("min(u, 1.0 - u)") != std::string::npos);
         CHECK(src.find("smoothstep(0.0, spread, d0)") != std::string::npos);

@@ -417,6 +417,13 @@ function checkWrapSource() {
   check(frag.indexOf("float d0 = u * 0.5;") !== -1, "qs off path is facing-only d0")
   check(frag.indexOf("min(u, 1.0 - u)") !== -1, "qs on path folds d0 to nearer end")
   check(frag.indexOf("smoothstep(0.0, spread, d0)") !== -1, "qs cone uses the same d0")
+  check(frag.indexOf("smoothstep(0.0, AA, dOut)") === -1,
+        "qs glow does not gate at dOut=0 (that holes coverage)")
+  check(frag.indexOf("smoothstep(-AA, AA, dOut) * cone") !== -1,
+        "qs glow starts across the ring's outer AA")
+  check(frag.indexOf("max(ring, glow * 0.65)") === -1, "qs does not max() ring over a holed glow")
+  check(frag.indexOf("ring + (1.0 - ring) * glow * 0.65") !== -1,
+        "qs coverage is ring over glow")
   check(frag.indexOf("int   mirror;") !== -1, "qs frag mirror UBO")
   check(frag.indexOf("if (mirror != 0)") !== -1, "qs on path gates on mirror")
   check(qml.indexOf("property bool mirror") !== -1, "QML overlay exposes mirror")
@@ -426,6 +433,44 @@ function checkWrapSource() {
   const service = fs.readFileSync(path.join(root, "Service.qml"), "utf8")
   check(service.indexOf("mirror: root.look.mirror") !== -1,
         "chrome overlay binds merged look.mirror")
+}
+
+function checkGlowCoverage() {
+  // Twin of the fragment coverage combine. Gating glow at dOut=0 left a
+  // hole just outside the stroke; overlapping the ring's ±AA band and
+  // putting glow under the ring keeps coverage monotonic through the halo.
+  function clamp(x, a, b) {
+    return Math.min(b, Math.max(a, x))
+  }
+  function smoothstep(e0, e1, x) {
+    const t = clamp((x - e0) / (e1 - e0), 0, 1)
+    return t * t * (3 - 2 * t)
+  }
+  const AA = 1.25
+  const localT = 2
+  const tmax = localT * 1.35
+  const cone = 1
+  function cov(dOut, gateFrom) {
+    const dIn = dOut + localT
+    const ring = smoothstep(AA, -AA, dOut) * smoothstep(-AA, AA, dIn)
+    const glow = (1 - smoothstep(0, tmax, dOut)) * smoothstep(gateFrom, AA, dOut) * cone
+    return { ring: ring, glow: glow, max: Math.max(ring, glow * 0.65),
+             over: ring + (1 - ring) * glow * 0.65 }
+  }
+  const hole = cov(0.5, 0)
+  check(hole.max + 0.05 < cov(0, 0).max && hole.max + 0.05 < cov(1.0, 0).max,
+        "old dOut=0 gate + max() holes coverage in the halo")
+  let last = 2
+  let rose = false
+  for (let dOut = -1; dOut <= tmax + 0.01; dOut += 0.05) {
+    const c = cov(dOut, -AA).over
+    if (c > last + 1e-4)
+      rose = true
+    last = c
+  }
+  check(!rose, "ring-over-glow coverage falls through the halo")
+  check(cov(0.5, -AA).over > cov(0.5, 0).max,
+        "overlapping glow start fills the old hole")
 }
 
 checkPinnedHeading()
@@ -438,6 +483,7 @@ checkGradientLobeU()
 checkGradientCwSide()
 checkLightProjection()
 checkWrapSource()
+checkGlowCoverage()
 
 if (fails) {
   console.error(fails + " checks failed")

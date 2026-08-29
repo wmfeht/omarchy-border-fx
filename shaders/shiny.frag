@@ -191,10 +191,11 @@ void main() {
 
     // Ring: inside the outer contour, outside the inner contour.
     float ring = smoothstep(AA, -AA, dOut) * smoothstep(-AA, AA, dIn);
-    // Halo strictly outside the rounded rect. dOut > 0 is outside.
-    float glow = (1.0 - smoothstep(0.0, localT * 1.35, dOut)) * smoothstep(0.0, AA, dOut) * cone;
+    // Halo outside the rounded rect. Overlap the ring's outer ±AA so
+    // coverage does not hole between the stroke and the glow.
+    float glow = (1.0 - smoothstep(0.0, localT * 1.35, dOut)) * smoothstep(-AA, AA, dOut) * cone;
 
-    float cov = max(ring, glow * 0.65);
+    float cov = ring + (1.0 - ring) * glow * 0.65;
     if (cov < 0.002 && (baseColor.a <= 0.0 || wrapRing < 0.002))
         discard;
 
