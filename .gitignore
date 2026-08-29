@@ -29,6 +29,7 @@ Thumbs.db
 /hypr/tests/test_runtime
 /hypr/tests/test_reload
 /hypr/tests/test_visual
+/hypr/tests/dump_shimmer
 
 # clangd / ccache
 .clangd/

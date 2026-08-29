@@ -11,6 +11,7 @@
 /tests/test_runtime
 /tests/test_reload
 /tests/test_visual
+/tests/dump_shimmer
 
 # clangd / ccache
 .cache/

@@ -28,7 +28,8 @@ TEST_TEARDOWN := tests/test_teardown
 TEST_RUNTIME  := tests/test_runtime
 TEST_RELOAD   := tests/test_reload
 TEST_VISUAL   := tests/test_visual
-TESTS         := $(TEST_TEARDOWN) $(TEST_RUNTIME) $(TEST_RELOAD) $(TEST_VISUAL)
+DUMP_SHIMMER  := tests/dump_shimmer
+TESTS         := $(TEST_TEARDOWN) $(TEST_RUNTIME) $(TEST_RELOAD) $(TEST_VISUAL) $(DUMP_SHIMMER)
 
 # Compiler identity objects were built with. Recipe is forced so a different
 # $(CXX) -dumpmachine/-dumpversion rewrites the stamp and rebuilds .o files.
@@ -80,6 +81,9 @@ $(TEST_RELOAD): tests/test_reload.cpp $(OBJ_DIR)/runtime.o
 
 $(TEST_VISUAL): tests/test_visual.cpp $(OBJ_DIR)/runtime.o
 	$(CXX) -std=gnu++26 -O2 -g -o $@ tests/test_visual.cpp $(OBJ_DIR)/runtime.o
+
+$(DUMP_SHIMMER): tests/dump_shimmer.cpp $(OBJ_DIR)/runtime.o
+	$(CXX) -std=gnu++26 -O2 -g -o $@ tests/dump_shimmer.cpp $(OBJ_DIR)/runtime.o
 
 clean:
 	rm -rf obj $(PLUGIN).so compile_flags.txt $(TESTS)

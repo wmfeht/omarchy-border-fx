@@ -660,6 +660,54 @@ function checkEnsureTree() {
     stopHarness(h)
   }
 
+  h = createHarness({ listed: true })
+  try {
+    const r = runEnsure(h, "{}")
+    const log = readLog(h.logPath)
+    const make = readLog(h.makeLog)
+    check(r.status === 0, "ensure shiny listed-no-path exits 0: " + (r.stderr || r.stdout || ""))
+    check((r.stdout || "").indexOf("STATUS=reuse") !== -1, "ensure shiny listed-no-path STATUS=reuse: " + (r.stdout || ""))
+    check((r.stdout || "").indexOf("STATUS=ok") === -1, "ensure shiny listed-no-path is not STATUS=ok")
+    check(!logHas(log, "plugin load"), "ensure shiny listed-no-path does not plugin load")
+    check(make.length === 0, "ensure shiny listed-no-path does not compile")
+    check(luaEnabledLoad(h.luaFile), "ensure shiny listed-no-path still writes enabled Lua")
+    note("ensure", "shiny listed-no-path: status=" + statusLines(r.stdout).join(",") + " load=" + logHas(log, "plugin load"))
+  } finally {
+    stopHarness(h)
+  }
+
+  h = createHarness({ listed: true, map: "hyprpm" })
+  try {
+    const r = runEnsure(h, "{}")
+    const log = readLog(h.logPath)
+    const make = readLog(h.makeLog)
+    check(r.status === 0, "ensure shiny hyprpm exits 0: " + (r.stderr || r.stdout || ""))
+    check((r.stdout || "").indexOf("STATUS=hyprpm") !== -1, "ensure shiny hyprpm STATUS=hyprpm: " + (r.stdout || ""))
+    check((r.stdout || "").indexOf("STATUS=ok") === -1, "ensure shiny hyprpm is not STATUS=ok")
+    check(!logHas(log, "plugin load"), "ensure shiny hyprpm does not plugin load")
+    check(!logHas(log, "plugin unload"), "ensure shiny hyprpm does not unload the hyprpm copy")
+    check(make.length === 0, "ensure shiny hyprpm does not compile")
+    note("ensure", "shiny hyprpm: status=" + statusLines(r.stdout).join(",") + " load=" + logHas(log, "plugin load"))
+  } finally {
+    stopHarness(h)
+  }
+
+  h = createHarness({ listed: false, map: "session" })
+  try {
+    const r = runEnsure(h, "{}")
+    const log = readLog(h.logPath)
+    const make = readLog(h.makeLog)
+    check(r.status === 0, "ensure shiny mapped-not-listed exits 0: " + (r.stderr || r.stdout || ""))
+    check((r.stdout || "").indexOf("STATUS=reuse") !== -1, "ensure shiny mapped-not-listed STATUS=reuse: " + (r.stdout || ""))
+    check((r.stdout || "").indexOf("STATUS=ok") === -1, "ensure shiny mapped-not-listed is not STATUS=ok")
+    check(!logHas(log, "plugin load"), "ensure shiny mapped-not-listed does not plugin load")
+    check(make.length === 0, "ensure shiny mapped-not-listed does not compile")
+    check(harnessMapperAlive(h), "ensure shiny mapped-not-listed leaves the existing mapping")
+    note("ensure", "shiny mapped-not-listed: status=" + statusLines(r.stdout).join(",") + " load=" + logHas(log, "plugin load"))
+  } finally {
+    stopHarness(h)
+  }
+
   h = createHarness({ listed: true, map: "session" })
   try {
     const r = runEnsure(h, JSON.stringify({ effect: "other" }))
