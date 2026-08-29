@@ -8,7 +8,7 @@ min_version = "2025.8.0"
 node = "26.7.0"
 
 [tasks.bake]
-description = "Bake shaders/shiny.frag into shaders/shiny.frag.qsb and inline lighting into hypr/src/shaders.hpp"
+description = "Bake every Qt shaders/*.frag into .qsb and inline GLES shiny+ripple into hypr/src/shaders.hpp"
 run = "bash scripts/bake.sh"
 
 [tasks.reflect]

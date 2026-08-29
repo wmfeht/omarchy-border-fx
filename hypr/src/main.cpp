@@ -120,6 +120,16 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
                                                                     Config::Values::SFloatValueOptions{.min = 0.2f, .max = 3.f});
     g_cfg.lobe         = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:lobe", "Lit-band half-width along the light axis; 0.5 = the whole window", 0.18,
                                                                 Config::Values::SFloatValueOptions{.min = 0.04, .max = 0.5});
+    g_cfg.effect       = makeShared<Config::Values::CStringValue>("plugin:shiny-border:effect",
+                                                                 "Renderer: shiny (directional comet) or ripple (radial lighting crests)", "shiny");
+    g_cfg.rippleFreq   = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:ripple_freq", "Ripple spatial frequency (1/px)", 0.025f,
+                                                                Config::Values::SFloatValueOptions{.min = 0.001f, .max = 0.2f});
+    g_cfg.rippleSpeed  = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:ripple_speed", "Ripple temporal speed", 2.f,
+                                                                Config::Values::SFloatValueOptions{.min = 0.f, .max = 40.f});
+    g_cfg.rippleGain   = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:ripple_gain", "Ripple mix into cone/glow (0 = shiny lighting)", 0.85f,
+                                                                Config::Values::SFloatValueOptions{.min = 0.f, .max = 2.f});
+    g_cfg.ripplePower  = makeShared<Config::Values::CFloatValue>("plugin:shiny-border:ripple_power", "Ripple sine-lobe power; higher = thinner crests", 8.f,
+                                                                Config::Values::SFloatValueOptions{.min = 1.f, .max = 16.f});
     g_cfg.mirror       = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:mirror", "Mirror the lit-band lobe onto the far side of the border", false);
     g_cfg.colA         = makeShared<Config::Values::CColorValue>("plugin:shiny-border:col.a", "Highlight head (ARGB)", 0xee33ccff);
     g_cfg.colB         = makeShared<Config::Values::CColorValue>("plugin:shiny-border:col.b", "Highlight shoulder (ARGB)", 0xee00ff99);
@@ -156,6 +166,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.shimmerScaleMin);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.shimmerScaleMax);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.lobe);
+    HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.effect);
+    HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.rippleFreq);
+    HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.rippleSpeed);
+    HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.rippleGain);
+    HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.ripplePower);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.mirror);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.colA);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.colB);

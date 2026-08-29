@@ -116,3 +116,26 @@ int shinyFallbackExpandPx(int logicalPx, float monitorScale);
 // the shipped shinyPulseAlphaMul; pulse off is identity. wrap / baseColor,
 // mirror two-head, and the clockwise half stay shader-only.
 float shinyFallbackPassAlpha(float payloadAlpha, bool pulseOn, float time, float pulseHz);
+
+// Renderer string on the look / plugin:shiny-border:effect. Empty/null is
+// shiny. Do not put these on ShinyEffect (that enum is pulse vs shimmer).
+bool shinyEffectDraws(const char* effect);
+bool shinyEffectIsRipple(const char* effect);
+
+// Twin of the ripple fragment: pow(max(sin(r*freq - t*speed), 0), max(power, 1)).
+// energy = max(cone, gain * crest); gain 0 matches shiny lighting.
+float shinyRippleCrest(float r, float t, float freq, float speed, float power);
+float shinyRippleEnergy(float cone, float crest, float gain);
+
+// Live clock for crest (and for pulse-on-ripple). Wrap so float time
+// keeps sub-frame precision; not the pulse 1/hz wrap.
+float shinyRippleTime(double clockSeconds);
+
+// Shader `time` uniform: ripple keeps the live clock even when pulse is
+// off. Pulse-only still uses shinyPulseUniforms (zero when pulse is off).
+float shinyShaderTime(bool pulseOn, bool rippleOn, double clockSeconds, float pulseHz);
+
+// Ring-damage timer: ripple needs a tick with pulse and shimmer both off.
+// active_only still skips unfocused. Not a ShinyEffect::RIPPLE.
+bool shinyTimerShouldRun(bool enabled, ShinyEffect mode, bool ripple, bool activeOnly, bool focused);
+int  shinyTimerTickMs(ShinyEffect mode, bool ripple, float pulseHz, float shimmerHz);

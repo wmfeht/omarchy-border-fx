@@ -2,7 +2,7 @@
 
 // Shared look: shell.json camelCase + Hyprland rgba() on the wmfeht.border-fx
 // plugins[] entry is the source of truth. `effect` selects the renderer
-// (`shiny` today). Missing look keys mean DEFAULTS below (pinned 120°,
+// (`shiny` or `ripple`). Missing look keys mean DEFAULTS below (pinned 120°,
 // shimmer, 4-stop ramp). PLUGIN_INIT registers the same numbers so first
 // paint matches chrome.
 
@@ -37,7 +37,11 @@ var DEFAULTS = {
   baseColor: "rgba(00687855)",
   activeOnly: true,
   pulse: false,
-  pulseHz: 0.4
+  pulseHz: 0.4,
+  rippleFreq: 0.025,
+  rippleSpeed: 2,
+  rippleGain: 0.85,
+  ripplePower: 8
 }
 
 function cloneValue(v) {
@@ -68,6 +72,12 @@ function normalizeEffect(value) {
   if (value === undefined || value === null || value === "")
     return DEFAULT_EFFECT
   return String(value)
+}
+
+// Chrome overlay + window plugin load. Empty/omitted is shiny.
+function effectDraws(value) {
+  var e = normalizeEffect(value)
+  return e === "shiny" || e === "ripple"
 }
 
 function pickLookFields(src) {
@@ -105,7 +115,11 @@ var FLOAT_RANGE = {
   pulseHz: { min: 0, max: 4 },
   shimmerScaleMin: { min: 0.2, max: 3 },
   shimmerScaleMax: { min: 0.2, max: 3 },
-  lobe: { min: 0.04, max: 0.5 }
+  lobe: { min: 0.04, max: 0.5 },
+  rippleFreq: { min: 0.001, max: 0.2 },
+  rippleSpeed: { min: 0, max: 40 },
+  rippleGain: { min: 0, max: 2 },
+  ripplePower: { min: 1, max: 16 }
 }
 
 function warnLook(key, why) {

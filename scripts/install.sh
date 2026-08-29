@@ -13,6 +13,10 @@ if [[ ! -f "$root/shaders/shiny.frag.qsb" ]]; then
   echo "missing shaders/shiny.frag.qsb — run: mise run bake" >&2
   exit 1
 fi
+if [[ ! -f "$root/shaders/ripple.frag.qsb" ]]; then
+  echo "missing shaders/ripple.frag.qsb — run: mise run bake" >&2
+  exit 1
+fi
 
 dest_abs=$(realpath -m "$dest")
 root_abs=$(realpath "$root")
@@ -26,6 +30,8 @@ cp -f "$root/manifest.json" "$root/Service.qml" "$dest/"
 cp -f "$root/qml/"*.qml "$root/qml/"*.js "$dest/qml/"
 cp -f "$root/shaders/shiny.frag" "$dest/shaders/"
 cp -f "$root/shaders/shiny.frag.qsb" "$dest/shaders/"
+cp -f "$root/shaders/ripple.frag" "$dest/shaders/"
+cp -f "$root/shaders/ripple.frag.qsb" "$dest/shaders/"
 cp -f "$root/scripts/paths.sh" \
       "$root/scripts/hypr-session.sh" \
       "$root/scripts/look-apply.sh" \

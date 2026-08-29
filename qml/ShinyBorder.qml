@@ -7,6 +7,7 @@
 import QtQuick
 import "Shimmer.js" as Shimmer
 import "Gradient.js" as Gradient
+import "Ripple.js" as Ripple
 
 Item {
   id: root
@@ -38,6 +39,11 @@ Item {
   // wins). Twin of plugin:shiny-border:pulse / pulse_hz.
   property bool pulse: false
   property real pulseHz: 0.4
+  property string effect: "shiny"
+  property real rippleFreq: 0.025
+  property real rippleSpeed: 2
+  property real rippleGain: 0.85
+  property real ripplePower: 8
   property real roundingPower: 2
 
   // Wrapping ring stroke under the directional highlight. Both hosts
@@ -64,6 +70,7 @@ Item {
   readonly property string _effectMode: Shimmer.effectMode(pulse, pulseHz, shimmer, shimmerHz)
   readonly property bool _shimmerOn: _effectMode === "shimmer"
   readonly property bool _pulseOn: _effectMode === "pulse"
+  readonly property bool _rippleOn: effect === "ripple"
   readonly property real _baseAngle: Shimmer.pinnedHeading(pinDeg, angleOffset)
   readonly property real _drawnAngle: _shimmerOn
       ? Shimmer.wrapAngle(_baseAngle + _shimmerAngle)
@@ -76,17 +83,18 @@ Item {
       : 1
   // On the RHI path, status often stays Uncompiled even while the shader
   // paints. Treat Error as the real failure; Compiled is a bonus.
-  readonly property bool shaderOk: effect.status === ShaderEffect.Compiled
-  readonly property bool shaderError: effect.status === ShaderEffect.Error
-  readonly property int shaderStatus: effect.status
-  readonly property string shaderLog: effect.log
-  property url shaderSource: Qt.resolvedUrl("../shaders/shiny.frag.qsb")
+  readonly property bool shaderOk: ring.status === ShaderEffect.Compiled
+  readonly property bool shaderError: ring.status === ShaderEffect.Error
+  readonly property int shaderStatus: ring.status
+  readonly property string shaderLog: ring.log
+  property url shaderSource: Qt.resolvedUrl(_rippleOn ? "../shaders/ripple.frag.qsb" : "../shaders/shiny.frag.qsb")
 
   property real _shimmerAngle: 0
   property real _shimmerScale: 1
   property var _shimmerState: null
   property real _lastTickMs: 0
   property real _pulseTime: 0
+  property real _clockTime: 0
 
   onShimmerChanged: {
     if (!shimmer) {
@@ -96,6 +104,7 @@ Item {
   }
 
   on_PulseOnChanged: if (_pulseOn) stepPulse()
+  on_RippleOnChanged: if (_rippleOn) stepClock()
 
   onColAChanged: rebuildRamp()
   onColBChanged: rebuildRamp()
@@ -138,18 +147,18 @@ Item {
     var primary = packRamp(Gradient.padStops(stops, n), resolved.pos)
     var clockwise = packRamp(cw.stops, cw.pos)
 
-    effect.color = vec4rgba(colA)
-    effect.colorSRGB = vec4rgba(colB)
-    effect.gradCount = n
-    effect.gradColors0 = primary.m0
-    effect.gradColors1 = primary.m1
-    effect.gradPos0 = primary.p0
-    effect.gradPos1 = primary.p1
-    effect.gradCountCW = cw.count
-    effect.gradColorsCW0 = clockwise.m0
-    effect.gradColorsCW1 = clockwise.m1
-    effect.gradPosCW0 = clockwise.p0
-    effect.gradPosCW1 = clockwise.p1
+    ring.color = vec4rgba(colA)
+    ring.colorSRGB = vec4rgba(colB)
+    ring.gradCount = n
+    ring.gradColors0 = primary.m0
+    ring.gradColors1 = primary.m1
+    ring.gradPos0 = primary.p0
+    ring.gradPos1 = primary.p1
+    ring.gradCountCW = cw.count
+    ring.gradColorsCW0 = clockwise.m0
+    ring.gradColorsCW1 = clockwise.m1
+    ring.gradPosCW0 = clockwise.p0
+    ring.gradPosCW1 = clockwise.p1
   }
 
   function stepShimmer() {
@@ -172,6 +181,12 @@ Item {
   function stepPulse() {
     var u = Shimmer.pulseUniforms(true, Date.now() / 1000, pulseHz)
     _pulseTime = u.time
+    if (!_rippleOn)
+      _clockTime = _pulseTime
+  }
+
+  function stepClock() {
+    _clockTime = Ripple.rippleTime(Date.now() / 1000)
   }
 
   Component.onCompleted: {
@@ -180,7 +195,7 @@ Item {
   }
 
   ShaderEffect {
-    id: effect
+    id: ring
     anchors.fill: parent
     visible: status !== ShaderEffect.Error
     blending: true
@@ -191,8 +206,12 @@ Item {
     property real radiusOuter: Math.max(root.radius, 0) * root.dpr
     property real roundingPower: root.roundingPower
     property real thick: root.borderSize * root.dpr * root._thickScale
-    property real time: root._pulseOn ? root._pulseTime : 0
+    property real time: (root._pulseOn || root._rippleOn) ? root._clockTime : 0
     property real brightness: root._pulseOn ? root.pulseHz : 0
+    property real rippleFreq: root.rippleFreq
+    property real rippleSpeed: root.rippleSpeed
+    property real rippleGain: root.rippleGain
+    property real ripplePower: root.ripplePower
     property real range: root._drawnLobe
     property real angle: root._drawnAngle
     property int mirror: root.mirror ? 1 : 0
@@ -213,7 +232,7 @@ Item {
 
   Rectangle {
     anchors.fill: parent
-    visible: effect.status === ShaderEffect.Error
+    visible: ring.status === ShaderEffect.Error
     color: "transparent"
     radius: root.radius
     border.width: root.borderSize
@@ -222,22 +241,25 @@ Item {
   }
 
   Timer {
-    interval: Shimmer.tickMs(root._shimmerOn ? root.shimmerHz : root.pulseHz)
+    interval: Shimmer.tickMs(root._shimmerOn ? root.shimmerHz : (root._pulseOn ? root.pulseHz : 0))
     repeat: true
     triggeredOnStart: true
-    running: root.visible && (root._shimmerOn || root._pulseOn)
-             && effect.status !== ShaderEffect.Error
+    running: root.visible && (root._shimmerOn || root._pulseOn || root._rippleOn)
+             && ring.status !== ShaderEffect.Error
     onRunningChanged: {
       if (!running) {
         root._lastTickMs = 0
         root._pulseTime = 0
+        root._clockTime = 0
       }
     }
     onTriggered: {
-      if (root._shimmerOn)
-        root.stepShimmer()
+      if (root._rippleOn)
+        root.stepClock()
       else if (root._pulseOn)
         root.stepPulse()
+      if (root._shimmerOn)
+        root.stepShimmer()
     }
   }
 }

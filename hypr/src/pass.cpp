@@ -22,28 +22,52 @@
 using namespace Render::GL;
 
 static SP<CShader> g_shinyShader;
+static SP<CShader> g_rippleShader;
 
-// The grad* and baseColor uniforms are not in CShader's uniform lookup
-// table, so they are uploaded with raw glUniform* against cached
+// The grad* / baseColor / ripple uniforms are not in CShader's uniform
+// lookup table, so they are uploaded with raw glUniform* against cached
 // locations. -1 is a valid "absent" location: glUniform* silently ignores it.
-static GLint g_gradColorsLoc   = -1;
-static GLint g_gradPosLoc      = -1;
-static GLint g_gradCountLoc    = -1;
-static GLint g_gradColorsCwLoc = -1;
-static GLint g_gradPosCwLoc    = -1;
-static GLint g_gradCountCwLoc  = -1;
-static GLint g_baseColorLoc    = -1;
-static GLint g_mirrorLoc       = -1;
+struct ShinyUniformLocs {
+    GLint gradColors   = -1;
+    GLint gradPos      = -1;
+    GLint gradCount    = -1;
+    GLint gradColorsCw = -1;
+    GLint gradPosCw    = -1;
+    GLint gradCountCw  = -1;
+    GLint baseColor    = -1;
+    GLint mirror       = -1;
+    GLint rippleFreq   = -1;
+    GLint rippleSpeed  = -1;
+    GLint rippleGain   = -1;
+    GLint ripplePower  = -1;
+};
 
-static void resetGradUniformLocations() {
-    g_gradColorsLoc   = -1;
-    g_gradPosLoc      = -1;
-    g_gradCountLoc    = -1;
-    g_gradColorsCwLoc = -1;
-    g_gradPosCwLoc    = -1;
-    g_gradCountCwLoc  = -1;
-    g_baseColorLoc    = -1;
-    g_mirrorLoc       = -1;
+static ShinyUniformLocs g_shinyLocs;
+static ShinyUniformLocs g_rippleLocs;
+
+static void resetGradUniformLocations(ShinyUniformLocs& locs) {
+    locs = {};
+}
+
+static void cacheProgramUniforms(const SP<CShader>& shader, ShinyUniformLocs& locs, bool ripple) {
+    locs = {};
+    if (!shader)
+        return;
+    const auto prog = shader->program();
+    locs.gradColors   = glGetUniformLocation(prog, "gradColors");
+    locs.gradPos      = glGetUniformLocation(prog, "gradPos");
+    locs.gradCount    = glGetUniformLocation(prog, "gradCount");
+    locs.gradColorsCw = glGetUniformLocation(prog, "gradColorsCW");
+    locs.gradPosCw    = glGetUniformLocation(prog, "gradPosCW");
+    locs.gradCountCw  = glGetUniformLocation(prog, "gradCountCW");
+    locs.baseColor    = glGetUniformLocation(prog, "baseColor");
+    locs.mirror       = glGetUniformLocation(prog, "mirror");
+    if (!ripple)
+        return;
+    locs.rippleFreq  = glGetUniformLocation(prog, "rippleFreq");
+    locs.rippleSpeed = glGetUniformLocation(prog, "rippleSpeed");
+    locs.rippleGain  = glGetUniformLocation(prog, "rippleGain");
+    locs.ripplePower = glGetUniformLocation(prog, "ripplePower");
 }
 
 static bool hyprGlAlive() {
@@ -55,7 +79,18 @@ static void hyprMakeCurrent() {
 }
 
 static bool hyprShaderLive() {
-    return g_shinyShader && g_shinyShader->program();
+    return g_shinyShader && g_shinyShader->program() && g_rippleShader && g_rippleShader->program();
+}
+
+static bool hyprCompileOne(SP<CShader>& slot, const std::string& frag, ShinyUniformLocs& locs, bool ripple) {
+    slot = makeShared<CShader>();
+    if (!slot->createProgram(SHINY_VERT, frag, true, false)) {
+        slot.reset();
+        resetGradUniformLocations(locs);
+        return false;
+    }
+    cacheProgramUniforms(slot, locs, ripple);
+    return true;
 }
 
 static bool hyprCompileShader() {
@@ -63,34 +98,32 @@ static bool hyprCompileShader() {
         return false;
 
     g_pHyprOpenGL->makeEGLCurrent();
-    g_shinyShader = makeShared<CShader>();
-    if (!g_shinyShader->createProgram(SHINY_VERT, SHINY_FRAG, true, false)) {
-        Log::logger->log(Log::ERR, "[shiny-border] fragment shader failed to compile");
-        g_shinyShader.reset();
+    if (!hyprCompileOne(g_shinyShader, SHINY_FRAG, g_shinyLocs, false)) {
+        Log::logger->log(Log::ERR, "[shiny-border] shiny fragment shader failed to compile");
         return false;
     }
-
-    g_gradColorsLoc   = glGetUniformLocation(g_shinyShader->program(), "gradColors");
-    g_gradPosLoc      = glGetUniformLocation(g_shinyShader->program(), "gradPos");
-    g_gradCountLoc    = glGetUniformLocation(g_shinyShader->program(), "gradCount");
-    g_gradColorsCwLoc = glGetUniformLocation(g_shinyShader->program(), "gradColorsCW");
-    g_gradPosCwLoc    = glGetUniformLocation(g_shinyShader->program(), "gradPosCW");
-    g_gradCountCwLoc  = glGetUniformLocation(g_shinyShader->program(), "gradCountCW");
-    g_baseColorLoc    = glGetUniformLocation(g_shinyShader->program(), "baseColor");
-    g_mirrorLoc       = glGetUniformLocation(g_shinyShader->program(), "mirror");
-
+    if (!hyprCompileOne(g_rippleShader, RIPPLE_FRAG, g_rippleLocs, true)) {
+        Log::logger->log(Log::ERR, "[shiny-border] ripple fragment shader failed to compile");
+        g_shinyShader.reset();
+        resetGradUniformLocations(g_shinyLocs);
+        return false;
+    }
     return true;
 }
 
 static void hyprResetShader() {
     g_shinyShader.reset();
-    resetGradUniformLocations();
+    g_rippleShader.reset();
+    resetGradUniformLocations(g_shinyLocs);
+    resetGradUniformLocations(g_rippleLocs);
 }
 
 static void hyprAbandonShader() {
-    // Deliberate leak: empty the static without ~CShader / glDelete*.
+    // Deliberate leak: empty the statics without ~CShader / glDelete*.
     (void)new SP<CShader>(std::move(g_shinyShader));
-    resetGradUniformLocations();
+    (void)new SP<CShader>(std::move(g_rippleShader));
+    resetGradUniformLocations(g_shinyLocs);
+    resetGradUniformLocations(g_rippleLocs);
 }
 
 struct ShinyQueued {
@@ -259,7 +292,9 @@ std::vector<UP<IPassElement>> CShinyPassElement::draw() {
     transformed.transform(inv, mon->m_transformedSize.x, mon->m_transformedSize.y);
 
     g_pHyprOpenGL->blend(true);
-    auto shader = g_pHyprOpenGL->useShader(g_shinyShader);
+    auto& prog = m_data.ripple ? g_rippleShader : g_shinyShader;
+    auto& locs = m_data.ripple ? g_rippleLocs : g_shinyLocs;
+    auto  shader = g_pHyprOpenGL->useShader(prog);
     if (!shader)
         return shinyFallbackIf(shinyFinishMutatedDraw(m_epoch, false, false), m_data, sc<float>(mon->m_scale));
 
@@ -281,12 +316,19 @@ std::vector<UP<IPassElement>> CShinyPassElement::draw() {
     shader->setUniformFloat(SHADER_RANGE, m_data.lobe);
     shader->setUniformFloat(SHADER_BRIGHTNESS, m_data.pulseHz);
     shader->setUniformFloat(SHADER_ANGLE, m_data.angle);
-    glUniform1i(g_mirrorLoc, m_data.mirror ? 1 : 0);
+    glUniform1i(locs.mirror, m_data.mirror ? 1 : 0);
 
     // CShader has no third color slot; upload like the gradient arrays.
     {
         const CHyprColor base{m_data.shared.baseColor};
-        glUniform4f(g_baseColorLoc, sc<float>(base.r), sc<float>(base.g), sc<float>(base.b), sc<float>(base.a));
+        glUniform4f(locs.baseColor, sc<float>(base.r), sc<float>(base.g), sc<float>(base.b), sc<float>(base.a));
+    }
+
+    if (m_data.ripple) {
+        glUniform1f(locs.rippleFreq, m_data.rippleFreq);
+        glUniform1f(locs.rippleSpeed, m_data.rippleSpeed);
+        glUniform1f(locs.rippleGain, m_data.rippleGain);
+        glUniform1f(locs.ripplePower, m_data.ripplePower);
     }
 
     // Always upload the counts — uniforms persist per program, so a classic
@@ -308,9 +350,9 @@ std::vector<UP<IPassElement>> CShinyPassElement::draw() {
         glUniform1fv(posLoc, SHINY_MAX_GRADIENT_STEPS, gradPos);
         glUniform1i(countLoc, steps);
     };
-    uploadRamp(g_gradColorsLoc, g_gradPosLoc, g_gradCountLoc, m_data.shared.stops, m_data.shared.stopPos,
+    uploadRamp(locs.gradColors, locs.gradPos, locs.gradCount, m_data.shared.stops, m_data.shared.stopPos,
                m_data.shared.stopCount);
-    uploadRamp(g_gradColorsCwLoc, g_gradPosCwLoc, g_gradCountCwLoc, m_data.shared.stopsCW, m_data.shared.stopPosCW,
+    uploadRamp(locs.gradColorsCw, locs.gradPosCw, locs.gradCountCw, m_data.shared.stopsCW, m_data.shared.stopPosCW,
                m_data.shared.stopCountCW);
 
     const GLint vao = shader->getUniformLocation(SHADER_SHADER_VAO);

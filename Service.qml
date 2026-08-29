@@ -36,7 +36,7 @@ Item {
   // Bump when the overlay's look changes so attach() drops leftovers from a
   // previous plugin load. omarchy-shell caches service instances; copying
   // QML is not enough if an old ShinyBorder is still a child of the card.
-  readonly property int overlayRev: 12
+  readonly property int overlayRev: 13
 
   // shell.json plugins[] entry is the shared look. Services are not injected
   // a settings object — read it off shell.shellConfig ourselves.
@@ -255,7 +255,7 @@ Item {
   }
 
   function effectIsShiny() {
-    return String(root.look && root.look.effect ? root.look.effect : Look.DEFAULT_EFFECT) === "shiny"
+    return Look.effectDraws(root.look && root.look.effect)
   }
 
   function runHyprEnsure() {
@@ -523,6 +523,11 @@ Item {
       shimmerScaleMax: root.look.shimmerScaleMax
       pulse: root.look.pulse
       pulseHz: root.look.pulseHz
+      effect: root.look.effect
+      rippleFreq: root.look.rippleFreq
+      rippleSpeed: root.look.rippleSpeed
+      rippleGain: root.look.rippleGain
+      ripplePower: root.look.ripplePower
       baseColor: Look.toQtColor(root.look.baseColor)
       gradient: Look.toQtColorList(root.look.gradient)
       gradientPositions: root.look.gradientPositions

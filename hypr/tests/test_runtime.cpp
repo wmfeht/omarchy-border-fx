@@ -679,10 +679,66 @@ static void checkFallbackEmergencyPaint() {
     // shader-only (the linear pass is not the shared look).
 }
 
+static void checkRippleCrest() {
+    const float freq  = 0.02f;
+    const float speed = 2.f;
+    const float pi    = std::acos(-1.f);
+
+    CHECK(shinyRippleCrest(0.f, 0.f, freq, speed, 8.f) == 0.f);
+
+    const float rPeak = (pi * 0.5f) / freq;
+    const float peak  = shinyRippleCrest(rPeak, 0.f, freq, speed, 8.f);
+    const float later = shinyRippleCrest(rPeak, 0.2f, freq, speed, 8.f);
+    CHECK(peak > 0.9f);
+    CHECK(later != peak);
+
+    const float rNeg = (3.f * pi / 2.f) / freq;
+    CHECK(shinyRippleCrest(rNeg, 0.f, freq, speed, 8.f) == 0.f);
+    CHECK(shinyRippleCrest(rNeg, 0.f, freq, speed, 1.f) == 0.f);
+
+    const float rHalf = (pi / 6.f) / freq;
+    const float p1    = shinyRippleCrest(rHalf, 0.f, freq, speed, 1.f);
+    const float p8    = shinyRippleCrest(rHalf, 0.f, freq, speed, 8.f);
+    CHECK(p1 > 0.f);
+    CHECK(p8 > 0.f);
+    CHECK(p8 < p1);
+    CHECK(p8 < 0.1f * p1);
+
+    CHECK(shinyRippleEnergy(0.3f, 0.8f, 0.f) == 0.3f);
+    CHECK(shinyRippleEnergy(0.3f, 0.8f, 1.f) == 0.8f);
+    CHECK(shinyRippleEnergy(0.9f, 0.8f, 1.f) == 0.9f);
+
+    CHECK(shinyEffectDraws(nullptr));
+    CHECK(shinyEffectDraws(""));
+    CHECK(shinyEffectDraws("shiny"));
+    CHECK(shinyEffectDraws("ripple"));
+    CHECK(!shinyEffectDraws("other"));
+    CHECK(!shinyEffectIsRipple(nullptr));
+    CHECK(!shinyEffectIsRipple(""));
+    CHECK(!shinyEffectIsRipple("shiny"));
+    CHECK(shinyEffectIsRipple("ripple"));
+
+    CHECK(shinyShaderTime(false, false, 12.5, 0.4f) == 0.f);
+    CHECK(shinyShaderTime(false, true, 12.5, 0.4f) == shinyRippleTime(12.5));
+    CHECK(shinyShaderTime(false, true, 12.5, 0.4f) != 0.f);
+    CHECK(shinyShaderTime(true, true, 12.5, 0.4f) == shinyRippleTime(12.5));
+
+    CHECK(!shinyTimerShouldRun(true, SHINY_EFFECT_NONE, false, true, true));
+    CHECK(shinyTimerShouldRun(true, SHINY_EFFECT_NONE, true, true, true));
+    CHECK(!shinyTimerShouldRun(true, SHINY_EFFECT_NONE, true, true, false));
+    CHECK(shinyTimerShouldRun(true, SHINY_EFFECT_NONE, true, false, false));
+    CHECK(shinyTimerShouldRun(true, SHINY_EFFECT_SHIMMER, true, true, true));
+    CHECK(!shinyTimerShouldRun(false, SHINY_EFFECT_NONE, true, true, true));
+    CHECK(shinyTimerTickMs(SHINY_EFFECT_NONE, true, 0.4f, 0.3f) == shinyPulseTickMs(0.f));
+    CHECK(shinyTimerTickMs(SHINY_EFFECT_PULSE, true, 0.4f, 0.3f) == shinyPulseTickMs(0.4f));
+    CHECK(shinyTimerTickMs(SHINY_EFFECT_SHIMMER, true, 0.4f, 0.3f) == shinyPulseTickMs(0.3f));
+}
+
 int main() {
     checkShippedDecisions();
     checkPulseDecisions();
     checkEffectExclusivity();
+    checkRippleCrest();
     checkPinnedHeading();
     checkShimmer();
     checkGradient();

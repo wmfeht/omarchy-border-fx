@@ -132,6 +132,10 @@ ShellRoot {
             title: "Notification card"
             body: "Live looknfeel: 4-stop ramp, pin 120, shimmer 0.3 Hz."
             caption: "defaults — light from ≈11 o'clock, stretched across this card"
+            shiny.effect: {
+              var v = String(Quickshell.env("BORDER_FX_EFFECT") || "").toLowerCase()
+              return v === "ripple" ? "ripple" : "shiny"
+            }
           }
 
           DemoCard {

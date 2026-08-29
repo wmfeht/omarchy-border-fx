@@ -245,6 +245,7 @@ hypr_abi_delete_session_so() {
 }
 
 # Look JSON `effect`. Missing or empty is shiny (compile/load still allowed).
+# shiny and ripple both load the window plugin; anything else is skipped.
 look_effect() {
   local json="${1-}"
   [[ -n $json ]] || json='{}'
@@ -257,7 +258,9 @@ look_effect() {
 }
 
 look_effect_is_shiny() {
-  [[ $(look_effect "${1-}") == shiny ]]
+  local e
+  e=$(look_effect "${1-}")
+  [[ $e == shiny || $e == ripple ]]
 }
 
 hypr_session_ensure_gen() {

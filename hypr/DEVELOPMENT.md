@@ -18,9 +18,10 @@ that light, projected along the axis using this window's width and height.
 
 - `CShinyBorder` is a custom `IHyprWindowDecoration`, so the plugin owns the
   draw path instead of poking Hyprland’s border-color angle field
-- a GLES 3 fragment shader draws the ring (`src/shaders.hpp`); if that
-  program fails to compile, draw falls back to Hyprland’s linear
-  `CBorderPassElement`
+- GLES 3 fragment shaders draw the ring (`src/shaders.hpp`: `SHINY_FRAG`
+  and sibling `RIPPLE_FRAG`); `draw()` picks from `plugin:shiny-border:effect`.
+  If compile fails, draw falls back to Hyprland’s linear `CBorderPassElement`.
+  Both programs share `SHINY_VERT`. Teardown destroys both.
 - optional pulse lives on the decoration (`CEventLoopTimer`), not a global
   `render.pre` scan
 - optional shimmer reuses that timer, exclusive with pulse (shimmer wins):
@@ -162,8 +163,8 @@ scripts/pluginctl.sh
 - **`PLUGIN_EXIT`** must reset `Event::bus()` listeners, mark teardown (which
   bumps the pass-element epoch so leftover `CShinyPassElement::draw` no-ops),
   recurse-remove leftover `CShinyPassElement` from each owning pass (including
-  nested transformer children recorded at construction), and destroy the
-  shader *before* `dlclose`. Do **not** `m_renderPass.clear()` — that drops
+  nested transformer children recorded at construction), and destroy both
+  shader programs *before* `dlclose`. Do **not** `m_renderPass.clear()` — that drops
   stock borders and windows already queued in the frame. Hyprland strips
   decorations; it does not flush plugin pass elements.
   `removeAllOfType("CShinyPassElement")` does not recurse, so unload walks the

@@ -91,6 +91,15 @@ function checkDefaults() {
   check(d.gradientPositions === "0 1 3 100", "positions")
   check(d.baseColor === "rgba(00687855)", "default baseColor")
   check(d.activeOnly === true, "hypr-only activeOnly")
+  check(d.rippleFreq === 0.025, "default rippleFreq is dedicated")
+  check(d.rippleSpeed === 2, "default rippleSpeed is dedicated")
+  check(d.rippleGain === 0.85, "default rippleGain is dedicated")
+  check(d.ripplePower === 8, "default ripplePower is dedicated")
+  check(Look.effectDraws("shiny") === true, "effectDraws shiny")
+  check(Look.effectDraws("ripple") === true, "effectDraws ripple")
+  check(Look.effectDraws("") === true, "empty effect draws as shiny")
+  check(Look.effectDraws(undefined) === true, "omitted effect draws as shiny")
+  check(Look.effectDraws("other") === false, "unknown effect does not draw")
 }
 
 function checkMerge() {
@@ -127,6 +136,22 @@ function checkMerge() {
   const other = Look.merge({ effect: "other", pinDeg: 10 })
   check(other.effect === "other", "unknown effect is preserved")
   check(other.pinDeg === 10, "look keys still merge when effect is not shiny")
+
+  const ripple = Look.merge({ effect: "ripple", ripple: { rippleGain: 0.5, rippleFreq: 0.04 } })
+  check(ripple.effect === "ripple", "merge preserves effect ripple")
+  check(ripple.rippleGain === 0.5, "nested ripple.rippleGain wins")
+  check(ripple.rippleFreq === 0.04, "nested ripple.rippleFreq wins")
+  check(ripple.rippleSpeed === Look.DEFAULTS.rippleSpeed, "missing nested rippleSpeed uses dedicated default")
+  check(ripple.ripplePower === Look.DEFAULTS.ripplePower, "missing nested ripplePower uses dedicated default")
+  check(ripple.pinDeg === Look.DEFAULTS.pinDeg, "ripple look still has shared pinDeg default")
+
+  const rippleTop = Look.merge({ effect: "ripple", rippleGain: 0.2, ripple: { rippleGain: 0.9 } })
+  check(rippleTop.rippleGain === 0.9, "nested ripple object wins over top-level rippleGain")
+
+  const rippleOnlyEffect = Look.merge({ effect: "ripple" })
+  check(rippleOnlyEffect.effect === "ripple", "effect:ripple with no nested object")
+  check(rippleOnlyEffect.rippleFreq === Look.DEFAULTS.rippleFreq, "ripple-only look gets dedicated freq")
+  check(rippleOnlyEffect.rippleGain === Look.DEFAULTS.rippleGain, "ripple-only look gets dedicated gain")
 
   const leftoverPin = Look.merge({ pin: false, pinDeg: 90, quantizeDeg: 15 })
   check(!Object.prototype.hasOwnProperty.call(leftoverPin, "pin"), "leftover pin:false is not a look key")
@@ -296,6 +321,34 @@ function checkLookApply() {
   check(otherFx.status === 0, "non-shiny effect look-apply")
   check(/SHINY_LOAD = false/.test(otherFx.stdout), "non-shiny effect skips shiny plugin.load")
   check(/enabled\s*=\s*false/.test(otherFx.stdout), "non-shiny effect disables shiny adapter")
+
+  const rippleFx = spawnSync(
+    "bash",
+    [script, "--stdout", "--look-json", JSON.stringify({ effect: "ripple" })],
+    { encoding: "utf8", env: env }
+  )
+  check(rippleFx.status === 0, "ripple effect look-apply: " + (rippleFx.stderr || ""))
+  check(/SHINY_LOAD = true/.test(rippleFx.stdout), "ripple effect loads the window plugin")
+  check(/enabled\s*=\s*true/.test(rippleFx.stdout), "ripple effect enables the adapter")
+  check(/effect\s*=\s*"ripple"/.test(rippleFx.stdout), "ripple effect fans out effect string")
+  check(luaAssign(rippleFx.stdout, "ripple_freq") === "0.025", "ripple look-apply dedicated freq")
+  check(luaAssign(rippleFx.stdout, "ripple_speed") === "2", "ripple look-apply dedicated speed")
+  check(luaAssign(rippleFx.stdout, "ripple_gain") === "0.85", "ripple look-apply dedicated gain")
+  check(luaAssign(rippleFx.stdout, "ripple_power") === "8", "ripple look-apply dedicated power")
+
+  const rippleNested = spawnSync(
+    "bash",
+    [script, "--stdout", "--look-json", JSON.stringify({
+      effect: "ripple",
+      rippleGain: 0.2,
+      ripple: { rippleGain: 0.5, rippleFreq: 0.04 }
+    })],
+    { encoding: "utf8", env: env }
+  )
+  check(rippleNested.status === 0, "nested ripple look-apply")
+  check(/SHINY_LOAD = true/.test(rippleNested.stdout), "nested ripple still loads")
+  check(luaAssign(rippleNested.stdout, "ripple_gain") === "0.5", "nested ripple.rippleGain fans out")
+  check(luaAssign(rippleNested.stdout, "ripple_freq") === "0.04", "nested ripple.rippleFreq fans out")
 }
 
 function pluginInitSection(src) {
@@ -410,6 +463,11 @@ function checkPluginInitDefaults() {
   check(sameNumber(hyprCtorDefault(init, "shimmer_scale_min"), d.shimmerScaleMin), "PLUGIN_INIT shimmer_scale_min == Look.DEFAULTS.shimmerScaleMin")
   check(sameNumber(hyprCtorDefault(init, "shimmer_scale_max"), d.shimmerScaleMax), "PLUGIN_INIT shimmer_scale_max == Look.DEFAULTS.shimmerScaleMax")
   check(sameNumber(hyprCtorDefault(init, "lobe"), d.lobe), "PLUGIN_INIT lobe == Look.DEFAULTS.lobe")
+  check(hyprCtorDefault(init, "effect") === d.effect, "PLUGIN_INIT effect == Look.DEFAULTS.effect")
+  check(sameNumber(hyprCtorDefault(init, "ripple_freq"), d.rippleFreq), "PLUGIN_INIT ripple_freq == Look.DEFAULTS.rippleFreq")
+  check(sameNumber(hyprCtorDefault(init, "ripple_speed"), d.rippleSpeed), "PLUGIN_INIT ripple_speed == Look.DEFAULTS.rippleSpeed")
+  check(sameNumber(hyprCtorDefault(init, "ripple_gain"), d.rippleGain), "PLUGIN_INIT ripple_gain == Look.DEFAULTS.rippleGain")
+  check(sameNumber(hyprCtorDefault(init, "ripple_power"), d.ripplePower), "PLUGIN_INIT ripple_power == Look.DEFAULTS.ripplePower")
 
   check(hyprCtorDefault(init, "gradient_positions") === d.gradientPositions,
     "PLUGIN_INIT gradient_positions == Look.DEFAULTS.gradientPositions")
@@ -595,6 +653,12 @@ function checkClamps() {
   const scales = Look.merge({ shimmerScaleMin: 0.1, shimmerScaleMax: 10 })
   check(scales.shimmerScaleMin === 0.2, "shimmerScaleMin clamps to 0.2")
   check(scales.shimmerScaleMax === 3, "shimmerScaleMax clamps to 3")
+
+  const rippleClamp = Look.merge({ rippleFreq: 1, rippleGain: -1, ripplePower: 0, rippleSpeed: 100 })
+  check(rippleClamp.rippleFreq === 0.2, "rippleFreq clamps to 0.2")
+  check(rippleClamp.rippleGain === 0, "rippleGain clamps to 0")
+  check(rippleClamp.ripplePower === 1, "ripplePower clamps to 1")
+  check(rippleClamp.rippleSpeed === 40, "rippleSpeed clamps to 40")
 }
 
 function checkLookApplyTyped() {

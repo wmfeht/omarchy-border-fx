@@ -45,6 +45,7 @@ class CShinyBorder : public IHyprWindowDecoration {
     CBox                assignedBoxGlobal();
     ShinyEffect         effectMode() const;
     ShinyShimmerParams  shimmerParams() const;
+    bool                rippleOn() const;
     bool                pulseWanted() const;
     void                startPulse();
     void                stopPulse();

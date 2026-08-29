@@ -34,7 +34,7 @@ Item {
       radius: card.radius
       // Resolve from this file so the qsb is found even if ShinyBorder's
       // own Qt.resolvedUrl is evaluated against a different QML document.
-      shaderSource: Qt.resolvedUrl("../shaders/shiny.frag.qsb")
+      shaderSource: Qt.resolvedUrl(effect === "ripple" ? "../shaders/ripple.frag.qsb" : "../shaders/shiny.frag.qsb")
     }
 
     Column {

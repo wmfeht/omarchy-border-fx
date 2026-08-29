@@ -14,7 +14,7 @@ build/load `~/.local/lib/hypr/hypr-shiny-border.so`.
 | Name | Role |
 |---|---|
 | Omarchy id `wmfeht.border-fx` | Source of truth in `shell.json`; `omarchy plugin enable` |
-| `effect` (`shiny`) | Which renderer to drive; more types later |
+| `effect` (`shiny` / `ripple`) | Which renderer to drive |
 | Hyprland plugin `hypr-shiny-border` | Shiny window adapter (`hyprctl plugin list`, hyprpm, `PLUGIN_INIT`) |
 | Config keys `plugin:shiny-border:*` / Lua `shiny_border` | Shiny Hyprland adapter (hyphen → underscore) |
 
@@ -90,10 +90,11 @@ plugin is on if and only if that id is present (`omarchy plugin enable` /
 `disable`). Look reading still falls back to leftover `qs.border-fx` or
 `qs.shiny-border` entries if `wmfeht.border-fx` is missing.
 
-`effect` selects the renderer (`shiny` is the only one today). Chrome
-overlays attach only while `effect` is `shiny`. Any other value detaches
-chrome and fans out `enabled = false` to the shiny Hyprland adapter (look
-keys still merge, for a later renderer).
+`effect` selects the renderer (`shiny` or `ripple`). Chrome overlays
+attach while `effect` is `shiny` or `ripple`. Any other value detaches
+chrome and fans out `enabled = false` to the Hyprland adapter (look
+keys still merge). Ripple is a lighting-only crest on the same ring:
+empty/`omitted` `effect` stays `"shiny"`.
 
 Missing or `null` look keys mean the **shared look** (pinned 120°,
 shimmer, 4-stop ramp, wrap stroke). Hyprland `PLUGIN_INIT` registers the
@@ -149,7 +150,11 @@ All keys at their shared defaults (equivalent to `{ "id": "wmfeht.border-fx" }`)
   "baseColor": "rgba(00687855)",
   "activeOnly": true,
   "pulse": false,
-  "pulseHz": 0.4
+  "pulseHz": 0.4,
+  "rippleFreq": 0.025,
+  "rippleSpeed": 2,
+  "rippleGain": 0.85,
+  "ripplePower": 8
 }
 ```
 
@@ -166,6 +171,18 @@ Nested keys win over the same key at the top level:
 ```
 
 That look is `pinDeg` 45, `borderSize` 3, everything else default.
+
+Ripple is the same swap: `"effect": "ripple"` plus an optional nested
+`"ripple"` object. Nested keys win; missing ripple keys use dedicated
+defaults (not the shiny C++ numbers).
+
+```json
+{
+  "id": "wmfeht.border-fx",
+  "effect": "ripple",
+  "ripple": { "rippleFreq": 0.02, "rippleGain": 0.7 }
+}
+```
 
 ### Colors
 
@@ -211,7 +228,7 @@ only (chrome ignores the key).
 
 | JSON key | Type | Default | Hosts | What it does |
 |---|---|---|---|---|
-| `effect` | string | `"shiny"` | both | Renderer. Only `"shiny"` draws today. Anything else: chrome off, shiny `.so` not loaded / `enabled = false`. |
+| `effect` | string | `"shiny"` | both | Renderer. `"shiny"` or `"ripple"` draws on chrome and windows. Anything else: chrome off, `.so` not loaded / `enabled = false`. |
 | `borderSize` | number (px) | `2` | both | Ring thickness. Chrome: overlay hidden when `≤ 0`. Hyprland clamps to `-1…20`; `-1` follows `general:border_size` on windows only. |
 | `baseColor` | color | `"rgba(00687855)"` | both | Wrapping stroke **under** the directional highlight, same thickness as the ring. Transparent (`a = 0`) = off. Not Hyprland `decoration:shadow`, not a gradient stop. Far-side highlight uses the last stop’s alpha; the wrap is what still paints when that alpha is low. |
 | `pinDeg` | number (°) | `120` | both | Light heading, degrees CCW. `0` = from the right, `90` = from above. Hyprland clamps `-360…360`. |
@@ -229,15 +246,20 @@ only (chrome ignores the key).
 | `shimmerDeg` | number | `20` | both | Max wander **each side** of the heading, degrees. Hyprland clamps `0…180`. |
 | `shimmerScaleMin` | number | `0.75` | both | Lower bound of the size walk. Swapped with max if inverted. Hyprland clamps `0.2…3`. |
 | `shimmerScaleMax` | number | `1.35` | both | Upper bound of the size walk. Scale also fattens/thins the stroke (~35% of the deviation from 1). Hyprland clamps `0.2…3`. |
-| `activeOnly` | bool | `true` | windows | Only the focused window draws / shimmers / pulses. Unfocused windows keep the reserved padding so layout does not jump. Chrome has no unfocused state, so it ignores this key. |
+| `activeOnly` | bool | `true` | windows | Only the focused window draws / shimmers / pulses / ripples. Unfocused windows keep the reserved padding so layout does not jump. Chrome has no unfocused state, so it ignores this key. |
 | `pulse` | bool | `false` | both | Oscillate highlight **transparency** in the shader (`0.5+0.5*sin`). Does not change lobe width or thickness. Ignored while shimmer is running. |
 | `pulseHz` | number | `0.4` | both | Pulse rate. `0` disables. Hyprland clamps `0…4`. |
+| `rippleFreq` | number | `0.025` | both | Ripple spatial `k` (1/px). Dedicated default (modest). Hyprland clamps `0.001…0.2`. |
+| `rippleSpeed` | number | `2` | both | Ripple temporal speed. Dedicated default (slow). Hyprland clamps `0…40`. |
+| `rippleGain` | number | `0.85` | both | Mix crests into cone/glow. `0` matches shiny lighting. Hyprland clamps `0…2`. |
+| `ripplePower` | number | `8` | both | `pow` on the sine lobe; higher = thinner bands. Hyprland clamps `1…16`. |
 
 Hyprland adapter keys (what you see in generated lua / `plugin:shiny-border:*`)
 use snake_case: `border_size`, `pin_deg`, `angle_offset`, `base_color`,
 `gradient_positions`, `gradient_cw`, `gradient_positions_cw`, `col.a`,
 `col.b`, `active_only`, `pulse_hz`, `shimmer_hz`, `shimmer_deg`,
-`shimmer_scale_min`, `shimmer_scale_max`, `mirror`. Hyphens in the Hyprland plugin
+`shimmer_scale_min`, `shimmer_scale_max`, `mirror`, `effect`, `ripple_freq`,
+`ripple_speed`, `ripple_gain`, `ripple_power`. Hyphens in the Hyprland plugin
 prefix become underscores in Lua (`shiny_border`).
 
 Not a look key (hardcoded or host-owned):

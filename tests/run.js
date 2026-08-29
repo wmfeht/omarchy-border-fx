@@ -14,7 +14,7 @@ let fails = 0
 function loadPragmaLibrary(rel) {
   const file = path.join(root, rel)
   const src = fs.readFileSync(file, "utf8").replace(/^\s*\.pragma library\s*$/m, "")
-  const ctx = { Math, Number, String, isFinite, console }
+  const ctx = { Math, Number, String, Object, Array, parseInt, isFinite, console }
   vm.createContext(ctx)
   vm.runInContext(src, ctx, { filename: file })
   return ctx
@@ -33,6 +33,8 @@ function approx(a, b, eps) {
 
 const Shimmer = loadPragmaLibrary("qml/Shimmer.js")
 const Gradient = loadPragmaLibrary("qml/Gradient.js")
+const Ripple = loadPragmaLibrary("qml/Ripple.js")
+const Look = loadPragmaLibrary("qml/Look.js")
 
 function checkPinnedHeading() {
   const pi = Math.PI
@@ -428,15 +430,48 @@ function checkLightProjection() {
   check(sample(0, 50, 100, 100, r, 0).cw, "pin 0 bottom is the CW half")
 }
 
+function checkRippleCrest() {
+  check(typeof Ripple.crest === "function", "Ripple.crest is shipped")
+  const freq = 0.02
+  const speed = 2
+  const pi = Math.PI
+  check(Ripple.crest(0, 0, freq, speed, 8) === 0, "crest at origin is 0")
+  const rPeak = (pi * 0.5) / freq
+  const peak = Ripple.crest(rPeak, 0, freq, speed, 8)
+  const later = Ripple.crest(rPeak, 0.2, freq, speed, 8)
+  check(peak > 0.9, "crest at π/2 is a peak")
+  check(later !== peak, "later t shifts phase")
+  const rNeg = (3 * pi / 2) / freq
+  check(Ripple.crest(rNeg, 0, freq, speed, 8) === 0, "negative sine lobe → crest 0")
+  check(Ripple.crest(rNeg, 0, freq, speed, 1) === 0, "negative lobe is 0 at power 1 too")
+  const rHalf = (pi / 6) / freq
+  const p1 = Ripple.crest(rHalf, 0, freq, speed, 1)
+  const p8 = Ripple.crest(rHalf, 0, freq, speed, 8)
+  check(p1 > 0 && p8 > 0, "off-peak positive lobe is live")
+  check(p8 < p1, "high power is sparser than power 1")
+  check(p8 < 0.1 * p1, "power 8 is much thinner than power 1")
+  check(Ripple.energy(0.3, 0.8, 0) === 0.3, "gain 0 energy matches cone (shiny)")
+  check(Ripple.energy(0.3, 0.8, 1) === 0.8, "gain 1 energy is max(cone, crest)")
+  check(Look.effectDraws("ripple") === true, "Look.effectDraws ripple")
+  check(Look.effectDraws("other") === false, "Look.effectDraws unknown")
+}
+
 function checkSharedShaderBake() {
   const lightingPath = path.join(root, "shaders/shiny-lighting.frag")
   const qtPath = path.join(root, "shaders/shiny.frag")
   const glesPath = path.join(root, "shaders/shiny.gles.frag")
+  const rippleLightingPath = path.join(root, "shaders/ripple-lighting.frag")
+  const rippleQtPath = path.join(root, "shaders/ripple.frag")
+  const rippleGlesPath = path.join(root, "shaders/ripple.gles.frag")
   const qsbPath = path.join(root, "shaders/shiny.frag.qsb")
+  const rippleQsbPath = path.join(root, "shaders/ripple.frag.qsb")
   const hppPath = path.join(root, "hypr/src/shaders.hpp")
   const lighting = fs.readFileSync(lightingPath, "utf8")
   const qt = fs.readFileSync(qtPath, "utf8")
   const gles = fs.readFileSync(glesPath, "utf8")
+  const rippleLighting = fs.readFileSync(rippleLightingPath, "utf8")
+  const rippleQt = fs.readFileSync(rippleQtPath, "utf8")
+  const rippleGles = fs.readFileSync(rippleGlesPath, "utf8")
   check(lighting.indexOf("vec4 shinyLightingColor") !== -1, "lighting source defines shinyLightingColor")
   check(qt.indexOf('#include "shiny-lighting.frag"') !== -1, "qt wrapper includes the lighting source")
   check(gles.indexOf('#include "shiny-lighting.frag"') !== -1, "gles wrapper includes the lighting source")
@@ -444,6 +479,16 @@ function checkSharedShaderBake() {
   check(gles.indexOf("gl_FragCoord") !== -1, "gles wrapper uses gl_FragCoord")
   check(qt.indexOf("vec4 shinyLightingColor") === -1, "qt wrapper does not hand-copy lighting")
   check(gles.indexOf("vec4 shinyLightingColor") === -1, "gles wrapper does not hand-copy lighting")
+  check(lighting.indexOf("if (ripple)") === -1, "shiny lighting has no if (ripple)")
+  check(lighting.indexOf("rippleGain") === -1, "shiny lighting has no ripple uniforms")
+  check(rippleLighting.indexOf("vec4 rippleLightingColor") !== -1, "ripple lighting defines rippleLightingColor")
+  check(rippleLighting.indexOf("rippleGain * crest") !== -1, "ripple lighting mixes crest via gain")
+  check(rippleLighting.indexOf("max(cone,") !== -1, "ripple lighting uses max into cone energy")
+  check(rippleLighting.indexOf("texture(") === -1, "ripple lighting does not texture()")
+  check(rippleQt.indexOf('#include "ripple-lighting.frag"') !== -1, "ripple qt wrapper includes ripple lighting")
+  check(rippleGles.indexOf('#include "ripple-lighting.frag"') !== -1, "ripple gles wrapper includes ripple lighting")
+  check(rippleQt.indexOf("vec4 rippleLightingColor") === -1, "ripple qt wrapper does not hand-copy lighting")
+  check(rippleGles.indexOf("vec4 rippleLightingColor") === -1, "ripple gles wrapper does not hand-copy lighting")
 
   const baked = spawnSync("bash", [path.join(root, "scripts/bake.sh")], {
     encoding: "utf8",
@@ -457,12 +502,16 @@ function checkSharedShaderBake() {
   check((baked.stdout || "").indexOf("baked ") !== -1, "bake reports qsb output")
   check((baked.stdout || "").indexOf("inlined ") !== -1, "bake reports shaders.hpp output")
   check(fs.existsSync(qsbPath) && fs.statSync(qsbPath).size > 0, "bake wrote shaders/shiny.frag.qsb")
+  check(fs.existsSync(rippleQsbPath) && fs.statSync(rippleQsbPath).size > 0, "bake wrote shaders/ripple.frag.qsb")
   const hpp = fs.readFileSync(hppPath, "utf8")
   check(hpp.indexOf("Generated by scripts/bake.sh") !== -1, "shaders.hpp is bake-generated")
   check(hpp.indexOf(lighting.trim()) !== -1, "shaders.hpp inlines the lighting source")
+  check(hpp.indexOf(rippleLighting.trim()) !== -1, "shaders.hpp inlines the ripple lighting source")
+  check(hpp.indexOf("RIPPLE_FRAG") !== -1, "shaders.hpp exports RIPPLE_FRAG")
   check(hpp.indexOf("gl_FragCoord") !== -1, "inlined gles wrapper keeps gl_FragCoord")
   check(hpp.indexOf("qt_Matrix") === -1, "inlined gles host has no Qt UBO")
   check(hpp.indexOf("widthPx") === -1, "inlined gles host is not the qt wrapper")
+  check(hpp.indexOf("if (ripple)") === -1, "inlined programs have no if (ripple) mode flag")
 }
 
 function checkShimmerParity() {
@@ -593,10 +642,14 @@ function checkWrapSource() {
         "ShaderEffect brightness is not stuck at 0")
   check(qml.indexOf("root._pulseOn ? root.pulseHz : 0") !== -1,
         "ShaderEffect brightness is pulse Hz when pulse is the active effect")
-  check(qml.indexOf("root._pulseOn ? root._pulseTime : 0") !== -1,
-        "ShaderEffect time is driven when pulse is the active effect")
-  check(qml.indexOf("root._shimmerOn || root._pulseOn") !== -1,
-        "chrome timer runs for pulse, not only shimmer")
+  check(qml.indexOf("root._pulseOn || root._rippleOn") !== -1,
+        "ShaderEffect time is driven when pulse or ripple is on")
+  check(qml.indexOf("root._shimmerOn || root._pulseOn || root._rippleOn") !== -1,
+        "chrome timer runs for pulse, shimmer, and ripple")
+  check(qml.indexOf("ripple.frag.qsb") !== -1, "chrome binds the ripple fragment")
+  check(qml.indexOf("property string effect") !== -1, "chrome overlay exposes effect")
+  check(qml.indexOf("property real rippleFreq") !== -1, "chrome overlay exposes rippleFreq")
+  check(qml.indexOf("Ripple.rippleTime") !== -1, "chrome ticks ripple from the shipped clock")
   const stepAt = qml.indexOf("function stepShimmer()")
   check(stepAt !== -1, "chrome has stepShimmer")
   const stepBody = qml.slice(stepAt, qml.indexOf("function stepPulse()"))
@@ -610,6 +663,12 @@ function checkWrapSource() {
         "chrome overlay binds merged look.pulse")
   check(service.indexOf("pulseHz: root.look.pulseHz") !== -1,
         "chrome overlay binds merged look.pulseHz")
+  check(service.indexOf("Look.effectDraws") !== -1,
+        "chrome attach keys off Look.effectDraws (shiny or ripple)")
+  check(service.indexOf("effect: root.look.effect") !== -1,
+        "chrome overlay binds merged look.effect")
+  check(service.indexOf("rippleFreq: root.look.rippleFreq") !== -1,
+        "chrome overlay binds merged look.rippleFreq")
 }
 
 function checkGlowCoverage() {
@@ -651,6 +710,7 @@ function checkGlowCoverage() {
 }
 
 checkPinnedHeading()
+checkRippleCrest()
 checkPulseAlphaMul()
 checkPulseUniforms()
 checkEffectMode()
@@ -921,6 +981,15 @@ function checkOverlayAttach() {
   const off = driveSync(OA, notShiny, overlay.host, overlay.card, { effectIsShiny: false })
   check(off.decision.action === "detach", "non-shiny effect detaches chrome")
   check(notShiny.attached.length === 0, "non-shiny effect clears attached set")
+
+  const rippleSess = { attached: [], overlayOf: new Map(), overlayRev: 12 }
+  const rippleOn = driveSync(OA, rippleSess, overlay.host, overlay.card, { effectIsShiny: Look.effectDraws("ripple") })
+  check(Look.effectDraws("ripple") === true, "ripple is a drawing effect")
+  check(rippleOn.decision.action === "attach", "ripple effect attaches chrome like shiny")
+  check(rippleSess.attached.length === 1, "ripple attach grows the attached set")
+  const rippleOff = driveSync(OA, rippleSess, overlay.host, overlay.card, { effectIsShiny: Look.effectDraws("other") })
+  check(rippleOff.decision.action === "detach", "unknown effect detaches after ripple")
+  check(rippleSess.attached.length === 0, "unknown effect clears attached set")
 
   const noAttach = driveSync(OA, { attached: [], overlayOf: new Map(), overlayRev: 12 },
     leftoverClosed, leftoverClosed, { effectIsShiny: true })

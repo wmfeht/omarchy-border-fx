@@ -159,8 +159,16 @@ static void checkTeardownOrdering() {
     CHECK(!pass.empty());
     CHECK(pass.find("hyprAbandonShader") != std::string::npos);
     CHECK(pass.find("std::move(g_shinyShader)") != std::string::npos);
+    CHECK(pass.find("std::move(g_rippleShader)") != std::string::npos);
     CHECK(pass.find(".abandon") != std::string::npos);
     CHECK(pass.find("g_shinyShader.reset()") != std::string::npos);
+    CHECK(pass.find("g_rippleShader.reset()") != std::string::npos);
+    CHECK(pass.find("RIPPLE_FRAG") != std::string::npos);
+
+    const std::string shimmer = readFile(sourceDir() + "/shimmer.hpp");
+    CHECK(!shimmer.empty());
+    CHECK(shimmer.find("enum ShinyEffect") != std::string::npos);
+    CHECK(shimmer.find("SHINY_EFFECT_RIPPLE") == std::string::npos);
     CHECK(pass.find("m_renderPass.clear()") == std::string::npos);
     CHECK(pass.find("shinyFinishMutatedDraw") != std::string::npos);
     CHECK(pass.find("shinyLinearFallbackElements") != std::string::npos);

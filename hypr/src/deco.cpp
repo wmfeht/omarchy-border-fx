@@ -58,10 +58,14 @@ ShinyShimmerParams CShinyBorder::shimmerParams() const {
     };
 }
 
+bool CShinyBorder::rippleOn() const {
+    return shinyEffectIsRipple(g_cfg.effect ? g_cfg.effect->value().c_str() : "");
+}
+
 bool CShinyBorder::pulseWanted() const {
     const auto PWINDOW = m_window.lock();
     const bool focused = PWINDOW && PWINDOW == Desktop::focusState()->window();
-    return shinyEffectShouldRun(g_cfg.enabled->value(), effectMode(), g_cfg.activeOnly->value(), focused);
+    return shinyTimerShouldRun(g_cfg.enabled->value(), effectMode(), rippleOn(), g_cfg.activeOnly->value(), focused);
 }
 
 void CShinyBorder::startPulse() {
@@ -69,7 +73,7 @@ void CShinyBorder::startPulse() {
         return;
 
     const auto period = std::chrono::milliseconds(
-        shinyEffectTickMs(effectMode(), sc<float>(g_cfg.pulseHz->value()), sc<float>(g_cfg.shimmerHz->value())));
+        shinyTimerTickMs(effectMode(), rippleOn(), sc<float>(g_cfg.pulseHz->value()), sc<float>(g_cfg.shimmerHz->value())));
 
     if (!m_pulseTimer) {
         m_pulseTimer = makeShared<CEventLoopTimer>(
@@ -119,7 +123,7 @@ void CShinyBorder::onPulseTick(SP<CEventLoopTimer> self) {
     damageEntire();
     if (self)
         self->updateTimeout(std::chrono::milliseconds(
-            shinyEffectTickMs(mode, sc<float>(g_cfg.pulseHz->value()), sc<float>(g_cfg.shimmerHz->value()))));
+            shinyTimerTickMs(mode, rippleOn(), sc<float>(g_cfg.pulseHz->value()), sc<float>(g_cfg.shimmerHz->value()))));
 }
 
 void CShinyBorder::syncPulse() {
@@ -282,20 +286,29 @@ void CShinyBorder::draw(PHLMONITOR pMonitor, float const& a) {
         std::chrono::duration<double>(Time::steadyNow() - g_pHyprRenderer->m_globalTimer.chrono()).count();
     // Shimmer is exclusive with pulse: zero uniforms take the shader's
     // nominal branch, and the shimmer channels modulate angle/lobe here.
+    // Ripple keeps compositor time even when pulse is off (crest is f(time)).
+    const bool ripple = rippleOn();
     const auto pulseU = shinyPulseUniforms(mode == SHINY_EFFECT_PULSE, seconds, sc<float>(g_cfg.pulseHz->value()));
+    const float shaderTime =
+        shinyShaderTime(mode == SHINY_EFFECT_PULSE, ripple, seconds, sc<float>(g_cfg.pulseHz->value()));
 
     if (ensureShinyShader()) {
         CShinyPassElement::SData data;
-        data.shared     = mapped.shader;
-        data.box        = outerBox;
-        data.angle      = drawAngle;
-        data.time       = pulseU.time;
-        data.pulseHz    = pulseU.pulseHz;
-        data.lobe       = lobe;
-        data.thickScale = thickScale;
-        data.mirror     = g_cfg.mirror->value();
-        data.customPos  = customPos;
-        data.window     = m_window;
+        data.shared      = mapped.shader;
+        data.box         = outerBox;
+        data.angle       = drawAngle;
+        data.time        = shaderTime;
+        data.pulseHz     = pulseU.pulseHz;
+        data.lobe        = lobe;
+        data.thickScale  = thickScale;
+        data.mirror      = g_cfg.mirror->value();
+        data.customPos   = customPos;
+        data.ripple      = ripple;
+        data.rippleFreq  = g_cfg.rippleFreq ? sc<float>(g_cfg.rippleFreq->value()) : 0.025f;
+        data.rippleSpeed = g_cfg.rippleSpeed ? sc<float>(g_cfg.rippleSpeed->value()) : 2.f;
+        data.rippleGain  = g_cfg.rippleGain ? sc<float>(g_cfg.rippleGain->value()) : 0.85f;
+        data.ripplePower = g_cfg.ripplePower ? sc<float>(g_cfg.ripplePower->value()) : 8.f;
+        data.window      = m_window;
         g_pHyprRenderer->addPassElement(makeUnique<CShinyPassElement>(data));
         return;
     }
@@ -307,7 +320,7 @@ void CShinyBorder::draw(PHLMONITOR pMonitor, float const& a) {
     fallback.shared    = mapped.fallback.shared;
     fallback.box       = outerBox;
     fallback.angle     = drawAngle;
-    fallback.time      = pulseU.time;
+    fallback.time      = shaderTime;
     fallback.pulseHz   = pulseU.pulseHz;
     fallback.customPos = customPos;
     fallback.window    = m_window;

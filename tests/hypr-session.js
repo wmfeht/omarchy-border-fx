@@ -141,6 +141,10 @@ function checkScriptShape() {
     /shaders\/shiny\.frag"/.test(install) && /shaders\/shiny\.frag\.qsb"/.test(install),
     "install copies shaders/shiny.frag and shaders/shiny.frag.qsb"
   )
+  check(
+    /shaders\/ripple\.frag"/.test(install) && /shaders\/ripple\.frag\.qsb"/.test(install),
+    "install copies shaders/ripple.frag and shaders/ripple.frag.qsb"
+  )
 }
 
 function checkInstallCopiesFrag() {
@@ -171,6 +175,10 @@ function checkInstallCopiesFrag() {
     const destQsb = path.join(dest, "shaders/shiny.frag.qsb")
     check(fs.existsSync(destFrag), "install dest has shaders/shiny.frag")
     check(fs.existsSync(destQsb), "install dest still has shaders/shiny.frag.qsb")
+    const destRipple = path.join(dest, "shaders/ripple.frag")
+    const destRippleQsb = path.join(dest, "shaders/ripple.frag.qsb")
+    check(fs.existsSync(destRipple), "install dest has shaders/ripple.frag")
+    check(fs.existsSync(destRippleQsb), "install dest has shaders/ripple.frag.qsb")
     if (fs.existsSync(destFrag) && fs.existsSync(srcFrag)) {
       check(
         Buffer.compare(fs.readFileSync(srcFrag), fs.readFileSync(destFrag)) === 0,
@@ -721,6 +729,21 @@ function checkEnsureTree() {
     check(logHas(log, "plugin load"), "ensure effect=shiny idle plugin loads")
     check(luaEnabledLoad(h.luaFile), "ensure effect=shiny idle writes enabled Lua")
     note("ensure", "effect shiny: load=" + logHas(log, "plugin load"))
+  } finally {
+    stopHarness(h)
+  }
+
+  h = createHarness({})
+  try {
+    touchFuture(h.sessionSo)
+    const r = runEnsure(h, JSON.stringify({ effect: "ripple" }))
+    const log = readLog(h.logPath)
+    check(r.status === 0, "ensure effect=ripple idle exits 0: " + (r.stderr || r.stdout || ""))
+    check((r.stdout || "").indexOf("STATUS=skipped") === -1, "ensure effect=ripple is not STATUS=skipped")
+    check((r.stdout || "").indexOf("STATUS=ok") !== -1, "ensure effect=ripple idle STATUS=ok: " + (r.stdout || ""))
+    check(logHas(log, "plugin load"), "ensure effect=ripple idle plugin loads")
+    check(luaEnabledLoad(h.luaFile), "ensure effect=ripple idle writes enabled Lua")
+    note("ensure", "effect ripple: load=" + logHas(log, "plugin load") + " status=" + String(r.stdout || "").trim())
   } finally {
     stopHarness(h)
   }

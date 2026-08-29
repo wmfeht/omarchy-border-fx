@@ -148,7 +148,7 @@ if ! command -v hyprctl >/dev/null 2>&1; then
 fi
 
 if ! look_effect_is_shiny "${look_json:-{}}"; then
-  echo "hypr-ensure: effect is not shiny; writing disabled Lua, skipping compile/load" >&2
+  echo "hypr-ensure: effect does not load the window plugin; writing disabled Lua, skipping compile/load" >&2
   ensure_hyprland_require
   apply_look --disabled
   path=$(loaded_so)
