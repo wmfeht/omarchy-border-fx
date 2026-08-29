@@ -28,9 +28,9 @@ notify() {
   local msg="$1"
   echo "hypr-ensure: $msg" >&2
   if command -v omarchy-notification-send >/dev/null 2>&1; then
-    omarchy-notification-send --app-name qs.border-fx -u normal "Border FX" "$msg" || true
+    omarchy-notification-send --app-name "$PLUGIN_ID" -u normal "Border FX" "$msg" || true
   elif command -v notify-send >/dev/null 2>&1; then
-    notify-send -a qs.border-fx "Border FX" "$msg" || true
+    notify-send -a "$PLUGIN_ID" "Border FX" "$msg" || true
   fi
 }
 
@@ -48,7 +48,7 @@ ensure_hyprland_require() {
   local f="$HYPRLAND_LUA"
   [[ -f $f ]] || return 0
   if ! grep -q "$LUA_MODULE" "$f"; then
-    printf '\n-- qs.border-fx (Omarchy plugin control plane; pcall if the file is missing)\npcall(require, "%s")\n' "$LUA_MODULE" >> "$f"
+    printf '\n-- %s (Omarchy plugin control plane; pcall if the file is missing)\npcall(require, "%s")\n' "$PLUGIN_ID" "$LUA_MODULE" >> "$f"
   fi
   if grep -q 'hypr.shiny-border' "$f"; then
     local tmp

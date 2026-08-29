@@ -27,8 +27,9 @@ function check(cond, msg) {
 const Look = loadPragmaLibrary("qml/Look.js")
 
 function checkDefaults() {
-  check(Look.PLUGIN_ID === "qs.border-fx", "plugin id")
-  check(Look.LEGACY_PLUGIN_ID === "qs.shiny-border", "legacy id")
+  check(Look.PLUGIN_ID === "wmfeht.border-fx", "plugin id")
+  check(Look.LEGACY_PLUGIN_ID === "qs.border-fx", "legacy id")
+  check(Look.OLDER_LEGACY_PLUGIN_ID === "qs.shiny-border", "older legacy id")
   check(Look.DEFAULT_EFFECT === "shiny", "default effect")
   const d = Look.merge(null)
   check(d.effect === "shiny", "merge default effect shiny")
@@ -49,7 +50,7 @@ function checkDefaults() {
 }
 
 function checkMerge() {
-  const e = Look.merge({ id: "qs.border-fx", pinDeg: 90, borderSize: 1 })
+  const e = Look.merge({ id: "wmfeht.border-fx", pinDeg: 90, borderSize: 1 })
   check(e.pinDeg === 90, "override pinDeg")
   check(e.borderSize === 1, "override borderSize")
   check(e.shimmer === true, "unmentioned key stays default")
@@ -94,25 +95,36 @@ function checkEntry() {
   const cfg = {
     plugins: [
       { id: "other.thing", pinDeg: 0 },
-      { id: "qs.border-fx", pinDeg: 45, shimmer: false, effect: "shiny" }
+      { id: "wmfeht.border-fx", pinDeg: 45, shimmer: false, effect: "shiny" }
     ]
   }
   const e = Look.entryFromConfig(cfg)
-  check(e.pinDeg === 45 && e.shimmer === false, "entryFromConfig picks qs.border-fx")
+  check(e.pinDeg === 45 && e.shimmer === false, "entryFromConfig picks wmfeht.border-fx")
   check(Look.entryFromConfig({ plugins: [] }).id === undefined, "missing entry is empty")
   check(Object.keys(Look.entryFromConfig(null)).length === 0, "null config")
 
   const legacy = {
+    plugins: [{ id: "qs.border-fx", pinDeg: 30 }]
+  }
+  check(Look.entryFromConfig(legacy).pinDeg === 30, "falls back to qs.border-fx")
+  const older = {
     plugins: [{ id: "qs.shiny-border", pinDeg: 30 }]
   }
-  check(Look.entryFromConfig(legacy).pinDeg === 30, "falls back to qs.shiny-border")
-  const both = {
+  check(Look.entryFromConfig(older).pinDeg === 30, "falls back to qs.shiny-border")
+  const bothLegacy = {
     plugins: [
       { id: "qs.shiny-border", pinDeg: 1 },
       { id: "qs.border-fx", pinDeg: 2 }
     ]
   }
-  check(Look.entryFromConfig(both).pinDeg === 2, "qs.border-fx wins over legacy")
+  check(Look.entryFromConfig(bothLegacy).pinDeg === 2, "qs.border-fx wins over older legacy")
+  const both = {
+    plugins: [
+      { id: "qs.border-fx", pinDeg: 1 },
+      { id: "wmfeht.border-fx", pinDeg: 2 }
+    ]
+  }
+  check(Look.entryFromConfig(both).pinDeg === 2, "wmfeht.border-fx wins over legacy")
 }
 
 function checkColors() {
@@ -139,7 +151,7 @@ function checkLookApply() {
   })
   check(r.status === 0, "look-apply --stdout exits 0: " + (r.stderr || ""))
   const lua = r.stdout || ""
-  check(lua.indexOf("qs.border-fx") !== -1, "lua cites qs.border-fx as source of truth")
+  check(lua.indexOf("wmfeht.border-fx") !== -1, "lua cites wmfeht.border-fx as source of truth")
   check(lua.indexOf("shiny_border") !== -1, "emits shiny_border Hyprland adapter table")
   check(/border_size\s*=\s*2/.test(lua), "lua border_size = 2")
   check(/pin_deg\s*=\s*120/.test(lua), "lua pin_deg = 120")

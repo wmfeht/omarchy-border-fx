@@ -1,8 +1,9 @@
 # Shared paths for hypr-ensure / hypr-teardown / look-apply / reinstall.
 # Sourced, not executed. No sudo. User-level only.
 
-PLUGIN_ID="${PLUGIN_ID:-qs.border-fx}"
-LEGACY_PLUGIN_ID="${LEGACY_PLUGIN_ID:-qs.shiny-border}"
+PLUGIN_ID="${PLUGIN_ID:-wmfeht.border-fx}"
+LEGACY_PLUGIN_ID="${LEGACY_PLUGIN_ID:-qs.border-fx}"
+OLDER_LEGACY_PLUGIN_ID="${OLDER_LEGACY_PLUGIN_ID:-qs.shiny-border}"
 # Compositor plugin that implements the "shiny" effect. Other effects will
 # get their own .so names; this is not the Omarchy config id.
 PLUGIN_NAME="${PLUGIN_NAME:-hypr-shiny-border}"

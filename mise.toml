@@ -1,4 +1,4 @@
-# qs.border-fx: Omarchy control plane for shell chrome + Hyprland window ring.
+# wmfeht.border-fx: Omarchy control plane for shell chrome + Hyprland window ring.
 # qsb is system Qt 6 (/usr/lib/qt6/bin/qsb); do not mise-install a second Qt.
 # Hyprland plugins must be built with the same GCC that built the compositor.
 
@@ -45,16 +45,16 @@ depends = ["check"]
 run = "make -C hypr test"
 
 [tasks.install]
-description = "Dev copy into ~/.config/omarchy/plugins/qs.border-fx and enable"
+description = "Dev copy into ~/.config/omarchy/plugins/wmfeht.border-fx and enable"
 depends = ["bake"]
 run = "bash scripts/install.sh"
 
 [tasks.uninstall]
-description = "Disable qs.border-fx, purge the login-session .so, remove the copy"
+description = "Disable wmfeht.border-fx, purge the login-session .so, remove the copy"
 run = "bash scripts/uninstall.sh"
 
 [tasks.reinstall]
-description = "Remove qs.border-fx from this system, then omarchy plugin add this folder"
+description = "Remove wmfeht.border-fx from this system, then omarchy plugin add this folder"
 depends = ["bake"]
 run = "bash scripts/reinstall.sh"
 

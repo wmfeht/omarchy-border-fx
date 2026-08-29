@@ -13,7 +13,7 @@ build/load `~/.local/lib/hypr/hypr-shiny-border.so`.
 
 | Name | Role |
 |---|---|
-| Omarchy id `qs.border-fx` | Source of truth in `shell.json`; `omarchy plugin enable` |
+| Omarchy id `wmfeht.border-fx` | Source of truth in `shell.json`; `omarchy plugin enable` |
 | `effect` (`shiny`) | Which renderer to drive; more types later |
 | Hyprland plugin `hypr-shiny-border` | Shiny window adapter (`hyprctl plugin list`, hyprpm, `PLUGIN_INIT`) |
 | Config keys `plugin:shiny-border:*` / Lua `shiny_border` | Shiny Hyprland adapter (hyphen → underscore) |
@@ -28,21 +28,22 @@ omarchy plugin add <git-url-of-this-repo> --enable --yes
 `--enable` starts the service, which overlays chrome **and** ensures the
 window ring.
 
-The previous Omarchy id was `qs.shiny-border`. Look reading still falls back
-to that entry if `qs.border-fx` is missing. Enable the new id (and disable
-the old one) so `omarchy plugin` commands match the clone directory.
+The previous Omarchy id was `qs.border-fx` (and before that `qs.shiny-border`).
+Look reading still falls back to those entries if `wmfeht.border-fx` is missing.
+Enable the new id (and disable the old one) so `omarchy plugin` commands match
+the clone directory.
 
 ```sh
-omarchy plugin enable qs.border-fx    # chrome + window ring on
-omarchy plugin disable qs.border-fx   # both off; clone kept
-omarchy plugin remove qs.border-fx --yes
-omarchy plugin update qs.border-fx --yes
+omarchy plugin enable wmfeht.border-fx    # chrome + window ring on
+omarchy plugin disable wmfeht.border-fx   # both off; clone kept
+omarchy plugin remove wmfeht.border-fx --yes
+omarchy plugin update wmfeht.border-fx --yes
 ```
 
 If the shell was not running during remove, also:
 
 ```sh
-~/.config/omarchy/plugins/qs.border-fx/scripts/hypr-teardown.sh --purge
+~/.config/omarchy/plugins/wmfeht.border-fx/scripts/hypr-teardown.sh --purge
 # or, from this tree:
 bash scripts/hypr-teardown.sh --purge
 ```
@@ -53,7 +54,7 @@ That deletes `~/.local/lib/hypr/hypr-shiny-border.so` and
 Dev copy (not git-managed, not `omarchy plugin update`):
 
 ```sh
-mise run install     # copies into ~/.config/omarchy/plugins/qs.border-fx
+mise run install     # copies into ~/.config/omarchy/plugins/wmfeht.border-fx
 mise run uninstall
 mise run reinstall   # purge the live .so, restart shell, then add this folder
 ```
@@ -67,7 +68,7 @@ hyprpm copy and notify you instead of stacking a second `.so`.
 hyprpm disable hypr-shiny-border
 # drop `hyprpm reload -n` from ~/.config/hypr/autostart.lua if it exists
 # only for this plugin, then:
-omarchy plugin enable qs.border-fx
+omarchy plugin enable wmfeht.border-fx
 ```
 
 hyprpm remains the Hyprland **development** workflow (`mise run nest`).
@@ -82,12 +83,12 @@ header-hash mismatch.
 
 ## Configuration
 
-Source of truth: the `qs.border-fx` entry in
+Source of truth: the `wmfeht.border-fx` entry in
 `~/.config/omarchy/shell.json` `plugins[]`. Settings are **inline on that
 object** — no `config:` / `settings:` wrapper, no extra JSON file. The
 plugin is on if and only if that id is present (`omarchy plugin enable` /
-`disable`). Look reading still falls back to a leftover `qs.shiny-border`
-entry if `qs.border-fx` is missing.
+`disable`). Look reading still falls back to leftover `qs.border-fx` or
+`qs.shiny-border` entries if `wmfeht.border-fx` is missing.
 
 `effect` selects the renderer (`shiny` is the only one today). Chrome
 overlays attach only while `effect` is `shiny`. Any other value detaches
@@ -118,11 +119,11 @@ looks right, then remove it.
 
 ### Example
 
-All keys at their shared defaults (equivalent to `{ "id": "qs.border-fx" }`):
+All keys at their shared defaults (equivalent to `{ "id": "wmfeht.border-fx" }`):
 
 ```json
 {
-  "id": "qs.border-fx",
+  "id": "wmfeht.border-fx",
   "effect": "shiny",
   "borderSize": 2,
   "shimmer": true,
@@ -157,7 +158,7 @@ Nested keys win over the same key at the top level:
 
 ```json
 {
-  "id": "qs.border-fx",
+  "id": "wmfeht.border-fx",
   "effect": "shiny",
   "pinDeg": 0,
   "shiny": { "pinDeg": 45, "borderSize": 3 }
@@ -187,8 +188,8 @@ stops are used; extra colors are dropped.
 
 ### Merge rules
 
-1. Read the `plugins[]` entry whose `id` is `qs.border-fx` (else
-   `qs.shiny-border`).
+1. Read the `plugins[]` entry whose `id` is `wmfeht.border-fx` (else
+   `qs.border-fx`, else `qs.shiny-border`).
 2. `effect` empty / omitted → `"shiny"`.
 3. Pick known look keys from the entry (not `id`, not unknown fields).
 4. If `entry[effect]` is an object, overlay its look keys (nested wins).
@@ -199,7 +200,7 @@ stops are used; extra colors are dropped.
 heading is always `pinDeg` + `angleOffset`. `pin: false` does **not**
 restore cursor tracking.
 
-`enabled` is not a look key either. `omarchy plugin disable qs.border-fx`
+`enabled` is not a look key either. `omarchy plugin disable wmfeht.border-fx`
 turns both rings off (`enabled = false` in the generated lua, chrome
 overlays destroyed). Re-enable to bring them back.
 
@@ -316,7 +317,7 @@ Thinner wrap-free ring, light from above:
 
 ```json
 {
-  "id": "qs.border-fx",
+  "id": "wmfeht.border-fx",
   "borderSize": 1,
   "pinDeg": 90,
   "baseColor": "rgba(00000000)"
@@ -327,7 +328,7 @@ Classic two-stop comet (`colA` / `colB`) instead of the 4-stop ramp:
 
 ```json
 {
-  "id": "qs.border-fx",
+  "id": "wmfeht.border-fx",
   "gradient": [],
   "colA": "rgba(33ccffee)",
   "colB": "rgba(00ff99ee)"
@@ -338,7 +339,7 @@ Pulse instead of shimmer (windows and chrome both breathe highlight alpha):
 
 ```json
 {
-  "id": "qs.border-fx",
+  "id": "wmfeht.border-fx",
   "shimmer": false,
   "pulse": true,
   "pulseHz": 0.4
@@ -349,7 +350,7 @@ Different clockwise-half colors (keep endpoints aligned to hide the seam):
 
 ```json
 {
-  "id": "qs.border-fx",
+  "id": "wmfeht.border-fx",
   "gradientCw": [
     "rgba(33ccffee)",
     "rgba(c084fcee)",
@@ -362,7 +363,7 @@ Different clockwise-half colors (keep endpoints aligned to hide the seam):
 ## Tree
 
 ```
-manifest.json                 # Omarchy id qs.border-fx (clone root)
+manifest.json                 # Omarchy id wmfeht.border-fx (clone root)
 Service.qml                   # chrome overlay + hypr-ensure + look fan-out
 qml/                          # ShinyBorder, Shimmer, Gradient, Look
 shaders/                      # shiny.frag + committed .qsb

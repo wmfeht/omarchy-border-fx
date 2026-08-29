@@ -4,10 +4,10 @@ This tree (`omarchy-border-fx`) is the unified repo: `hypr/` is the compositor
 plugin, `manifest.json` stays at the clone root, and `scripts/hypr-ensure.sh` /
 `look-apply.sh` / `hypr-teardown.sh` are the Omarchy control-plane plumbing.
 
-The Omarchy plugin id (source of truth in `shell.json`) is **`qs.border-fx`**.
+The Omarchy plugin id (source of truth in `shell.json`) is **`wmfeht.border-fx`**.
 `effect` on that entry selects the renderer (`shiny` today). Hyprland adapter
 keys for the shiny effect remain `plugin:shiny-border:*` / Lua `shiny_border`.
-Historical text below still says `qs.shiny-border`.
+Historical text below still says `qs.shiny-border` / `qs.border-fx`.
 
 The rest of this file is the design it was scaffolded from.
 

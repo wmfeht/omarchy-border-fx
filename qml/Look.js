@@ -1,13 +1,14 @@
 .pragma library
 
-// Shared look: shell.json camelCase + Hyprland rgba() on the qs.border-fx
+// Shared look: shell.json camelCase + Hyprland rgba() on the wmfeht.border-fx
 // plugins[] entry is the source of truth. `effect` selects the renderer
 // (`shiny` today). Missing look keys mean the intended shared look
 // (looknfeel / ShinyBorder defaults), not the C++ plugin defaults
 // (pulse on, pinDeg 90, border 3).
 
-var PLUGIN_ID = "qs.border-fx"
-var LEGACY_PLUGIN_ID = "qs.shiny-border"
+var PLUGIN_ID = "wmfeht.border-fx"
+var LEGACY_PLUGIN_ID = "qs.border-fx"
+var OLDER_LEGACY_PLUGIN_ID = "qs.shiny-border"
 var DEFAULT_EFFECT = "shiny"
 
 var DEFAULTS = {
@@ -89,6 +90,7 @@ function entryFromConfig(config, id) {
   if (!config || !config.plugins || !config.plugins.length)
     return {}
   var legacy = null
+  var older = null
   for (var i = 0; i < config.plugins.length; i++) {
     var e = config.plugins[i]
     if (!e)
@@ -97,9 +99,15 @@ function entryFromConfig(config, id) {
       return e
     if (e.id === LEGACY_PLUGIN_ID)
       legacy = e
+    else if (e.id === OLDER_LEGACY_PLUGIN_ID)
+      older = e
   }
-  if (want === PLUGIN_ID && legacy)
-    return legacy
+  if (want === PLUGIN_ID) {
+    if (legacy)
+      return legacy
+    if (older)
+      return older
+  }
   return {}
 }
 

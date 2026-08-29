@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Dev helper: copy this tree into ~/.config/omarchy/plugins/qs.border-fx
+# Dev helper: copy this tree into ~/.config/omarchy/plugins/wmfeht.border-fx
 # and enable it. User path is `omarchy plugin add <git-url> --enable`.
 # Does not patch /usr/share/omarchy. Does not use sudo.
 set -euo pipefail
@@ -43,6 +43,7 @@ echo "installed $dest"
 
 if command -v omarchy >/dev/null 2>&1; then
   omarchy plugin disable "$LEGACY_PLUGIN_ID" 2>/dev/null || true
+  omarchy plugin disable "$OLDER_LEGACY_PLUGIN_ID" 2>/dev/null || true
   omarchy plugin enable "$PLUGIN_ID"
   omarchy restart shell
 fi

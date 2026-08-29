@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Completely remove qs.border-fx from this system, then reload this folder
+# Completely remove wmfeht.border-fx from this system, then reload this folder
 # through the Omarchy CLI (`omarchy plugin remove` + `omarchy plugin add`).
 # Includes uncommitted working-tree files. Does not use sudo.
 set -euo pipefail
@@ -13,6 +13,7 @@ source "$root/scripts/hypr-session.sh"
 plugins_home="$HOME/.config/omarchy/plugins"
 dest="$plugins_home/$PLUGIN_ID"
 legacy_dest="$plugins_home/$LEGACY_PLUGIN_ID"
+older_legacy_dest="$plugins_home/$OLDER_LEGACY_PLUGIN_ID"
 
 need() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -115,6 +116,9 @@ fi
 if [[ -e "$legacy_dest" || -L "$legacy_dest" ]]; then
   omarchy plugin disable "$LEGACY_PLUGIN_ID" 2>/dev/null || true
 fi
+if [[ -e "$older_legacy_dest" || -L "$older_legacy_dest" ]]; then
+  omarchy plugin disable "$OLDER_LEGACY_PLUGIN_ID" 2>/dev/null || true
+fi
 wait_plugin_gone 8 || true
 
 echo "reinstall: purging login-session Hyprland copy"
@@ -129,6 +133,7 @@ fi
 
 remove_if_installed "$PLUGIN_ID" "$dest"
 remove_if_installed "$LEGACY_PLUGIN_ID" "$legacy_dest"
+remove_if_installed "$OLDER_LEGACY_PLUGIN_ID" "$older_legacy_dest"
 
 if command -v omarchy-shell >/dev/null 2>&1; then
   omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true

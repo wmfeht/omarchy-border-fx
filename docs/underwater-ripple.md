@@ -9,7 +9,7 @@ gradient, dual GLSL wrappers. The ripple is an illumination term:
 bright crests traveling on the chrome. It is not a water surface, not
 caustics-as-material, not refraction, not a thickness “swell.”
 
-`effect` on the `qs.border-fx` `plugins[]` entry already selects a
+`effect` on the `wmfeht.border-fx` `plugins[]` entry already selects a
 renderer (`shiny` today). This note is about one candidate: `ripple`.
 
 ---
@@ -222,7 +222,7 @@ random walk.
 
 ## Config sketch
 
-`effect: "ripple"` on `qs.border-fx`. Nested `"ripple"` keys win.
+`effect: "ripple"` on `wmfeht.border-fx`. Nested `"ripple"` keys win.
 Shared with shiny: `borderSize`, `gradient`, `pin` / `pinDeg`, `lobe`,
 `shimmer*`, `baseColor`, `activeOnly`, `pulse`.
 

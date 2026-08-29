@@ -28,11 +28,11 @@ Item {
   property var manifest: null
   property string omarchyPath: ""
 
-  readonly property string tag: "qs-border-fx"
+  readonly property string tag: "wmfeht-border-fx"
   // Bump when the overlay's look changes so attach() drops leftovers from a
   // previous plugin load. omarchy-shell caches service instances; copying
   // QML is not enough if an old ShinyBorder is still a child of the card.
-  readonly property int overlayRev: 11
+  readonly property int overlayRev: 12
 
   // shell.json plugins[] entry is the shared look. Services are not injected
   // a settings object — read it off shell.shellConfig ourselves.
@@ -163,7 +163,9 @@ Item {
     var found = null
     eachChild(card, function(ch) {
       if (found) return
-      if (ch && ch.objectName === root.tag) found = ch
+      if (!ch) return
+      if (ch.objectName === root.tag || ch.objectName === "qs-border-fx")
+        found = ch
     })
     return found
   }
