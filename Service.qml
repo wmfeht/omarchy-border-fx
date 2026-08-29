@@ -20,6 +20,7 @@ import Quickshell.Io
 import qs.Commons
 import "qml"
 import "qml/Look.js" as Look
+import "qml/EnsureStatus.js" as EnsureStatus
 
 Item {
   id: root
@@ -434,14 +435,13 @@ Item {
       id: ensureOut
       waitForEnd: true
       onStreamFinished: {
-        var t = String(ensureOut.text || "")
-        if (t.indexOf("STATUS=ok") !== -1 || t.indexOf("STATUS=hyprpm") !== -1
-            || t.indexOf("STATUS=reuse") !== -1)
+        if (EnsureStatus.isEnsureSuccessStatus(ensureOut.text))
           root.hyprReady = true
       }
     }
     onExited: function(exitCode) {
-      root.hyprReady = true
+      if (EnsureStatus.isEnsureSuccessStatus(ensureOut.text))
+        root.hyprReady = true
       if (exitCode !== 0)
         console.warn(root.tag + ": hypr-ensure exited " + exitCode)
       Qt.callLater(root.runLookApply)

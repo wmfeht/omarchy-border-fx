@@ -45,6 +45,15 @@ function checkScriptShape() {
   check(ensure.indexOf("unload_session_so") !== -1, "hypr-ensure waits for unload")
   check(ensure.indexOf("plugin_mapped") !== -1, "hypr-ensure refuses a second mapped copy")
   check(
+    !/\bload_session_so \|\| true/.test(ensure),
+    "hypr-ensure does not swallow a failed plugin load"
+  )
+  check(ensure.indexOf("status load-failed") !== -1, "hypr-ensure emits STATUS=load-failed")
+  check(
+    ensure.indexOf("load_session_so_or_fail") !== -1,
+    "hypr-ensure shares one fail-closed load path"
+  )
+  check(
     !/cp -f "\$src" "\$SESSION_SO"/.test(ensure),
     "hypr-ensure does not cp -f onto the live session .so"
   )
@@ -214,6 +223,7 @@ LOG=${JSON.stringify(harness.logPath)}
 STATE=${JSON.stringify(harness.stateDir)}
 UNLOAD_SLEEP=${Number(harness.unloadSleepSec || 0)}
 UNLOAD_EXIT=${Number(harness.unloadExit || 0)}
+LOAD_EXIT=${Number(harness.loadExit || 0)}
 stamp() { date +%s.%N; }
 echo "$(stamp) BEGIN $*" >> "$LOG"
 
@@ -275,6 +285,11 @@ if [[ $args == *plugin*unload* ]]; then
 fi
 
 if [[ $args == *plugin*load* ]]; then
+  if [[ $LOAD_EXIT -ne 0 ]]; then
+    echo "load refused" >&2
+    echo "$(stamp) END $*" >> "$LOG"
+    exit "$LOAD_EXIT"
+  fi
   printf '%s\\n' '[{"name":"hypr-shiny-border"}]' > "$STATE/listed"
   echo "loaded"
   echo "$(stamp) END $*" >> "$LOG"
@@ -297,7 +312,24 @@ exit 0
 function writeMakeStub(harness) {
   const body = `#!/usr/bin/env bash
 echo "make $*" >> ${JSON.stringify(harness.makeLog)}
-exit 1
+MAKE_EXIT=${Number(harness.makeExit === undefined ? 1 : harness.makeExit)}
+if [[ $MAKE_EXIT -ne 0 ]]; then
+  exit "$MAKE_EXIT"
+fi
+build_dir=""
+for a in "$@"; do
+  case "$a" in
+    BUILD_DIR=*) build_dir="\${a#BUILD_DIR=}" ;;
+  esac
+done
+if [[ -z $build_dir ]]; then
+  echo "make stub: missing BUILD_DIR" >&2
+  exit 1
+fi
+mkdir -p "$build_dir"
+printf 'BUILT-SO' > "$build_dir/hypr-shiny-border.so"
+chmod 755 "$build_dir/hypr-shiny-border.so"
+exit 0
 `
   fs.writeFileSync(path.join(harness.binDir, "make"), body)
   fs.chmodSync(path.join(harness.binDir, "make"), 0o755)
@@ -378,6 +410,8 @@ function createHarness(opts) {
     makeLog: makeLog,
     unloadSleepSec: opts.unloadSleepSec || 0,
     unloadExit: opts.unloadExit || 0,
+    makeExit: opts.makeExit === undefined ? 1 : Number(opts.makeExit),
+    loadExit: opts.loadExit === undefined ? 0 : Number(opts.loadExit),
     mapper: null,
     mapperPid: 0,
   }
@@ -447,7 +481,14 @@ function eventTimes(logText, needle) {
   return times
 }
 
-const evidenceChunks = { teardown: [], ensure: [], lock: [] }
+const evidenceChunks = { teardown: [], ensure: [], lock: [], hotReload: [] }
+
+function statusLines(stdout) {
+  return String(stdout || "")
+    .split("\n")
+    .map((l) => l.replace(/\r$/, ""))
+    .filter((l) => l.indexOf("STATUS=") === 0)
+}
 
 function note(bucket, msg) {
   evidenceChunks[bucket].push(msg)
@@ -660,6 +701,42 @@ function checkEnsureTree() {
   } finally {
     fs.rmSync(hyprSrc, { recursive: true, force: true })
   }
+
+  h = createHarness({ loadExit: 1 })
+  try {
+    touchFuture(h.sessionSo)
+    const r = runEnsure(h, "{}")
+    const log = readLog(h.logPath)
+    check(r.status === 0, "ensure cold load-fail exits 0: " + (r.stderr || r.stdout || ""))
+    check((r.stdout || "").indexOf("STATUS=load-failed") !== -1, "ensure cold load-fail STATUS=load-failed: " + (r.stdout || ""))
+    check((r.stdout || "").indexOf("STATUS=ok") === -1, "ensure cold load-fail is not STATUS=ok")
+    check(logHas(log, "plugin load"), "ensure cold load-fail still attempts plugin load")
+    note("ensure", "cold load-fail: status=" + statusLines(r.stdout).join(",") + " load=" + logHas(log, "plugin load"))
+  } finally {
+    stopHarness(h)
+  }
+
+  const hyprSrcOk = fs.mkdtempSync(path.join(os.tmpdir(), "hypr-src-"))
+  try {
+    h = createHarness({ listed: true, map: "session", hyprSrc: hyprSrcOk, makeExit: 0 })
+    try {
+      touchFuture(path.join(hyprSrcOk, "src", "main.cpp"))
+      const r = runEnsure(h, "{}")
+      const log = readLog(h.logPath)
+      const make = readLog(h.makeLog)
+      check(r.status === 0, "ensure hot-reload success exits 0: " + (r.stderr || r.stdout || ""))
+      check((r.stdout || "").indexOf("STATUS=ok") !== -1, "ensure hot-reload success STATUS=ok: " + (r.stdout || ""))
+      check((r.stdout || "").indexOf("STATUS=load-failed") === -1, "ensure hot-reload success is not load-failed")
+      check(logHas(log, "plugin unload"), "ensure hot-reload success unloads first")
+      check(logHas(log, "plugin load"), "ensure hot-reload success plugin loads")
+      check(make.length > 0, "ensure hot-reload success rebuilds")
+      note("ensure", "hot-reload success: status=" + statusLines(r.stdout).join(",") + " makeInvoked=" + (make.length > 0))
+    } finally {
+      stopHarness(h)
+    }
+  } finally {
+    fs.rmSync(hyprSrcOk, { recursive: true, force: true })
+  }
 }
 
 function harnessMapperAlive(h) {
@@ -734,6 +811,77 @@ function runOverlapOnce() {
   }
 }
 
+function runEnsureHotReloadLoadFailed() {
+  const hyprSrc = fs.mkdtempSync(path.join(os.tmpdir(), "hypr-src-"))
+  const h = createHarness({
+    listed: true,
+    map: "session",
+    hyprSrc: hyprSrc,
+    makeExit: 0,
+    loadExit: 1,
+  })
+  try {
+    touchFuture(path.join(hyprSrc, "src", "main.cpp"))
+    const r = runEnsure(h, "{}")
+    return {
+      status: r.status,
+      stdout: String(r.stdout || ""),
+      stderr: String(r.stderr || ""),
+      log: readLog(h.logPath),
+      make: readLog(h.makeLog),
+    }
+  } finally {
+    stopHarness(h)
+    fs.rmSync(hyprSrc, { recursive: true, force: true })
+  }
+}
+
+function checkEnsureHotReloadLoadFailed() {
+  const a = runEnsureHotReloadLoadFailed()
+  const b = runEnsureHotReloadLoadFailed()
+  function summarize(run, label) {
+    const msg =
+      label +
+      " status=" +
+      run.status +
+      " STATUS=" +
+      statusLines(run.stdout).join(",") +
+      " hasOk=" +
+      (run.stdout.indexOf("STATUS=ok") !== -1) +
+      " unload=" +
+      logHas(run.log, "plugin unload") +
+      " load=" +
+      logHas(run.log, "plugin load") +
+      " makeInvoked=" +
+      (run.make.length > 0)
+    note("hotReload", msg)
+    note("hotReload", label + " stdout:\n" + run.stdout)
+    note("hotReload", label + " stderr:\n" + run.stderr)
+    return msg
+  }
+  summarize(a, "run1")
+  summarize(b, "run2")
+  function assertFailClosed(run, label) {
+    check(run.status === 0, label + " hot-reload load-fail exits 0: " + (run.stderr || run.stdout || ""))
+    check(run.stdout.indexOf("STATUS=load-failed") !== -1, label + " hot-reload load-fail STATUS=load-failed: " + run.stdout)
+    check(run.stdout.indexOf("STATUS=ok") === -1, label + " hot-reload load-fail is not STATUS=ok")
+    check(statusLines(run.stdout).join(",") === "STATUS=load-failed", label + " hot-reload emits only STATUS=load-failed")
+    check(logHas(run.log, "plugin unload"), label + " hot-reload load-fail unloads the session copy")
+    check(logHas(run.log, "plugin load"), label + " hot-reload load-fail attempts plugin load")
+    check(run.make.length > 0, label + " hot-reload load-fail rebuilds before load")
+  }
+  assertFailClosed(a, "run1")
+  assertFailClosed(b, "run2")
+  check(
+    a.status === b.status &&
+      (a.stdout.indexOf("STATUS=load-failed") !== -1) === (b.stdout.indexOf("STATUS=load-failed") !== -1) &&
+      (a.stdout.indexOf("STATUS=ok") !== -1) === (b.stdout.indexOf("STATUS=ok") !== -1) &&
+      logHas(a.log, "plugin load") === logHas(b.log, "plugin load") &&
+      (a.make.length > 0) === (b.make.length > 0),
+    "both hot-reload load-fail runs agree"
+  )
+}
+
 function checkTeardownEnsureLock() {
   const a = runOverlapOnce()
   const b = runOverlapOnce()
@@ -778,6 +926,10 @@ function writeEvidence() {
   fs.writeFileSync(path.join(dir, "teardown-persist.log"), evidenceChunks.teardown.join("\n") + "\n")
   fs.writeFileSync(path.join(dir, "ensure-tree.log"), evidenceChunks.ensure.join("\n") + "\n")
   fs.writeFileSync(path.join(dir, "teardown-ensure-lock.log"), evidenceChunks.lock.join("\n") + "\n")
+  fs.writeFileSync(
+    path.join(dir, "ensure-hot-reload-load-failed.log"),
+    evidenceChunks.hotReload.join("\n") + "\n"
+  )
 }
 
 checkScriptShape()
@@ -785,6 +937,7 @@ checkInstallSessionSo()
 checkWaitPluginGone()
 checkTeardownPersist()
 checkEnsureTree()
+checkEnsureHotReloadLoadFailed()
 checkTeardownEnsureLock()
 writeEvidence()
 

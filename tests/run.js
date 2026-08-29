@@ -525,7 +525,57 @@ checkGradientPositions()
 checkGradientLobeU()
 checkGradientCwSide()
 checkLightProjection()
+
+function checkEnsureStatusReady() {
+  const EnsureStatus = loadPragmaLibrary("qml/EnsureStatus.js")
+  check(typeof EnsureStatus.isEnsureSuccessStatus === "function", "EnsureStatus.isEnsureSuccessStatus is shipped")
+  check(EnsureStatus.isEnsureSuccessStatus("STATUS=ok") === true, "STATUS=ok is ready")
+  check(EnsureStatus.isEnsureSuccessStatus("STATUS=hyprpm") === true, "STATUS=hyprpm is ready")
+  check(EnsureStatus.isEnsureSuccessStatus("STATUS=reuse") === true, "STATUS=reuse is ready")
+  check(EnsureStatus.isEnsureSuccessStatus("hypr-ensure: done\nSTATUS=ok\n") === true, "STATUS=ok among logs is ready")
+  check(EnsureStatus.isEnsureSuccessStatus("STATUS=load-failed") === false, "STATUS=load-failed is not ready")
+  check(EnsureStatus.isEnsureSuccessStatus("STATUS=build-failed") === false, "STATUS=build-failed is not ready")
+  check(EnsureStatus.isEnsureSuccessStatus("STATUS=skipped") === false, "STATUS=skipped is not ready")
+  check(EnsureStatus.isEnsureSuccessStatus("STATUS=no-hyprctl") === false, "STATUS=no-hyprctl is not ready")
+  check(EnsureStatus.isEnsureSuccessStatus("") === false, "empty stdout is not ready")
+  check(
+    EnsureStatus.isEnsureSuccessStatus("hypr-ensure: load refused\nSTATUS=load-failed\n") === false,
+    "STATUS=load-failed among logs is not ready"
+  )
+
+  const service = fs.readFileSync(path.join(root, "Service.qml"), "utf8")
+  check(
+    service.indexOf('import "qml/EnsureStatus.js" as EnsureStatus') !== -1,
+    "Service.qml imports shipped EnsureStatus"
+  )
+  const ensureAt = service.indexOf("id: ensureProc")
+  const lookApplyAt = service.indexOf("id: lookApplyProc")
+  check(ensureAt !== -1 && lookApplyAt > ensureAt, "ensureProc precedes lookApplyProc")
+  const ensureProc = service.slice(ensureAt, lookApplyAt)
+  check(
+    ensureProc.indexOf("EnsureStatus.isEnsureSuccessStatus") !== -1,
+    "ensureProc keys hyprReady on shipped isEnsureSuccessStatus"
+  )
+  const onExitedAt = ensureProc.indexOf("onExited:")
+  check(onExitedAt !== -1, "ensureProc has onExited")
+  const onExited = ensureProc.slice(onExitedAt)
+  check(
+    !/onExited:\s*function\s*\(\s*exitCode\s*\)\s*\{\s*root\.hyprReady\s*=\s*true/.test(onExited),
+    "ensureProc onExited does not force hyprReady = true"
+  )
+  check(
+    onExited.indexOf("EnsureStatus.isEnsureSuccessStatus") !== -1,
+    "ensureProc onExited still consults STATUS via EnsureStatus (fail closed)"
+  )
+  check(
+    ensureProc.indexOf("onStreamFinished") !== -1 &&
+      ensureProc.indexOf("EnsureStatus.isEnsureSuccessStatus") !== -1,
+    "ensureProc collector still keys ready on success STATUS= only"
+  )
+}
+
 checkWrapSource()
+checkEnsureStatusReady()
 checkGlowCoverage()
 
 if (fails) {

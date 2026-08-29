@@ -90,6 +90,16 @@ load_session_so() {
   hyprctl -i "$HYPRCTL_INSTANCE" plugin load "$SESSION_SO"
 }
 
+# Load the session copy. Fail closed: STATUS=load-failed, chrome stays on.
+load_session_so_or_fail() {
+  if load_session_so; then
+    return 0
+  fi
+  notify "hyprctl plugin load failed. Chrome is on. Allow hyprctl plugin loads or check Hyprland permissions."
+  status load-failed
+  exit 0
+}
+
 # Unload the session copy. Returns 0 only when Hyprland no longer lists or
 # maps it — copy+load after a failed unload is how CRenderPass::clear SIGBUS'd.
 unload_session_so() {
@@ -138,7 +148,7 @@ if plugin_listed; then
       if build_so; then
         if unload_session_so; then
           copy_session_so "$BUILD_DIR/hypr-shiny-border.so"
-          load_session_so || true
+          load_session_so_or_fail
         else
           notify "hypr-shiny-border still mapped after unload; not replacing the live .so. Chrome is on."
           apply_look --eval
@@ -191,11 +201,7 @@ if [[ $built != "$SESSION_SO" ]]; then
   copy_session_so "$built"
 fi
 
-if ! load_session_so; then
-  notify "hyprctl plugin load failed. Chrome is on. Allow hyprctl plugin loads or check Hyprland permissions."
-  status load-failed
-  exit 0
-fi
+load_session_so_or_fail
 
 apply_look --eval
 status ok
