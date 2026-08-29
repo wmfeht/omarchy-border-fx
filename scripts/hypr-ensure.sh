@@ -97,9 +97,28 @@ unload_session_so() {
   wait_plugin_gone 8
 }
 
+hypr_session_lock
+trap 'hypr_session_bump_ensure_gen || true; hypr_session_unlock' EXIT
+
 if ! command -v hyprctl >/dev/null 2>&1; then
   echo "hypr-ensure: hyprctl not found; chrome only" >&2
   status no-hyprctl
+  exit 0
+fi
+
+if ! look_effect_is_shiny "${look_json:-{}}"; then
+  echo "hypr-ensure: effect is not shiny; writing disabled Lua, skipping compile/load" >&2
+  ensure_hyprland_require
+  apply_look --disabled
+  path=$(loaded_so)
+  if [[ ${path:-} == "$SESSION_SO" ]]; then
+    echo "hypr-ensure: unloading leftover session plugin" >&2
+    unload_session_so || true
+  fi
+  if plugin_listed; then
+    apply_look --disabled --eval
+  fi
+  status skipped
   exit 0
 fi
 

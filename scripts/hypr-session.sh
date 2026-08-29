@@ -72,3 +72,61 @@ install_session_so() {
     return 1
   fi
 }
+
+# Look JSON `effect`. Missing or empty is shiny (compile/load still allowed).
+look_effect() {
+  local json="${1-}"
+  [[ -n $json ]] || json='{}'
+  local effect
+  effect=$(printf '%s' "$json" | jq -r '(.effect // "shiny") | if . == "" then "shiny" else . end' 2>/dev/null) || true
+  if [[ -z $effect || $effect == null ]]; then
+    effect=shiny
+  fi
+  printf '%s' "$effect"
+}
+
+look_effect_is_shiny() {
+  [[ $(look_effect "${1-}") == shiny ]]
+}
+
+hypr_session_ensure_gen() {
+  local n=0
+  if [[ -n ${HYPR_SESSION_GEN:-} && -f $HYPR_SESSION_GEN ]]; then
+    n=$(cat "$HYPR_SESSION_GEN" 2>/dev/null || true)
+  fi
+  [[ "$n" =~ ^[0-9]+$ ]] || n=0
+  printf '%s' "$n"
+}
+
+hypr_session_bump_ensure_gen() {
+  local dir n tmp
+  [[ -n ${HYPR_SESSION_GEN:-} ]] || return 0
+  dir=$(dirname "$HYPR_SESSION_GEN")
+  mkdir -p "$dir"
+  n=$(hypr_session_ensure_gen)
+  tmp="${HYPR_SESSION_GEN}.tmp.$$"
+  echo $((n + 1)) > "$tmp"
+  mv -f "$tmp" "$HYPR_SESSION_GEN"
+}
+
+# Exclusive flock for the whole ensure/teardown critical section so a
+# detached disable teardown cannot unload after this ensure has loaded.
+hypr_session_lock() {
+  local dir
+  command -v flock >/dev/null 2>&1 || {
+    echo "hypr-session: flock not found" >&2
+    return 1
+  }
+  dir=$(dirname "$HYPR_SESSION_LOCK")
+  mkdir -p "$dir"
+  exec {HYPR_SESSION_LOCK_FD}>"$HYPR_SESSION_LOCK"
+  flock "$HYPR_SESSION_LOCK_FD"
+}
+
+hypr_session_unlock() {
+  if [[ -n ${HYPR_SESSION_LOCK_FD:-} ]]; then
+    flock -u "$HYPR_SESSION_LOCK_FD" || true
+    eval "exec ${HYPR_SESSION_LOCK_FD}>&-" || true
+    unset HYPR_SESSION_LOCK_FD
+  fi
+}

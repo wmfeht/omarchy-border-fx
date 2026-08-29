@@ -27,6 +27,23 @@ disable_look() {
   "$_script_dir/look-apply.sh" --disabled --look-json "${LOOK_JSON:-{}}" "$@" || true
 }
 
+# Always persist-disable. --eval only while the plugin is still listed.
+persist_disable() {
+  if command -v hyprctl >/dev/null 2>&1 && plugin_listed; then
+    disable_look --eval
+  else
+    disable_look
+  fi
+}
+
+_teardown_gen=$(hypr_session_ensure_gen)
+hypr_session_lock
+trap 'hypr_session_unlock' EXIT
+if [[ $(hypr_session_ensure_gen) != "$_teardown_gen" ]]; then
+  echo "hypr-teardown: skipped; ensure already claimed this session" >&2
+  exit 0
+fi
+
 if command -v hyprctl >/dev/null 2>&1 && plugin_listed; then
   path=$(loaded_so)
   if [[ ${path:-} == "$SESSION_SO" ]]; then
@@ -34,18 +51,15 @@ if command -v hyprctl >/dev/null 2>&1 && plugin_listed; then
       echo "hypr-teardown: unloaded $SESSION_SO"
     else
       echo "hypr-teardown: unload refused; setting enabled = false" >&2
-      disable_look --eval
     fi
   elif [[ -n ${path:-} ]]; then
     echo "hypr-teardown: not unloading $path (not the Omarchy session copy)" >&2
-    disable_look
   else
     echo "hypr-teardown: plugin listed but .so path unknown; setting enabled = false" >&2
-    disable_look --eval
   fi
-else
-  disable_look
 fi
+
+persist_disable
 
 if (( purge )); then
   rm -f "$SESSION_SO" "$LUA_FILE" "$LEGACY_LUA_FILE"

@@ -17,4 +17,8 @@ HYPRCTL_INSTANCE="${SHINY_INSTANCE:-0}"
 
 _paths_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PLUGIN_ROOT=$(cd "$_paths_dir/.." && pwd)
-HYPR_SRC="$PLUGIN_ROOT/hypr"
+HYPR_SRC="${HYPR_SRC:-$PLUGIN_ROOT/hypr}"
+# Detached hypr-teardown vs hypr-ensure serialize on this lock.
+_runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+HYPR_SESSION_LOCK="${HYPR_SESSION_LOCK:-$_runtime_dir/omarchy-border-fx/hypr-session.lock}"
+HYPR_SESSION_GEN="${HYPR_SESSION_GEN:-$_runtime_dir/omarchy-border-fx/hypr-ensure.gen}"
