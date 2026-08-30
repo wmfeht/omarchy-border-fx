@@ -83,7 +83,7 @@ ensure_hyprland_require() {
 
 build_so() {
   if [[ ! -f $HYPR_SRC/Makefile ]]; then
-    notify "window ring needs Hyprland headers; chrome is on. This checkout has no hypr/ sources."
+    notify "Window borders can't be built here: this copy of the plugin has no Hyprland sources. Panel and notification effects still work."
     return 1
   fi
   mkdir -p "$BUILD_DIR"
@@ -92,7 +92,7 @@ build_so() {
     hypr_abi_invalidate_objects
   fi
   if ! make -C "$HYPR_SRC" all BUILD_DIR="$BUILD_DIR" >&2; then
-    notify "window ring needs Hyprland headers; chrome is on. Fix: install matching Hyprland headers and re-enable, or: make -C hypr all"
+    notify "Window borders failed to build. Panel and notification effects still work. Install the Hyprland headers that match your compositor, then re-enable the plugin."
     return 1
   fi
   [[ -f $BUILD_DIR/hypr-shiny-border.so ]] || return 1
@@ -126,7 +126,7 @@ load_session_so_or_fail() {
   if load_session_so; then
     return 0
   fi
-  notify "hyprctl plugin load failed. Chrome is on. Allow hyprctl plugin loads or check Hyprland permissions."
+  notify "Hyprland refused to load the window borders. Panel and notification effects still work. Check that your Hyprland configuration allows plugin loads."
   status load-failed
   exit 0
 }
@@ -169,7 +169,7 @@ apply_look
 if plugin_listed; then
   path=$(loaded_so)
   if [[ -z ${path:-} ]]; then
-    notify "hypr-shiny-border is already loaded; not loading a second copy."
+    notify "Window borders are already active."
     apply_look --eval
     status reuse
     exit 0
@@ -182,7 +182,7 @@ if plugin_listed; then
           copy_session_so "$BUILD_DIR/hypr-shiny-border.so"
           load_session_so_or_fail
         else
-          notify "hypr-shiny-border still mapped after unload; not replacing the live .so. Chrome is on."
+          notify "Window borders couldn't be replaced while running, so the current version stays active. Log out and back in to finish the update."
           apply_look --eval
           status reuse
           exit 0
@@ -194,19 +194,19 @@ if plugin_listed; then
     exit 0
   fi
   if [[ $path == *hyprpm* ]]; then
-    notify "hyprpm already loaded hypr-shiny-border; not loading a second copy. Disable it with: hyprpm disable hypr-shiny-border"
+    notify "Window borders are already loaded by hyprpm. To let Border FX manage them instead, run: hyprpm disable hypr-shiny-border"
     apply_look --eval
     status hyprpm
     exit 0
   fi
-  notify "hypr-shiny-border already loaded from $path; not loading a second copy."
+  notify "Window borders are already loaded from $path."
   apply_look --eval
   status reuse
   exit 0
 fi
 
 if plugin_mapped; then
-  notify "hypr-shiny-border is still mapped from $(loaded_so); not loading a second copy."
+  notify "Window borders are already loaded from $(loaded_so)."
   apply_look --eval
   status reuse
   exit 0

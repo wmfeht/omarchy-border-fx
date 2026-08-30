@@ -5,7 +5,8 @@
 //   GLES: shaders/shiny.gles.frag (CShader uniforms, gl_FragCoord, alpha)
 
 const float TAU = 6.28318530718;
-const float AA  = 1.25;
+
+#include "coverage.frag"
 
 // Pulse off (hz <= 0) is identity. Pulse on: the existing 0.5+0.5*sin
 // scales stop alpha. Twin of shinyPulseAlphaMul in runtime.cpp.
@@ -97,11 +98,12 @@ vec4 shinyLightingColor(vec2 p, vec2 size, float opacity) {
 
     // Ring: inside the outer contour, outside the inner contour.
     float ring = smoothstep(AA, -AA, dOut) * smoothstep(-AA, AA, dIn);
-    // Halo outside the rounded rect. Overlap the ring's outer ±AA so
-    // coverage does not hole between the stroke and the glow.
-    float glow = (1.0 - smoothstep(0.0, localT * 1.35, dOut)) * smoothstep(-AA, AA, dOut) * cone;
+    // Specular halo outside the rounded rect. Overlap the ring's outer
+    // ±AA so coverage does not hole between the stroke and the glow.
+    // specularHalo <= 0 is off (hard outer contour). Wrap never includes it.
+    float glow = shinyHaloGlow(dOut, localT, cone, specularHalo);
 
-    float cov = ring + (1.0 - ring) * glow * 0.65;
+    float cov = shinyCoverageCombine(ring, glow);
     if (cov < 0.002 && (baseColor.a <= 0.0 || wrapRing < 0.002))
         discard;
 

@@ -34,6 +34,8 @@ class CShinyPassElement : public IPassElement {
         float           rippleOriginX = 0.5f;
         float           rippleOriginY = 0.5f;
         float           rippleFade    = 0.f;
+        float           specularHalo  = 0.f; // 0 = hard contour; 1 = lit-side halo bleed
+        int             haloExpandPx  = 0;   // framebuffer px; 0 when off; draw/damage only
         PHLWINDOWREF    window;             // CBorderPassElement fallback
     };
 

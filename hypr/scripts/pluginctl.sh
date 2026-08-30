@@ -8,7 +8,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# In-tree build (hyprpm / nest). User enable builds into XDG_CACHE_HOME.
+# In-tree build (nest). User enable builds into XDG_CACHE_HOME.
 SO="${SHINY_SO:-$ROOT/hypr-shiny-border.so}"
 
 # Load copies and lastso live under $XDG_RUNTIME_DIR (0700), not a guessable

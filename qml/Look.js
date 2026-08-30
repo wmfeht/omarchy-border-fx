@@ -42,7 +42,8 @@ var DEFAULTS = {
   ripplePower: 8,
   rippleOriginX: 0.5,
   rippleOriginY: 0.5,
-  rippleFade: 0
+  rippleFade: 0,
+  specularHalo: false
 }
 
 function cloneValue(v) {
@@ -103,7 +104,8 @@ var BOOL_KEYS = {
   shimmer: true,
   mirror: true,
   activeOnly: true,
-  pulse: true
+  pulse: true,
+  specularHalo: true
 }
 var INT_RANGE = {
   borderSize: { min: 0, max: 20 },

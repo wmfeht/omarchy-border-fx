@@ -90,7 +90,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
     if (HASH != CLIENT_HASH) {
         HyprlandAPI::addNotification(PHANDLE,
-                                     "[shiny-border] Header/compositor hash mismatch. Rebuild against this Hyprland.",
+                                     "Border FX: window borders were built for a different Hyprland version. "
+                                     "Re-enable the plugin to rebuild them.",
                                      CHyprColor{1.0, 0.2, 0.2, 1.0}, 8000);
         throw std::runtime_error("[shiny-border] version mismatch");
     }
@@ -139,6 +140,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
                                                                 "Ripple spatial fade as a proportion of the decoration-box perimeter; 0 = off", 0.f,
                                                                 Config::Values::SFloatValueOptions{.min = 0.f, .max = 1.f});
     g_cfg.mirror       = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:mirror", "Mirror the lit-band lobe onto the far side of the border", true);
+    g_cfg.specularHalo = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:specular_halo",
+                                                                "Specular halo on bright border regions that bleeds outside the ring; does not change reserved padding", false);
     g_cfg.colA         = makeShared<Config::Values::CColorValue>("plugin:shiny-border:col.a", "Highlight head (ARGB)", 0xeef7ffff);
     g_cfg.colB         = makeShared<Config::Values::CColorValue>("plugin:shiny-border:col.b", "Highlight shoulder (ARGB)", 0x000a3f47);
     g_cfg.baseColor    = makeShared<Config::Values::CColorValue>("plugin:shiny-border:base_color",
@@ -183,6 +186,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.rippleOriginY);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.rippleFade);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.mirror);
+    HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.specularHalo);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.colA);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.colB);
     HyprlandAPI::addConfigValueV2(PHANDLE, g_cfg.baseColor);
@@ -218,7 +222,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     for (auto& w : Desktop::windowState()->windows())
         attach(w);
 
-    HyprlandAPI::addNotification(PHANDLE, "[shiny-border] pinned heading. try not to crash the nest.",
+    HyprlandAPI::addNotification(PHANDLE, "Border FX: window borders are on.",
                                  CHyprColor{0.2, 1.0, 0.6, 1.0}, 4000);
 
     return {"hypr-shiny-border", "Gradient window border with a directional highlight", "wmfeht", "0.1.0"};

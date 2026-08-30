@@ -43,6 +43,7 @@ struct ShinyUniformLocs {
     GLint rippleOriginX  = -1;
     GLint rippleOriginY  = -1;
     GLint rippleFade     = -1;
+    GLint specularHalo   = -1;
 };
 
 static ShinyUniformLocs g_shinyLocs;
@@ -65,6 +66,7 @@ static void cacheProgramUniforms(const SP<CShader>& shader, ShinyUniformLocs& lo
     locs.gradCountCw  = glGetUniformLocation(prog, "gradCountCW");
     locs.baseColor    = glGetUniformLocation(prog, "baseColor");
     locs.mirror       = glGetUniformLocation(prog, "mirror");
+    locs.specularHalo = glGetUniformLocation(prog, "specularHalo");
     if (!ripple)
         return;
     locs.rippleFreq    = glGetUniformLocation(prog, "rippleFreq");
@@ -271,7 +273,10 @@ bool CShinyPassElement::disableSimplification() {
 std::optional<CBox> CShinyPassElement::boundingBox() {
     if (!g_pHyprRenderer->m_renderData.pMonitor)
         return std::nullopt;
-    return m_data.box.copy().scale(1.F / g_pHyprRenderer->m_renderData.pMonitor->m_scale).round();
+    CBox box = m_data.box.copy();
+    if (m_data.haloExpandPx > 0)
+        box.expand(m_data.haloExpandPx);
+    return box.scale(1.F / g_pHyprRenderer->m_renderData.pMonitor->m_scale).round();
 }
 
 CRegion CShinyPassElement::opaqueRegion() {
@@ -290,7 +295,11 @@ std::vector<UP<IPassElement>> CShinyPassElement::draw() {
     CBox box = m_data.box;
     rd.renderModif.applyToBox(box);
 
-    const auto proj = g_pHyprRenderer->projectBoxToTarget(box);
+    CBox drawBox = box;
+    if (m_data.haloExpandPx > 0)
+        drawBox.expand(m_data.haloExpandPx);
+
+    const auto proj = g_pHyprRenderer->projectBoxToTarget(drawBox);
 
     const auto inv = Math::wlTransformToHyprutils(Math::invertTransform(mon->m_transform));
 
@@ -323,6 +332,7 @@ std::vector<UP<IPassElement>> CShinyPassElement::draw() {
     shader->setUniformFloat(SHADER_BRIGHTNESS, m_data.pulseHz);
     shader->setUniformFloat(SHADER_ANGLE, m_data.angle);
     glUniform1i(locs.mirror, m_data.mirror ? 1 : 0);
+    glUniform1f(locs.specularHalo, m_data.specularHalo);
 
     // CShader has no third color slot; upload like the gradient arrays.
     {

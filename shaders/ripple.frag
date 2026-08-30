@@ -40,6 +40,8 @@ layout(std140, binding = 0) uniform buf {
     float rippleOriginX;
     float rippleOriginY;
     float rippleFade;
+    float specularHalo;
+    float haloBleedPx;
 };
 
 const int MAX_STEPS = 8;
@@ -87,6 +89,8 @@ vec4 shinyRampColor(bool cw, float u) {
 #include "ripple-lighting.frag"
 
 void main() {
-    vec2 p = (qt_TexCoord0 - vec2(0.5)) * vec2(widthPx, heightPx);
-    fragColor = rippleLightingColor(p, vec2(widthPx, heightPx), qt_Opacity);
+    vec2 ringSize = vec2(widthPx, heightPx);
+    vec2 itemSize = ringSize + vec2(2.0 * max(haloBleedPx, 0.0));
+    vec2 p = (qt_TexCoord0 - vec2(0.5)) * itemSize;
+    fragColor = rippleLightingColor(p, ringSize, qt_Opacity);
 }

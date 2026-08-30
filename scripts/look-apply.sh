@@ -100,6 +100,7 @@ DEFAULTS = {
     "rippleOriginX": 0.5,
     "rippleOriginY": 0.5,
     "rippleFade": 0,
+    "specularHalo": False,
 }
 
 raw = os.environ.get("LOOK_JSON") or "{}"
@@ -131,7 +132,7 @@ if isinstance(nested, dict):
         if v is not None:
             merged_src[k] = v
 
-BOOL_KEYS = ("shimmer", "mirror", "activeOnly", "pulse")
+BOOL_KEYS = ("shimmer", "mirror", "activeOnly", "pulse", "specularHalo")
 INT_RANGE = {
     "borderSize": (0, 20),
     "pinDeg": (-360, 360),
@@ -375,6 +376,7 @@ lines = [
     "        angle_offset = " + lua_num(look["angleOffset"]) + ",",
     "        lobe         = " + lua_num(look["lobe"]) + ",",
     "        mirror       = " + lua_bool(look["mirror"]) + ",",
+    "        specular_halo = " + lua_bool(look["specularHalo"]) + ",",
     "        border_size  = " + lua_num(look["borderSize"]) + ",",
     "        col = {",
     "          a = " + lua_str(to_hypr(look["colA"])) + ",",

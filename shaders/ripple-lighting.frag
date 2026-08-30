@@ -5,7 +5,8 @@
 // rippleGain = 0 matches shiny. No textures, no UV/SDF warp, no caustics.
 
 const float TAU = 6.28318530718;
-const float AA  = 1.25;
+
+#include "coverage.frag"
 
 float shinyPulseAlphaMul(float hz, float t) {
     if (hz <= 0.0)
@@ -92,9 +93,9 @@ vec4 rippleLightingColor(vec2 p, vec2 size, float opacity) {
         discard;
 
     float ring = smoothstep(AA, -AA, dOut) * smoothstep(-AA, AA, dIn);
-    float glow = (1.0 - smoothstep(0.0, localT * 1.35, dOut)) * smoothstep(-AA, AA, dOut) * energy;
+    float glow = shinyHaloGlow(dOut, localT, energy, specularHalo);
 
-    float cov = ring + (1.0 - ring) * glow * 0.65;
+    float cov = shinyCoverageCombine(ring, glow);
     if (cov < 0.002 && (baseColor.a <= 0.0 || wrapRing < 0.002))
         discard;
 

@@ -148,3 +148,44 @@ int shinyTimerTickMs(ShinyEffect mode, bool ripple, float pulseHz, float shimmer
         return shinyPulseTickMs(0.f);
     return shinyPulseTickMs(0.f);
 }
+
+float shinySmoothstep(float edge0, float edge1, float x) {
+    const float t = std::clamp((x - edge0) / (edge1 - edge0), 0.f, 1.f);
+    return t * t * (3.f - 2.f * t);
+}
+
+float shinyRingCoverage(float dOut, float dIn) {
+    return shinySmoothstep(kShinyCoverageAA, -kShinyCoverageAA, dOut) * shinySmoothstep(-kShinyCoverageAA, kShinyCoverageAA, dIn);
+}
+
+float shinyWrapRingCoverage(float dOut, float dWrap) {
+    return shinySmoothstep(kShinyCoverageAA, -kShinyCoverageAA, dOut) * shinySmoothstep(-kShinyCoverageAA, kShinyCoverageAA, dWrap);
+}
+
+float shinyHaloGlow(float dOut, float localT, float energy, float halo) {
+    if (!(halo > 0.f))
+        return 0.f;
+    return (1.f - shinySmoothstep(0.f, localT * kShinyHaloFalloff, dOut)) * shinySmoothstep(-kShinyCoverageAA, kShinyCoverageAA, dOut) * energy * halo;
+}
+
+float shinyCoverageCombine(float ring, float glow) {
+    return ring + (1.f - ring) * glow * kShinyHaloMix;
+}
+
+float shinyHaloBleedPx(float thick, float halo) {
+    if (!(halo > 0.f))
+        return 0.f;
+    const float t = std::max(thick, 1.f);
+    return t * kShinyHaloFalloff + kShinyCoverageAA;
+}
+
+int shinyHaloExpandPx(float thick, float halo) {
+    const float bleed = shinyHaloBleedPx(thick, halo);
+    if (!(bleed > 0.f))
+        return 0;
+    return std::max(1, static_cast<int>(std::ceil(bleed)));
+}
+
+int shinyDamageExpandPx(float thick, float halo) {
+    return std::max(2, shinyHaloExpandPx(thick, halo));
+}

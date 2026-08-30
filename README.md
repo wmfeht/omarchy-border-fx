@@ -1,10 +1,11 @@
 # omarchy-border-fx
 
-Animated border effects for [Omarchy](https://omarchy.org): a directional
-comet highlight (`shiny`) or a traveling ripple of light (`ripple`) drawn on
-a rounded-rect ring around **Hyprland windows** and **Omarchy shell chrome**
-(panels, notification toasts). One configuration drives both surfaces —
-change the look once in `shell.json` and windows and chrome update together.
+Animated border effects for [Omarchy](https://omarchy.org). The plugin
+draws a rounded-rect ring around Hyprland windows and Omarchy shell chrome
+(panels, notification toasts) and animates it with one of two renderers:
+`shiny`, a directional comet highlight, or `ripple`, a traveling crest of
+light. One configuration drives both surfaces: change the look once in
+`shell.json` and windows and chrome update together.
 
 > **Status: unfinished.** This project works but is still under active
 > development. Configuration keys and defaults may change between updates,
@@ -14,12 +15,17 @@ change the look once in `shell.json` and windows and chrome update together.
 ## Install
 
 ```sh
-omarchy plugin add <git-url-of-this-repo> --enable --yes
+omarchy plugin add https://github.com/wmfeht/omarchy-border-fx.git --enable --yes
 ```
 
-`omarchy plugin add` alone only clones files; nothing draws until enable.
-`--enable` starts the service, which overlays the shell chrome **and**
-builds/loads the Hyprland window ring (user-level, no sudo).
+`omarchy plugin add` on its own only clones the files; nothing draws until
+the plugin is enabled. `--enable` starts the service, which overlays the
+shell chrome and builds and loads the Hyprland window ring. Everything
+runs at the user level; no sudo required. The baked shaders ship in the
+repo, so the chrome effect needs no build tools; the window ring compiles
+on your machine against the installed Hyprland headers.
+
+Manage the plugin with:
 
 ```sh
 omarchy plugin enable wmfeht.border-fx    # chrome + window ring on
@@ -27,66 +33,155 @@ omarchy plugin disable wmfeht.border-fx   # both off; clone kept
 omarchy plugin update wmfeht.border-fx --yes
 ```
 
-### Remove
+### If the window ring fails to build
+
+The window ring compiles on your machine, against the running compositor.
+The build needs three packages, all in the Arch repos:
+
+- `gcc`: the C++ compiler, same toolchain that builds Hyprland itself
+- `pkgconf`: provides `pkg-config`, which locates the headers and libraries
+- `hyprland`: ships its headers in `/usr/include/hyprland` and pulls in
+  every library the plugin links against
 
 ```sh
-omarchy plugin remove wmfeht.border-fx --yes
+sudo pacman -S --needed gcc pkgconf hyprland
 ```
 
-If the shell was not running during remove, one manual step is left:
+The headers must match the running compositor. After a Hyprland upgrade,
+re-enable the plugin or run `omarchy restart shell`: the build check
+notices the version change and recompiles instead of loading a stale copy.
 
-```sh
-~/.config/omarchy/plugins/wmfeht.border-fx/scripts/hypr-teardown.sh --purge
-# or, from a checkout of this repo:
-bash scripts/hypr-teardown.sh --purge
+If the build still fails, the chrome effect keeps running and you get a
+notification telling you what to do next.
+
+## Configure
+
+Settings live in `~/.config/omarchy/shell.json`, inline on the `plugins[]`
+entry whose `id` is `wmfeht.border-fx`. There is no `config:` or
+`settings:` wrapper and no separate JSON file:
+
+```json
+{
+  "id": "wmfeht.border-fx",
+  "effect": "shiny",
+  "pinDeg": 90
+}
 ```
-
-That deletes the installed Hyprland plugin and
-`~/.config/hypr/border-fx.lua`.
-
-### Hyprland headers
-
-The window ring is compiled against the running compositor. If the build
-fails, chrome still runs and you get a notification. Fix: install matching
-Hyprland headers, then re-enable (or `omarchy restart shell`).
-
-## Configuration
-
-Source of truth: the `wmfeht.border-fx` entry in
-`~/.config/omarchy/shell.json` `plugins[]`. Settings are **inline on that
-object** — no `config:` / `settings:` wrapper, no extra JSON file. The
-plugin is on if and only if that id is present (`omarchy plugin enable` /
-`disable`).
 
 There is no settings UI. Edit `shell.json` and save:
 
-- **Chrome** (panels, toasts) hot-reloads immediately.
-- **Windows** follow a moment later (changes are debounced ~150 ms, then
-  fanned out to Hyprland).
+- Chrome (panels, toasts) picks up changes immediately.
+- Windows follow a moment later: changes are debounced by about 150 ms,
+  then fanned out to Hyprland.
 
-`~/.config/hypr/border-fx.lua` is a generated **output** of this plugin,
-not an input. Do not edit it.
+The plugin is on if and only if that entry is present.
+`omarchy plugin enable` and `disable` manage it.
 
-### Choosing an effect
+`~/.config/hypr/border-fx.lua` is generated output, not an input. Don't
+edit it.
+
+## Choose an effect
 
 `effect` selects the renderer:
 
-- `"shiny"` (default) — a directional comet highlight on the ring.
-- `"ripple"` — the same ring with crests of light traveling along it.
-- Any other value turns both surfaces off (look keys are kept but nothing
-  draws).
+- `"shiny"` (default): a directional comet highlight on the ring.
+- `"ripple"`: the same ring with crests of light traveling along it.
+- Any other value turns both surfaces off. Look keys are kept, but nothing
+  draws.
 
 An empty or omitted `effect` means `"shiny"`.
 
-### Defaults
+## Recipes
 
-Missing or `null` keys mean the **shared look**: light pinned at 120°,
+Each snippet is a complete `plugins[]` entry. Add or change only the keys
+you care about; everything else falls back to the defaults described
+below.
+
+Thinner wrap-free ring, light from above:
+
+```json
+{
+  "id": "wmfeht.border-fx",
+  "borderSize": 1,
+  "pinDeg": 90,
+  "baseColor": "rgba(00000000)"
+}
+```
+
+Classic two-stop comet (`colA` / `colB`) instead of the default ramp:
+
+```json
+{
+  "id": "wmfeht.border-fx",
+  "gradient": [],
+  "colA": "rgba(33ccffee)",
+  "colB": "rgba(00ff99ee)"
+}
+```
+
+Specular halo on bright border areas, bleeding outside the stroke (padding unchanged):
+
+```json
+{
+  "id": "wmfeht.border-fx",
+  "specularHalo": true
+}
+```
+
+Pulse instead of shimmer (windows and chrome both breathe highlight alpha):
+
+```json
+{
+  "id": "wmfeht.border-fx",
+  "shimmer": false,
+  "pulse": true,
+  "pulseHz": 0.4
+}
+```
+
+Different clockwise-half colors (keep endpoints aligned to hide the seam):
+
+```json
+{
+  "id": "wmfeht.border-fx",
+  "gradientCw": [
+    "rgba(f7ffffee)",
+    "rgba(c084fcee)",
+    "rgba(7c3aedee)",
+    "rgba(0a3f4700)"
+  ]
+}
+```
+
+The rest of this file is reference: colors, defaults, every option, and
+how the gradient maps onto the ring.
+
+## Colors
+
+Canonical strings are Hyprland `rgba(RRGGBBAA)` (hex, no commas). Accepted
+on the way in:
+
+| Form | Example | Notes |
+|---|---|---|
+| `rgba(RRGGBBAA)` | `"rgba(33ccffee)"` | Canonical. Write this. |
+| `rgb(RRGGBB)` | `"rgb(007a48)"` | Alpha `ff`. |
+| `#AARRGGBB` | `"#ee33ccff"` | Qt order (alpha first). |
+| `#RRGGBB` | `"#33ccff"` | Alpha `ff`. |
+| object | `{ "r": 0.2, "g": 0.8, "b": 1, "a": 0.9 }` | Channels in 0..1 (`a` optional, default 1). |
+
+Junk / unparsable colors become transparent `rgba(00000000)`.
+
+A color list (`gradient`, `gradientCw`) may be a JSON array of those
+strings, or a Hyprland-style object `{ "colors": [ … ] }`. At most 8
+stops are used; extra colors are dropped.
+
+## Defaults
+
+Missing or `null` keys give you the shared look: light pinned at 120°,
 shimmer on, a 2-stop light glint, and a wrapping stroke. Windows and
 chrome share these defaults, so first paint matches on both. An empty
-`gradient` array is a real override (falls back to the two-stop
-`colA`/`colB`), not "use the default ramp."
-
-### Example
+`gradient` array is a real override: it falls back to the two-stop
+`colA`/`colB` rather than the default ramp.
 
 All keys at their shared defaults (equivalent to
 `{ "id": "wmfeht.border-fx" }`):
@@ -124,9 +219,12 @@ All keys at their shared defaults (equivalent to
   "ripplePower": 8,
   "rippleOriginX": 0.5,
   "rippleOriginY": 0.5,
-  "rippleFade": 0
+  "rippleFade": 0,
+  "specularHalo": false
 }
 ```
+
+### Per-effect overrides
 
 Look keys may also sit under a nested object named after the effect.
 Nested keys win over the same key at the top level:
@@ -142,7 +240,7 @@ Nested keys win over the same key at the top level:
 
 That look is `pinDeg` 45, `borderSize` 3, everything else default.
 
-Ripple is the same swap: `"effect": "ripple"` plus an optional nested
+Ripple works the same way: `"effect": "ripple"` plus an optional nested
 `"ripple"` object. Nested keys win; missing ripple keys use dedicated
 defaults (not the shiny defaults).
 
@@ -154,48 +252,32 @@ defaults (not the shiny defaults).
 }
 ```
 
-### Colors
+## How settings resolve
 
-Canonical strings are Hyprland `rgba(RRGGBBAA)` (hex, no commas). Accepted
-on the way in:
-
-| Form | Example | Notes |
-|---|---|---|
-| `rgba(RRGGBBAA)` | `"rgba(33ccffee)"` | Canonical. Write this. |
-| `rgb(RRGGBB)` | `"rgb(007a48)"` | Alpha `ff`. |
-| `#AARRGGBB` | `"#ee33ccff"` | Qt order (alpha first). |
-| `#RRGGBB` | `"#33ccff"` | Alpha `ff`. |
-| object | `{ "r": 0.2, "g": 0.8, "b": 1, "a": 0.9 }` | Channels in 0..1 (`a` optional, default 1). |
-
-Junk / unparsable colors become transparent `rgba(00000000)`.
-
-A color list (`gradient`, `gradientCw`) may be a JSON array of those
-strings, or a Hyprland-style object `{ "colors": [ … ] }`. At most **8**
-stops are used; extra colors are dropped.
-
-### How your settings resolve
-
-1. The plugin reads the `plugins[]` entry whose `id` is `wmfeht.border-fx`.
-2. `effect` empty / omitted → `"shiny"`.
-3. Known look keys are picked from the entry (not `id`, not unknown fields).
+1. The plugin reads the `plugins[]` entry whose `id` is
+   `wmfeht.border-fx`.
+2. `effect` empty or omitted means `"shiny"`.
+3. Known look keys are picked from the entry; `id` and unknown fields are
+   ignored.
 4. If the entry has a nested object named after the effect, its look keys
-   overlay the top level (nested wins).
+   overlay the top level. Nested wins.
 5. Any still-missing key gets the shared default above.
-6. `gradient` / `gradientCw` are normalized to arrays.
+6. `gradient` and `gradientCw` are normalized to arrays.
 
 `id` and `enabled` are not look keys. `omarchy plugin disable` is the only
-off switch; it turns both surfaces off, and re-enable brings them back.
+off switch; it turns both surfaces off, and re-enabling brings them back.
 
-### Option reference
+## Option reference
 
-**Hosts:** *both* = windows and chrome. *windows* = Hyprland decoration
-only (chrome ignores the key).
+In the Hosts column, *both* means windows and chrome; *windows* means the
+Hyprland decoration only (chrome ignores the key).
 
 | JSON key | Type | Default | Hosts | What it does |
 |---|---|---|---|---|
 | `effect` | string | `"shiny"` | both | Renderer. `"shiny"` or `"ripple"` draws on chrome and windows. Anything else: everything off. |
 | `borderSize` | number (px) | `2` | both | Ring thickness. Chrome: overlay hidden when `≤ 0`. Hyprland clamps to `-1…20`; `-1` follows `general:border_size` on windows only. |
 | `baseColor` | color | `"rgba(0a3f47dd)"` | both | Wrapping stroke **under** the directional highlight, same thickness as the ring. Transparent (`a = 0`) = off. Not a shadow, not a gradient stop. The wrap is what still paints on the far side when the highlight fades out. |
+| `specularHalo` | bool | `false` | both | Specular halo on **bright** (lit) border regions — comet / ripple energy, not the wrapping stroke — that **bleeds outside** the ring's outer contour. Unlit / far regions stay hard-edged. Off (default) hides that outside halo. Does not change `borderSize` or reserved client padding. Hyprland and chrome both honor this. |
 | `pinDeg` | number (°) | `120` | both | Light heading, degrees CCW. `0` = from the right, `90` = from above. Hyprland clamps `-360…360`. |
 | `angleOffset` | number (°) | `0` | both | Added to `pinDeg` before drawing. Hyprland clamps `-180…180`. |
 | `lobe` | number | `0.16` | both | Lit-band **half-width** along the light axis. `0.5` = the whole window. Hyprland clamps config to `0.04…0.5`. Chrome clamps a walking lobe to that range, and a static lobe to at least `0.04`. |
@@ -229,18 +311,18 @@ Not a look key (hardcoded or host-owned):
 | `roundingPower` | Chrome shader default `2`. Windows use each window’s Hyprland rounding. |
 | `enabled` | Omarchy plugin enable/disable. |
 
-### Gradient
+## The gradient
 
-The ramp is a **parallel projection onto the light axis**, not a conic
-sweep around the window center. A wide panel and a tall one with the same
+The ramp is a parallel projection onto the light axis, not a conic sweep
+around the window center. A wide panel and a tall one with the same
 heading share a direction. Iso-lines are perpendicular to the light.
 
-Stops fill the **lit band** (`lobe`, including shimmer scale), not the
-full window:
+Stops fill the lit band (`lobe`, including shimmer scale), not the full
+window:
 
-- **0** = facing support of this rounded rect (where the comet sits).
-- **100** = edge of the comet. Past that the last stop is held (RGB and
-  alpha).
+- `0` is the facing support of the rounded rect, where the comet sits.
+- `100` is the edge of the comet. Past that, the last stop is held (RGB
+  and alpha).
 - Smaller lobes compress the same stop list into the comet so every stop
   stays visible in the highlight.
 - With `mirror` on, the same 0…100 band is also measured from the far
@@ -250,13 +332,13 @@ full window:
   other. Match first and last colors between the halves to avoid a seam.
 
 `gradientPositions` / `gradientPositionsCw` are strings of one percentage
-**per color**, separated by spaces, tabs, or commas. A trailing `%` is
-allowed (`"0 70 100"` and `"0%, 70%, 100%"` are the same). Values are
-clamped to 0…100 and forced non-decreasing.
+per color, separated by spaces, tabs, or commas. A trailing `%` is allowed
+(`"0 70 100"` and `"0%, 70%, 100%"` are the same). Values are clamped to
+0…100 and forced non-decreasing.
 
 The spec is all-or-nothing: token count must equal the color count (2…8),
-and every token must parse. Empty, junk, or a count mismatch → **even
-spacing** (`0 … 100` in equal steps). That is why a 4-stop ramp with
+and every token must parse. Empty, junk, or a count mismatch falls back to
+even spacing (`0 … 100` in equal steps). That is why a 4-stop ramp with
 positions `"0 50"` silently even-spaces instead of stretching two numbers.
 
 Default `"0 99"` puts the white head at the facing edge and the
@@ -264,8 +346,8 @@ transparent teal at the comet tail.
 
 ### Clockwise half
 
-`gradientCw` / `gradientPositionsCw` never turn the ramp **on**. If
-`gradient` has fewer than two colors, clockwise config is ignored.
+`gradientCw` / `gradientPositionsCw` never turn the ramp on by themselves.
+If `gradient` has fewer than two colors, clockwise config is ignored.
 
 | `gradientCw` | `gradientPositionsCw` | Clockwise half |
 |---|---|---|
@@ -274,69 +356,37 @@ transparent teal at the comet tail.
 | empty / fewer than 2 | valid spec matching primary count | Primary colors, reshaped. Default `"0 22 50 100"` is four tokens, so with the 2-stop ramp it mismatches and falls through to a mirror of the primary positions. |
 | empty / fewer than 2 | empty / invalid | Exact **mirror** of the primary positions. |
 
-### Heading and motion
+## Heading and motion
 
 The light heading is `pinDeg + angleOffset`. When shimmer is on, the
 heading and the highlight size each drift on their own random walk (within
 `±shimmerDeg` and `shimmerScaleMin…Max`), retargeting about `shimmerHz`
 times per second. Windows are seeded individually so overlapping windows
-do not walk in unison. When both shimmer and pulse could run, **shimmer
-wins**; pulse stays off until shimmer is disabled or its Hz is `≤ 0`.
+do not walk in unison. When both shimmer and pulse could run, shimmer
+wins; pulse stays off until shimmer is disabled or its Hz is `≤ 0`.
 
-### Recipes
+## Remove
 
-Thinner wrap-free ring, light from above:
-
-```json
-{
-  "id": "wmfeht.border-fx",
-  "borderSize": 1,
-  "pinDeg": 90,
-  "baseColor": "rgba(00000000)"
-}
+```sh
+omarchy plugin remove wmfeht.border-fx --yes
 ```
 
-Classic two-stop comet (`colA` / `colB`) instead of the default ramp:
+If the shell was not running during the remove, one manual step remains:
 
-```json
-{
-  "id": "wmfeht.border-fx",
-  "gradient": [],
-  "colA": "rgba(33ccffee)",
-  "colB": "rgba(00ff99ee)"
-}
+```sh
+~/.config/omarchy/plugins/wmfeht.border-fx/scripts/hypr-teardown.sh --purge
+# or, from a checkout of this repo:
+bash scripts/hypr-teardown.sh --purge
 ```
 
-Pulse instead of shimmer (windows and chrome both breathe highlight alpha):
+That deletes the installed Hyprland plugin and
+`~/.config/hypr/border-fx.lua`.
 
-```json
-{
-  "id": "wmfeht.border-fx",
-  "shimmer": false,
-  "pulse": true,
-  "pulseHz": 0.4
-}
-```
-
-Different clockwise-half colors (keep endpoints aligned to hide the seam):
-
-```json
-{
-  "id": "wmfeht.border-fx",
-  "gradientCw": [
-    "rgba(f7ffffee)",
-    "rgba(c084fcee)",
-    "rgba(7c3aedee)",
-    "rgba(0a3f4700)"
-  ]
-}
-```
-
-## Development and contributing
+## Development
 
 Architecture, build tasks, and the development workflow live in
 [DEVELOPMENT.md](DEVELOPMENT.md). Before opening a change, read
-[CONTRIBUTING.md](CONTRIBUTING.md) — in particular the project's scope:
-a small, well-documented set of effects, not a growing option surface.
+[CONTRIBUTING.md](CONTRIBUTING.md), in particular the project's scope: a
+small, well-documented set of effects, not a growing option surface.
 
 MIT. See [LICENSE](LICENSE).
