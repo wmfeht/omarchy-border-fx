@@ -90,7 +90,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
     if (HASH != CLIENT_HASH) {
         HyprlandAPI::addNotification(PHANDLE,
-                                     "[shiny-border] Header/compositor hash mismatch. Rebuild against this Hyprland.",
+                                     "Border FX: window borders were built for a different Hyprland version. "
+                                     "Re-enable the plugin to rebuild them.",
                                      CHyprColor{1.0, 0.2, 0.2, 1.0}, 8000);
         throw std::runtime_error("[shiny-border] version mismatch");
     }
@@ -221,7 +222,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     for (auto& w : Desktop::windowState()->windows())
         attach(w);
 
-    HyprlandAPI::addNotification(PHANDLE, "[shiny-border] pinned heading. try not to crash the nest.",
+    HyprlandAPI::addNotification(PHANDLE, "Border FX: window borders are on.",
                                  CHyprColor{0.2, 1.0, 0.6, 1.0}, 4000);
 
     return {"hypr-shiny-border", "Gradient window border with a directional highlight", "wmfeht", "0.1.0"};
