@@ -1,17 +1,18 @@
 # Contributing
 
-Thanks for your interest. Before writing code, please read this page —
-especially the scope section. It will save you (and the review) time.
+Thanks for your interest in contributing. Before writing code, please read
+this page, especially the scope section. It will save you and your
+reviewer time.
 
 ## What this project is trying to be
 
-A **small, well-documented set of border effects with a focused
-configuration**. Two renderers (Hyprland windows, Omarchy/Quickshell
-chrome), one config, and every option accounted for: documented, defaulted,
-clamped, and behaving identically on both hosts.
+A small, well-documented set of border effects with a focused
+configuration. Two renderers (Hyprland windows, Omarchy/Quickshell
+chrome), one config, and every option accounted for: documented,
+defaulted, clamped, and behaving identically on both hosts.
 
-**New shaders and expanded options are not the focus.** The main problem
-this project faces is *controlling* the set of possible options, not adding
+New shaders and expanded options are not the focus. The main problem this
+project faces is *controlling* the set of possible options, not adding
 more. Every look key must be:
 
 - documented in the README option reference,
@@ -34,40 +35,42 @@ than one that adds them.
 - Tests, and simplifications that keep behavior while shedding code.
 - Removing or consolidating options whose effect can be expressed with the
   remaining ones.
-- Install/teardown robustness (the unfinished parts — see the status note
+- Install/teardown reliability (the unfinished parts; see the status note
   in the [README](README.md)).
 
-## Contributions that likely will not fit
+## Contributions that likely won't fit
 
 - A new effect or shader.
 - New look keys, unless they fix a real expressiveness gap that recipes
-  cannot cover — and come with docs, defaults, clamps, and tests for both
+  can't cover, and come with docs, defaults, clamps, and tests for both
   hosts.
 - Options that serve one specific configuration. Prefer a recipe in the
   README.
 
 ## Want a fully custom shader? Fork it
 
-If you want your own effect, **forking this project is the supported
-path** — that is what the MIT license is for, and the tree is small enough
-to make it practical. The places to change:
+If you want your own effect, forking this project is the supported path.
+That's what the MIT license is for, and the tree is small enough to make
+it practical. The places to change:
 
-- `shaders/*-lighting.frag` — the shared lighting bodies, `#include`d by
-  both hosts. This is where the effect math lives.
-- `shaders/*.frag` — the Qt/Quickshell host shaders (baked to `.qsb`).
-- `shaders/*.gles.frag` — the GLES 3 host shaders for the Hyprland plugin.
+- `shaders/*-lighting.frag`: the shared lighting bodies, `#include`d by
+  both hosts. This is where the effect math lives, together with
+  `shaders/coverage.frag` (ring and halo coverage, mirrored in
+  `qml/Coverage.js` and `hypr/src/runtime.cpp`).
+- `shaders/*.frag`: the Qt/Quickshell host shaders (baked to `.qsb`).
+- `shaders/*.gles.frag`: the GLES 3 host shaders for the Hyprland plugin.
   `mise run bake` inlines them into the generated `hypr/src/shaders.hpp`;
-  do not edit that header directly.
-- `qml/` and `hypr/src/` — the per-host adapters if your effect needs new
+  don't edit that header directly.
+- `qml/` and `hypr/src/`: the per-host adapters, if your effect needs new
   uniforms.
 
 Keep the two hosts mathematically identical (the shared lighting include
 exists to make that easy), or windows and chrome will drift apart. Rename
-the Omarchy plugin id in `manifest.json` so your fork does not collide with
+the Omarchy plugin id in `manifest.json` so your fork doesn't collide with
 an installed copy of this plugin.
 
 Upstreaming a finished custom effect back into this repository is almost
-always out of scope — see above.
+always out of scope; see above.
 
 ## Practicalities
 
