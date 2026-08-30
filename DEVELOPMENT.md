@@ -9,13 +9,13 @@ unified tree. User-facing install and configuration live in the
 
 One git tree, two renderers, one Omarchy plugin as the control plane.
 
-The same conic comet on a rounded-rect ring is drawn by **Hyprland window
-decorations** (`hypr-shiny-border.so`) and by **Omarchy / Quickshell
-chrome** (panels, notification toasts). Changing the look in `shell.json`
-updates both.
+The same conic comet on a rounded-rect ring is drawn by Hyprland window
+decorations (`hypr-shiny-border.so`) and by Omarchy / Quickshell chrome
+(panels, notification toasts). Changing the look in `shell.json` updates
+both.
 
 This tree is what `omarchy plugin add <url>` clones. The Hyprland `.so` is
-a compositor plugin, not a Quickshell plugin — Omarchy never compiles it.
+a compositor plugin, not a Quickshell plugin; Omarchy never compiles it.
 After enable, `Service.qml` runs `scripts/hypr-ensure.sh` (user-level, no
 sudo) to build/load `~/.local/lib/hypr/hypr-shiny-border.so`.
 
@@ -67,15 +67,23 @@ is off or its Hz is `≤ 0`.
 ```
 manifest.json                 # Omarchy id wmfeht.border-fx (clone root)
 Service.qml                   # chrome overlay + hypr-ensure + look fan-out
-qml/                          # ShinyBorder, Shimmer, Gradient, Look
-shaders/                      # Qt + GLES hosts, shared *-lighting.frag, committed .qsb
+preview.qml                   # standalone qs entry point (preview / smoke)
+qml/                          # ShinyBorder + Shimmer/Gradient/Ripple/Coverage/Look helpers
+shaders/                      # Qt + GLES hosts, shared *-lighting.frag + coverage.frag, committed .qsb
 hypr/                         # compositor plugin (src, Makefile, nest, tests)
 hyprpm.toml                   # clone root, so hyprpm add of this URL works
+mise.toml                     # all dev tasks
+Makefile                      # clone-root convenience, forwards to hypr/
+harness/                      # DemoCard.qml mock cards for preview / smoke
 scripts/
+  bake.sh                     # .frag → .qsb + inline GLES into hypr/src/shaders.hpp
+  paths.sh                    # shared ids/paths, sourced by the other scripts
   hypr-ensure.sh              # build/install/load ~/.local/lib/hypr/… (no sudo)
   hypr-session.sh             # mapped-.so helpers; install via rename, not cp -f
   hypr-teardown.sh            # unload session copy; --purge deletes it
   look-apply.sh               # JSON look → border-fx.lua + hyprctl eval
+  shell-look.sh               # snapshot/restore the shell.json look across reinstall
+  preview.sh                  # launch preview.qml under qs
   install.sh / uninstall.sh   # dev copy helpers
   reinstall.sh                # purge, restart shell, add --enable; keeps shell.json look
 tests/                        # compositor-free JS tests (run in CI)
@@ -87,12 +95,12 @@ them). Build artifacts are gitignored; user builds write to
 
 ## Dev copy
 
-A dev copy is a file copy into the Omarchy plugin directory — not
-git-managed, not updated by `omarchy plugin update`:
+A dev copy is a file copy into the Omarchy plugin directory, not
+git-managed and not updated by `omarchy plugin update`:
 
 ```sh
-mise run install     # copies into ~/.config/omarchy/plugins/wmfeht.border-fx
-mise run uninstall
+mise run install     # copy into ~/.config/omarchy/plugins/wmfeht.border-fx, enable, restart shell
+mise run uninstall   # disable, purge the login-session .so, remove the copy
 mise run reinstall   # purge the live .so, restart shell, add this folder; keeps shell.json look
 ```
 
@@ -100,18 +108,27 @@ mise run reinstall   # purge the live .so, restart shell, add this folder; keeps
 
 ```sh
 mise run bake        # shaders/*.frag → .qsb + inline GLES into hypr/src/shaders.hpp
-mise run test        # shimmer + gradient + look adapter (no compositor)
+mise run reflect     # bake, then dump qsb reflection (UBO layout)
+mise run test        # shimmer + gradient + look adapter + session install (no compositor)
 mise run lint        # qmllint ShinyBorder.qml
 mise run check       # bake + lint + test
 mise run preview     # standalone qs window; does not touch omarchy-shell
+mise run smoke       # short-lived preview; fails only if the shader errors
+mise run test-full   # check + Hyprland logic tests
 mise run hypr-build  # hypr-shiny-border.so
 mise run hypr-test   # C++ logic tests
+mise run hypr-clean  # remove hypr objects and the .so
+mise run headers     # running compositor hash vs installed headers
 mise run nest        # nested Hyprland crash sandbox
+mise run load        # load into the nest; refuses the login session
+mise run unload      # unload from $SHINY_INSTANCE
 mise run reload      # rebuild + load into the nest
-mise run reinstall   # purge live .so, restart shell, add this folder; keeps shell.json look
 ```
 
-CI (`.github/workflows/test.yml`) runs `mise run test` — the
+Dev-copy tasks (`install` / `uninstall` / `reinstall`) are listed in the
+previous section.
+
+CI (`.github/workflows/test.yml`) runs `mise run test`, the
 compositor-free JS suite.
 
 ## Hyprland side
@@ -120,8 +137,8 @@ hyprpm is the Hyprland **development** workflow (`mise run nest`), not the
 user install path. `hyprpm.toml` is at this repo root so
 `hyprpm add <same-url>` still builds.
 
-Hyprland C++ iteration — nested compositor, `pluginctl`, header pins,
-teardown rules: [hypr/DEVELOPMENT.md](hypr/DEVELOPMENT.md).
+Hyprland C++ iteration (nested compositor, `pluginctl`, header pins,
+teardown rules): [hypr/DEVELOPMENT.md](hypr/DEVELOPMENT.md).
 
 ## Chrome side
 
