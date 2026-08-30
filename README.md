@@ -15,13 +15,15 @@ light. One configuration drives both surfaces: change the look once in
 ## Install
 
 ```sh
-omarchy plugin add <git-url-of-this-repo> --enable --yes
+omarchy plugin add https://github.com/wmfeht/omarchy-border-fx.git --enable --yes
 ```
 
 `omarchy plugin add` on its own only clones the files; nothing draws until
 the plugin is enabled. `--enable` starts the service, which overlays the
 shell chrome and builds and loads the Hyprland window ring. Everything
-runs at the user level; no sudo required.
+runs at the user level; no sudo required. The baked shaders ship in the
+repo, so the chrome effect needs no build tools; the window ring compiles
+on your machine against the installed Hyprland headers.
 
 Manage the plugin with:
 
@@ -33,10 +35,24 @@ omarchy plugin update wmfeht.border-fx --yes
 
 ### If the window ring fails to build
 
-The window ring is compiled against the running compositor. If the build
-fails, the chrome effect still runs and you get a notification. Install
-the Hyprland headers that match your compositor, then re-enable the plugin
-(or run `omarchy restart shell`).
+The window ring compiles on your machine, against the running compositor.
+The build needs three packages, all in the Arch repos:
+
+- `gcc`: the C++ compiler, same toolchain that builds Hyprland itself
+- `pkgconf`: provides `pkg-config`, which locates the headers and libraries
+- `hyprland`: ships its headers in `/usr/include/hyprland` and pulls in
+  every library the plugin links against
+
+```sh
+sudo pacman -S --needed gcc pkgconf hyprland
+```
+
+The headers must match the running compositor. After a Hyprland upgrade,
+re-enable the plugin or run `omarchy restart shell`: the build check
+notices the version change and recompiles instead of loading a stale copy.
+
+If the build still fails, the chrome effect keeps running and you get a
+notification telling you what to do next.
 
 ## Configure
 

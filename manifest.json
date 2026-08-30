@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "wmfeht.border-fx",
   "name": "Border FX",
-  "version": "1.1.0",
+  "version": "0.1.0",
   "author": "wmfeht",
-  "description": "Window and shell border effects for Omarchy. This plugin is the control plane for both Hyprland decorations and Quickshell chrome.",
+  "description": "Animated border effects for Omarchy. A ring of light around windows, panels, and notification toasts, rendered as a directional comet or traveling ripples and styled from a single config.",
   "kinds": [
     "service"
   ],

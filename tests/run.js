@@ -1186,7 +1186,7 @@ function checkOverlayRevStamp() {
   const rev = m ? Number(m[1]) : NaN
   check(Number.isInteger(rev), "overlayRev is an integer stamp")
   check(service.indexOf("Number(manifest.version)") === -1, "overlayRev is not Number(manifest.version)")
-  check(String(rev) !== String(Number("1.1.0")), 'Number("1.1.0") is not the overlay stamp')
+  check(String(rev) !== String(Number("0.1.0")), 'Number("0.1.0") is not the overlay stamp')
   check(String(rev) !== String(Number(manifest.version)), "overlayRev is not package semver")
 
   const OA = loadPragmaLibrary("qml/OverlayAttach.js")
