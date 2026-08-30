@@ -1,4 +1,4 @@
-# Convenience for `hyprpm add` / `make` at the clone root.
+# Convenience for `make` at the clone root.
 # The compositor plugin lives in hypr/.
 
 .PHONY: all test test-logic test-full clean clangd

@@ -74,8 +74,8 @@ always out of scope; see above.
 
 ## Practicalities
 
-- Development setup, tasks, and architecture: [DEVELOPMENT.md](DEVELOPMENT.md).
-  Hyprland C++ iteration: [hypr/DEVELOPMENT.md](hypr/DEVELOPMENT.md).
+- Development setup, tasks, and architecture: [DEVELOPMENT.md](DEVELOPMENT.md),
+  including the Hyprland C++ iteration loop.
 - Run `mise run check` (bake + lint + compositor-free tests) before
   submitting. `mise run hypr-test` covers the C++ logic without a
   compositor.

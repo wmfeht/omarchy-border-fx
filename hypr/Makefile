@@ -1,10 +1,9 @@
 # Build against the Hyprland that pkg-config finds (Omarchy: /usr).
-# hyprpm.toml runs `make all` with PKG_CONFIG_PATH pointing at hyprpm's headers.
 # --no-gnu-unique is required so the plugin can actually unload.
 
 PLUGIN := hypr-shiny-border
 
-# In-tree for hyprpm / nest. Omarchy enable sets BUILD_DIR to
+# In-tree for the nest. Omarchy enable sets BUILD_DIR to
 # XDG_CACHE_HOME so obj/ and the .so do not land in the plugin checkout
 # (omarchy-shell rescans that folder on any save).
 BUILD_DIR ?= .
