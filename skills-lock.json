@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "avoid-ai-writing": {
+      "source": "conorbronsdon/avoid-ai-writing",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "8d6caaf6280716e126fb610aa24deef2fd15c0c08a9fd46c86959cee334f39e7"
+    }
+  }
+}

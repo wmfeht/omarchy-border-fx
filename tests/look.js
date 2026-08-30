@@ -911,8 +911,6 @@ function checkLookApplyEval() {
       "eval payload is not dofile([=[LUA_FILE]=]) concat: " + payload
     )
     check(payload.indexOf(luaFile) !== -1, "eval payload still names the lua file: " + payload)
-    console.log("look-apply-eval log:\n" + log)
-    console.log("look-apply-eval payload: " + payload)
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }

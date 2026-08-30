@@ -586,10 +586,6 @@ function checkSharedShaderBake() {
     timeout: 60000,
   })
   check(baked.status === 0, "bake exits 0: " + (baked.stderr || baked.stdout || ""))
-  if ((baked.stdout || "").trim())
-    console.log(String(baked.stdout).trim())
-  if ((baked.stderr || "").trim())
-    console.log(String(baked.stderr).trim())
   check((baked.stdout || "").indexOf("baked ") !== -1, "bake reports qsb output")
   check((baked.stdout || "").indexOf("inlined ") !== -1, "bake reports shaders.hpp output")
   check(fs.existsSync(qsbPath) && fs.statSync(qsbPath).size > 0, "bake wrote shaders/shiny.frag.qsb")
@@ -698,24 +694,6 @@ function checkShimmerParity() {
       }
     }
     check(mismatches === 0, "js Shimmer.step and cpp shinyShimmerStep agree (" + n + " steps, " + mismatches + " mismatches)")
-    const lastJs = n ? jsRows[n - 1] : { angle: NaN, scale: NaN }
-    const lastCpp = n ? cppRows[n - 1] : { angle: NaN, scale: NaN }
-    console.log(
-      "shimmer parity: seed=" +
-        seed +
-        " steps=" +
-        n +
-        " mismatches=" +
-        mismatches +
-        " last js=" +
-        lastJs.angle +
-        "," +
-        lastJs.scale +
-        " last cpp=" +
-        lastCpp.angle +
-        "," +
-        lastCpp.scale
-    )
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }
@@ -1352,8 +1330,6 @@ function checkPluginRoot() {
 
   const injected = run("file:///tmp/has%20space/plugin/", { __sourceDir: "/injected/source/" })
   check(injected === "/injected/source", "manifest.__sourceDir wins over file:// fallback: " + injected)
-
-  console.log("pluginroot spaced=" + spaced + " localhost=" + localHost + " three=" + three + " injected=" + injected)
 }
 
 checkSharedShaderBake()

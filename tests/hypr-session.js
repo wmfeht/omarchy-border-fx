@@ -617,7 +617,6 @@ function statusLines(stdout) {
 
 function note(bucket, msg) {
   evidenceChunks[bucket].push(msg)
-  console.log(msg)
 }
 
 function checkTeardownPersist() {
@@ -1575,9 +1574,6 @@ function checkEnsureHyprlandLua() {
         " border-fx=" +
         /pcall\(require, "hypr\.border-fx"\)/.test(rewritten)
     )
-    console.log("ensure-hyprland-lua stdout:\n" + (r.stdout || ""))
-    console.log("ensure-hyprland-lua stderr:\n" + (r.stderr || ""))
-    console.log("ensure-hyprland-lua rewritten:\n" + rewritten)
   } finally {
     stopHarness(h)
   }
@@ -1690,8 +1686,6 @@ function checkPluginctlRuntime() {
     }
     check(fs.existsSync(dest) && fs.readFileSync(dest, "utf8") === "DUMMY-SO", "pluginctl copied the .so to dest")
     note("ensure", "pluginctl dest=" + dest + " lastso=" + (lastso ? lastso.path : "") + " mode=" + (runtimeSt.mode & 0o777).toString(8))
-    console.log("pluginctl-runtime log:\n" + log)
-    console.log("pluginctl dest=" + dest)
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }
