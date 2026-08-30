@@ -4,6 +4,7 @@
   "name": "Border FX",
   "version": "0.1.0",
   "author": "wmfeht",
+  "license": "MIT",
   "description": "Animated border effects for Omarchy. A ring of light around windows, panels, and notification toasts, rendered as a directional comet or traveling ripples and styled from a single config.",
   "kinds": [
     "service"

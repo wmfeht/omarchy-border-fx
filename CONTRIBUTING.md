@@ -35,8 +35,7 @@ than one that adds them.
 - Tests, and simplifications that keep behavior while shedding code.
 - Removing or consolidating options whose effect can be expressed with the
   remaining ones.
-- Install/teardown reliability (the unfinished parts; see the status note
-  in the [README](README.md)).
+- Install/teardown reliability, including leftovers after remove.
 
 ## Contributions that likely won't fit
 
