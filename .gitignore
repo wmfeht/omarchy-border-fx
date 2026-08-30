@@ -1,3 +1,6 @@
+# Local agent skills; not part of the published plugin
+.agents/
+
 # mise local overrides
 mise.local.toml
 .mise.local.toml

@@ -7,10 +7,10 @@ draws a rounded-rect ring around Hyprland windows and Omarchy shell chrome
 light. One configuration drives both surfaces: change the look once in
 `shell.json` and windows and chrome update together.
 
-> **Status: unfinished.** This project works but is still under active
-> development. Configuration keys and defaults may change between updates,
-> some cleanup steps are manual (see [Remove](#remove)), and rough edges
-> remain. Treat every option below as provisional.
+> 0.1.0. Look keys and defaults may still change. After a Hyprland upgrade,
+> re-enable so the window ring rebuilds against the new compositor. If you
+> remove the plugin while the shell is down, leftover files stay; see
+> [Remove](#remove).
 
 ## Install
 
@@ -24,6 +24,16 @@ shell chrome and builds and loads the Hyprland window ring. Everything
 runs at the user level; no sudo required. The baked shaders ship in the
 repo, so the chrome effect needs no build tools; the window ring compiles
 on your machine against the installed Hyprland headers.
+
+Enable also writes `~/.config/hypr/border-fx.lua` and, if it isn't already
+there, appends this to `~/.config/hypr/hyprland.lua`:
+
+```lua
+-- wmfeht.border-fx (Omarchy plugin control plane; pcall if the file is missing)
+pcall(require, "hypr.border-fx")
+```
+
+The require is added once. `pcall` means a missing lua file is a no-op.
 
 Manage the plugin with:
 
@@ -78,7 +88,8 @@ The plugin is on if and only if that entry is present.
 `omarchy plugin enable` and `disable` manage it.
 
 `~/.config/hypr/border-fx.lua` is generated output, not an input. Don't
-edit it.
+edit it. The `pcall(require, "hypr.border-fx")` line in `hyprland.lua` is
+how Hyprland loads that file.
 
 ## Choose an effect
 
@@ -371,7 +382,8 @@ wins; pulse stays off until shimmer is disabled or its Hz is `≤ 0`.
 omarchy plugin remove wmfeht.border-fx --yes
 ```
 
-If the shell was not running during the remove, one manual step remains:
+If the shell was not running during the remove, the Hyprland copy can stay.
+Purge it:
 
 ```sh
 ~/.config/omarchy/plugins/wmfeht.border-fx/scripts/hypr-teardown.sh --purge
@@ -379,8 +391,13 @@ If the shell was not running during the remove, one manual step remains:
 bash scripts/hypr-teardown.sh --purge
 ```
 
-That deletes the installed Hyprland plugin and
-`~/.config/hypr/border-fx.lua`.
+`--purge` deletes the session plugin
+(`~/.local/lib/hypr/hypr-shiny-border.so`) and
+`~/.config/hypr/border-fx.lua`. It does not delete the
+`pcall(require, "hypr.border-fx")` line from `hyprland.lua`. That leftover
+is harmless: `pcall` does nothing once the file is gone. Remove the
+comment and the require yourself if you want `hyprland.lua` back to how it
+was.
 
 ## Development
 
