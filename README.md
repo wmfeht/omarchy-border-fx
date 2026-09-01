@@ -22,8 +22,9 @@ omarchy plugin add https://github.com/wmfeht/omarchy-border-fx.git --enable --ye
 the plugin is enabled. `--enable` starts the service, which overlays the
 shell chrome and builds and loads the Hyprland window ring. Everything
 runs at the user level; no sudo required. The baked shaders ship in the
-repo, so the chrome effect needs no build tools; the window ring compiles
-on your machine against the installed Hyprland headers.
+repo, so the chrome effect needs no build tools; the window ring and its
+small controller (`border-fx`, written in Rust) compile on your machine
+on first enable, into `~/.cache/omarchy-border-fx`.
 
 Enable also writes `~/.config/hypr/border-fx.lua` and, if it isn't already
 there, appends this to `~/.config/hypr/hyprland.lua`:
@@ -46,16 +47,21 @@ omarchy plugin update wmfeht.border-fx --yes
 ### If the window ring fails to build
 
 The window ring compiles on your machine, against the running compositor.
-The build needs three packages, all in the Arch repos:
+The build needs four packages, all in the Arch repos:
 
 - `gcc`: the C++ compiler, same toolchain that builds Hyprland itself
 - `pkgconf`: provides `pkg-config`, which locates the headers and libraries
 - `hyprland`: ships its headers in `/usr/include/hyprland` and pulls in
   every library the plugin links against
+- `rust`: `cargo` builds the plugin's controller (the part that reads your
+  `shell.json` look and drives Hyprland). `rustup` works too.
 
 ```sh
-sudo pacman -S --needed gcc pkgconf hyprland
+sudo pacman -S --needed gcc pkgconf hyprland rust
 ```
+
+Without `cargo` you get a notification and the chrome effect only; enable
+the plugin again after installing it.
 
 The headers must match the running compositor. After a Hyprland upgrade,
 re-enable the plugin or run `omarchy restart shell`: the build check
@@ -386,9 +392,9 @@ If the shell was not running during the remove, the Hyprland copy can stay.
 Purge it:
 
 ```sh
-~/.config/omarchy/plugins/wmfeht.border-fx/scripts/hypr-teardown.sh --purge
+~/.config/omarchy/plugins/wmfeht.border-fx/scripts/border-fx teardown --purge
 # or, from a checkout of this repo:
-bash scripts/hypr-teardown.sh --purge
+bash scripts/border-fx teardown --purge
 ```
 
 `--purge` deletes the session plugin

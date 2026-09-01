@@ -5,6 +5,11 @@
 // (`shiny` or `ripple`). Missing look keys mean DEFAULTS below (pinned 120°,
 // shimmer, 2-stop light glint, wrap stroke). PLUGIN_INIT registers the same
 // numbers so first paint matches chrome.
+//
+// The Rust control plane (cli/src/look/) is the authoritative resolver; the
+// chrome first-paints from this file, then adopts the CLI's LOOK= line.
+// tests/look.js checks both resolve identically. Keep DEFAULTS, the clamp
+// tables, and coerceKey in step with cli/src/look/schema.rs and mod.rs.
 
 var PLUGIN_ID = "wmfeht.border-fx"
 var LEGACY_PLUGIN_ID = "qs.border-fx"
@@ -98,7 +103,7 @@ function pickLookFields(src) {
 }
 
 // Hyprland CIntValue / CFloatValue ranges. Applied in merge so chrome and
-// look-apply emit the same numbers. borderSize < 0 is illegal in the look
+// border-fx apply emit the same numbers. borderSize < 0 is illegal in the look
 // document (keep default) — not a chrome-hide / follow-stock sentinel.
 var BOOL_KEYS = {
   shimmer: true,

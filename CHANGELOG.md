@@ -4,6 +4,34 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 uses [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Changed
+
+- The control plane is now a Rust CLI (`border-fx`, in `cli/`) instead of
+  bash + inline Python. It resolves the `shell.json` look (defaults,
+  per-effect overlay, coercion, clamps), writes `border-fx.lua`, and
+  builds / loads / unloads the Hyprland plugin. `Service.qml` adopts the
+  resolved look the CLI prints, so windows and chrome render the same
+  numbers from one implementation.
+- The CLI is built on first enable by `scripts/border-fx`, a small
+  launcher that compiles into `~/.cache/omarchy-border-fx` and reuses the
+  binary until `cli/` changes. `cargo` (the `rust` package) is now needed
+  for the window ring; the chrome effect still works without it.
+- Removal: `scripts/border-fx teardown --purge` replaces
+  `scripts/hypr-teardown.sh --purge`.
+- Developer tasks (`mise run install|uninstall|reinstall`) go through the
+  CLI (`border-fx dev …`); `jq` and `python3` are no longer required.
+
+### Added
+
+- `border-fx look`, `status`, `theme`, and `shell-look` subcommands for
+  inspecting the resolved look, the compositor/ABI state, the current
+  Omarchy theme, and the saved `shell.json` entry.
+- Rust unit tests for the look schema, ensure / teardown flows, ABI
+  freshness, and `shell.json` handling; the JS suites drive the built CLI
+  and check Rust and `qml/Look.js` resolve identically.
+
 ## [0.1.0] - 2026-08-30
 
 Initial release.

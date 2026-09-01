@@ -1,6 +1,8 @@
 // omarchy-shell service: put ShinyBorder on every showing panel card and
-// notification toast, load the Hyprland window ring, and fan the shared look
-// out to both. This is the control plane; Omarchy itself has no install hooks.
+// notification toast, and drive the control plane (scripts/border-fx, the
+// Rust CLI in cli/) that resolves the shared look, loads the Hyprland window
+// ring, and fans the look out to both. Omarchy itself has no install hooks,
+// so the launcher builds the CLI on first use.
 //
 // Hosts:
 //   KeyboardPanel / PopupCard — bar popouts (audio, clock, network, …)
@@ -41,7 +43,14 @@ Item {
   // shell.json plugins[] entry is the shared look. Services are not injected
   // a settings object — read it off shell.shellConfig ourselves.
   property var shellConfig: root.shell ? root.shell.shellConfig : null
-  readonly property var look: Look.merge(Look.entryFromConfig(root.shellConfig, Look.PLUGIN_ID))
+  readonly property var entry: Look.entryFromConfig(root.shellConfig, Look.PLUGIN_ID)
+  // String form so a re-read of an unchanged shell.json does not retrigger
+  // the fan-out (var properties signal on every assignment).
+  readonly property string entryJson: root.entryToJson(root.entry)
+  // Resolved by the control plane (scripts/border-fx). Authoritative once it
+  // arrives; Look.merge is the first-paint fallback and the no-toolchain path.
+  property var resolvedLook: null
+  readonly property var look: root.resolvedLook ? root.resolvedLook : Look.merge(root.entry)
 
   property bool lookApplyPending: false
   property bool hyprReady: false
@@ -242,16 +251,25 @@ Item {
     return u.replace(/\/$/, "")
   }
 
-  function scriptPath(name) {
-    return pluginRoot() + "/scripts/" + name
+  // Build-once launcher for the Rust control plane (cli/). Compiles into
+  // $XDG_CACHE_HOME on first use, then execs the cached binary.
+  function launcher() {
+    return pluginRoot() + "/scripts/border-fx"
   }
 
-  function lookJson() {
+  function entryToJson(entry) {
     try {
-      return JSON.stringify(root.look)
+      var s = JSON.stringify(entry)
+      return typeof s === "string" ? s : "{}"
     } catch (e) {
       return "{}"
     }
+  }
+
+  function adoptLook(text) {
+    var resolved = EnsureStatus.parseLook(text)
+    if (resolved)
+      root.resolvedLook = resolved
   }
 
   function effectIsShiny() {
@@ -261,7 +279,7 @@ Item {
   function runHyprEnsure() {
     if (ensureProc.running)
       return
-    ensureProc.command = ["bash", scriptPath("hypr-ensure.sh"), "--look-json", lookJson()]
+    ensureProc.command = ["bash", launcher(), "ensure", "--look-json", root.entryJson]
     ensureProc.running = true
   }
 
@@ -270,13 +288,13 @@ Item {
       root.lookApplyPending = true
       return
     }
-    lookApplyProc.command = ["bash", scriptPath("look-apply.sh"), "--eval", "--look-json", lookJson()]
+    lookApplyProc.command = ["bash", launcher(), "apply", "--eval", "--look-json", root.entryJson]
     lookApplyProc.running = true
   }
 
   function runHyprTeardown() {
     // Detached: this service is being destroyed, so a child Process would die.
-    Quickshell.execDetached(["bash", scriptPath("hypr-teardown.sh")])
+    Quickshell.execDetached(["bash", launcher(), "teardown"])
   }
 
   function watchEntry(host) {
@@ -546,22 +564,30 @@ Item {
       id: ensureOut
       waitForEnd: true
       onStreamFinished: {
+        root.adoptLook(ensureOut.text)
         if (EnsureStatus.isEnsureSuccessStatus(ensureOut.text))
           root.hyprReady = true
       }
     }
     onExited: function(exitCode) {
+      root.adoptLook(ensureOut.text)
       if (EnsureStatus.isEnsureSuccessStatus(ensureOut.text))
         root.hyprReady = true
       if (exitCode !== 0)
-        console.warn(root.tag + ": hypr-ensure exited " + exitCode)
+        console.warn(root.tag + ": border-fx ensure exited " + exitCode)
       Qt.callLater(root.runLookApply)
     }
   }
 
   Process {
     id: lookApplyProc
+    stdout: StdioCollector {
+      id: lookApplyOut
+      waitForEnd: true
+      onStreamFinished: root.adoptLook(lookApplyOut.text)
+    }
     onExited: function() {
+      root.adoptLook(lookApplyOut.text)
       if (root.lookApplyPending) {
         root.lookApplyPending = false
         root.runLookApply()
@@ -619,10 +645,15 @@ Item {
   }
 
   onShellChanged: Qt.callLater(root.syncAll)
-  onLookChanged: {
+  // Debounce the fan-out on the *entry* (what the user edited), not on the
+  // resolved look: adopting the CLI's LOOK= must not schedule another apply.
+  // Before the ring is ready (still building, build/load failed) nothing will
+  // re-resolve, so drop the stale resolved look and let Look.merge track edits.
+  onEntryJsonChanged: {
     if (root.hyprReady) lookApplyTimer.restart()
-    Qt.callLater(root.syncAll)
+    else root.resolvedLook = null
   }
+  onLookChanged: Qt.callLater(root.syncAll)
 
   Component.onCompleted: {
     Qt.callLater(root.syncAll)

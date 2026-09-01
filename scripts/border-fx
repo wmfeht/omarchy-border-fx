@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Build-once launcher for the Rust control plane (cli/). Omarchy has no
+# install hooks, so the first call after `omarchy plugin add` compiles the
+# CLI into $XDG_CACHE_HOME/omarchy-border-fx (never into the plugin folder;
+# omarchy-shell rescans that folder on any save) and every later call execs
+# the cached binary. Rebuilds when cli/ changes. No sudo.
+#
+#   scripts/border-fx <subcommand> [args]   # build if needed, then run
+#   scripts/border-fx --bootstrap           # build if needed, print the binary path
+#
+# BORDER_FX_BIN=/path/to/border-fx skips the build (dev / tests).
+set -euo pipefail
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+export BORDER_FX_ROOT="$root"
+
+if [[ -n ${BORDER_FX_BIN:-} ]]; then
+  [[ ${1:-} == --bootstrap ]] && { printf '%s\n' "$BORDER_FX_BIN"; exit 0; }
+  exec "$BORDER_FX_BIN" "$@"
+fi
+
+build_dir="${BUILD_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/omarchy-border-fx}"
+bin_dir="$build_dir/bin"
+bin="$bin_dir/border-fx"
+stamp="$bin_dir/border-fx.source-id"
+
+source_id() {
+  # Content hash of cli/ (sources + lockfile), independent of mtimes.
+  {
+    find "$root/cli" -path '*/target' -prune -o -type f -print0 | sort -z | xargs -0 sha256sum
+  } | sha256sum | cut -d' ' -f1
+}
+
+find_cargo() {
+  local c
+  for c in "${CARGO:-}" "$(command -v cargo 2>/dev/null || true)" \
+           "${CARGO_HOME:-$HOME/.cargo}/bin/cargo" /usr/bin/cargo /usr/local/bin/cargo; do
+    [[ -n $c && -x $c ]] && { printf '%s' "$c"; return 0; }
+  done
+  return 1
+}
+
+notify() {
+  local msg="$1"
+  echo "border-fx: $msg" >&2
+  if command -v omarchy-notification-send >/dev/null 2>&1; then
+    omarchy-notification-send --app-name wmfeht.border-fx -u normal "Border FX" "$msg" >/dev/null 2>&1 || true
+  elif command -v notify-send >/dev/null 2>&1; then
+    notify-send -a wmfeht.border-fx "Border FX" "$msg" >/dev/null 2>&1 || true
+  fi
+}
+
+# Serialize concurrent callers (ensure + detached teardown) on one build.
+mkdir -p "$bin_dir"
+exec {lock_fd}>"$bin_dir/.build.lock"
+flock "$lock_fd"
+
+want=$(source_id)
+have=""
+[[ -f $stamp ]] && have=$(cat "$stamp" 2>/dev/null || true)
+
+if [[ ! -x $bin || $have != "$want" ]]; then
+  if ! cargo=$(find_cargo); then
+    notify "Window borders need the Rust toolchain to build their controller (sudo pacman -S rust). Panel and notification effects still work."
+    echo "STATUS=no-cli"
+    exit 0
+  fi
+  echo "border-fx: building the control plane (first run after install or an update)" >&2
+  if ! "$cargo" build --release --locked --quiet \
+        --manifest-path "$root/cli/Cargo.toml" \
+        --target-dir "$build_dir/cargo-target" >&2; then
+    notify "Window borders' controller failed to build. Panel and notification effects still work. See the shell log for the cargo error."
+    echo "STATUS=no-cli"
+    exit 0
+  fi
+  tmp=$(mktemp "$bin_dir/border-fx.XXXXXX")
+  cp -f "$build_dir/cargo-target/release/border-fx" "$tmp"
+  chmod 755 "$tmp"
+  mv -f "$tmp" "$bin"
+  printf '%s\n' "$want" > "$stamp"
+fi
+
+flock -u "$lock_fd"
+
+if [[ ${1:-} == --bootstrap ]]; then
+  printf '%s\n' "$bin"
+  exit 0
+fi
+
+exec "$bin" "$@"

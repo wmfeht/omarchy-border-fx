@@ -34,6 +34,9 @@ Thumbs.db
 /hypr/tests/test_visual
 /hypr/tests/dump_shimmer
 
+# Rust control plane build output (the launcher builds into $XDG_CACHE_HOME)
+/cli/target/
+
 # clangd / ccache
 .clangd/
 .cccaches/

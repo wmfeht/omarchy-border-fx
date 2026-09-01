@@ -15,26 +15,88 @@ both.
 
 This tree is what `omarchy plugin add <url>` clones. The Hyprland `.so` is
 a compositor plugin, not a Quickshell plugin; Omarchy never compiles it.
-After enable, `Service.qml` runs `scripts/hypr-ensure.sh` (user-level, no
+After enable, `Service.qml` runs `scripts/border-fx ensure` (user-level, no
 sudo) to build/load `~/.local/lib/hypr/hypr-shiny-border.so`.
 
 | Name | Role |
 |---|---|
 | Omarchy id `wmfeht.border-fx` | Source of truth in `shell.json`; `omarchy plugin enable` |
 | `effect` (`shiny` / `ripple`) | Which renderer to drive |
+| `border-fx` (Rust, `cli/`) | Control plane: resolve the look, fan out, build/load/unload the `.so` |
+| `scripts/border-fx` | Build-once launcher for the CLI (Omarchy has no install hooks) |
 | Hyprland plugin `hypr-shiny-border` | Shiny window adapter (`hyprctl plugin list`, `PLUGIN_INIT`) |
 | Config keys `plugin:shiny-border:*` / Lua `shiny_border` | Shiny Hyprland adapter (hyphen → underscore) |
+
+### Control plane
+
+`cli/` is a single Rust crate, binary `border-fx`. It owns everything that
+used to be bash: paths and ids, the look schema (defaults, per-effect
+overlay, coercion, clamps, colors), the `border-fx.lua` emitter, the
+session `.so` lifecycle (mapped-inode detection, rename-install, flock +
+generation counter, ABI identity stamp), the `hyprland.lua` require, the
+`shell.json` look snapshot, and the dev install cycle.
+
+```
+border-fx ensure     [--look-json J]           # after enable: build/load + apply; STATUS= + LOOK=
+border-fx apply      [--eval] [--disabled] [--no-load] [--stdout] [--lua P] [--look-json J]
+border-fx look       [--look-json J] [--pretty] # the resolved look as JSON
+border-fx teardown   [--purge]                  # on disable / remove
+border-fx status                                # diagnostics
+border-fx theme                                 # current Omarchy theme (name, colors.toml)
+border-fx shell-look snapshot | restore <json>
+border-fx dev install | uninstall | reinstall
+```
+
+Every path is overridable through the same environment variables the bash
+scripts honored (`SESSION_SO`, `LUA_FILE`, `BUILD_DIR`, `HYPR_SRC`,
+`HYPRLAND_LUA`, `HYPR_ABI_*`, `XDG_*`, `OMARCHY_SHELL_JSON`, …), plus
+`BORDER_FX_ROOT` for the clone root. `--look-json` / `LOOK_JSON` take the
+raw `plugins[]` entry; without either, `ensure` / `apply` / `look` read the
+entry out of `~/.config/omarchy/shell.json`.
+
+Module map (`cli/src/`): `look/` (schema, resolve, colors), `lua.rs`,
+`json.rs` (lenient input), `paths.rs`, `hyprctl.rs` (trait + real impl +
+test fake), `session.rs`, `abi.rs`, `hyprland_lua.rs`, `ensure.rs`,
+`apply.rs`, `teardown.rs`, `shell_json.rs`, `devcopy.rs`, `theme.rs`,
+`timing.rs` (every wait/poll constant), `ctx.rs` (injected side effects:
+hyprctl, notifier, `make`).
+
+**Build at install.** Omarchy has no install hooks, so `scripts/border-fx`
+is a ~100-line bash launcher: it hashes `cli/`, runs
+`cargo build --release --locked` into `$XDG_CACHE_HOME/omarchy-border-fx`
+when the hash changed (never into the plugin folder, which omarchy-shell
+rescans), and `exec`s the cached binary. Concurrent callers serialize on a
+flock. Without a Rust toolchain it prints `STATUS=no-cli` and notifies; the
+chrome keeps drawing from `qml/Look.js`. `mise run install` goes through
+the launcher, so the dev copy is pre-built. `BORDER_FX_BIN=…` skips the
+build (tests, `cargo run`).
+
+**Theme following (next).** `look::Base` is the layer under the user's
+keys: `Base::shared()` is the documented defaults; `Base::with(map)` swaps
+in per-key overrides that user keys still win over. A theme preset is such
+a map, chosen from `theme::current()` (reads
+`~/.local/state/omarchy/current/theme.name` and the theme's `colors.toml`).
+The chrome does not need its own copy: it adopts the resolved look from the
+CLI's `LOOK=` line.
 
 ### Config fan-out
 
 The `wmfeht.border-fx` entry in `shell.json` `plugins[]` is the only input.
 On save:
 
-- **Chrome** hot-reloads from the same process (`Service.qml` bindings).
-- **Windows** debounce ~150 ms, then `look-apply.sh` writes
-  `~/.config/hypr/border-fx.lua` and `hyprctl eval`s it if
-  `hypr-shiny-border` is loaded. If the `.so` is not loaded, the lua is
-  still written and eval is skipped until the next ensure.
+- **Chrome** first paints from `qml/Look.js` (same defaults/merge as the
+  CLI; `tests/look.js` checks the two agree byte for byte), then adopts the
+  `LOOK=` the CLI printed.
+- **Windows** debounce ~150 ms on the entry (`Service.qml` `entryJson`),
+  then `border-fx apply --eval` writes `~/.config/hypr/border-fx.lua` and
+  `hyprctl eval`s it if `hypr-shiny-border` is loaded. If the `.so` is not
+  loaded, the lua is still written and eval is skipped until the next
+  ensure.
+
+stdout protocol of `ensure` / `apply`: `KEY=value` lines. `LOOK=` is the
+resolved look as compact JSON; `STATUS=` is `ok|reuse|hyprpm` (ring ready),
+`load-failed|build-failed|skipped|no-hyprctl` (fail closed), `no-cli` (the
+launcher had no toolchain), or `applied|written` for `apply`.
 
 A generated `~/.config/hypr/border-fx.lua` is an **output**, not an input.
 `omarchy refresh hyprland` can drop the one-line
@@ -65,7 +127,7 @@ is off or its Hz is `≤ 0`.
 
 ```
 manifest.json                 # Omarchy id wmfeht.border-fx (clone root)
-Service.qml                   # chrome overlay + hypr-ensure + look fan-out
+Service.qml                   # chrome overlay + border-fx ensure/apply/teardown
 preview.qml                   # standalone qs entry point (preview / smoke)
 qml/                          # ShinyBorder + Shimmer/Gradient/Ripple/Coverage/Look helpers
 shaders/                      # Qt + GLES hosts, shared *-lighting.frag + coverage.frag, committed .qsb
@@ -73,23 +135,21 @@ hypr/                         # compositor plugin (src, Makefile, nest, tests)
 mise.toml                     # all dev tasks
 Makefile                      # clone-root convenience, forwards to hypr/
 harness/                      # DemoCard.qml mock cards for preview / smoke
-scripts/
+dev/
   bake.sh                     # .frag → .qsb + inline GLES into hypr/src/shaders.hpp
-  paths.sh                    # shared ids/paths, sourced by the other scripts
-  hypr-ensure.sh              # build/install/load ~/.local/lib/hypr/… (no sudo)
-  hypr-session.sh             # mapped-.so helpers; install via rename, not cp -f
-  hypr-teardown.sh            # unload session copy; --purge deletes it
-  look-apply.sh               # JSON look → border-fx.lua + hyprctl eval
-  shell-look.sh               # snapshot/restore the shell.json look across reinstall
   preview.sh                  # launch preview.qml under qs
-  install.sh / uninstall.sh   # dev copy helpers
-  reinstall.sh                # purge, restart shell, add --enable; keeps shell.json look
+scripts/
+  border-fx                   # build-once launcher for cli/ (what Service.qml execs)
+cli/                          # Rust control plane: border-fx binary + unit tests
+  Cargo.toml, Cargo.lock      # --locked builds; keep the lockfile committed
+  src/                        # see "Control plane" above
 tests/                        # compositor-free JS tests (run in CI)
+  cli.js                      # locates/builds the debug border-fx for the suites
 ```
 
 No symlinks inside the plugin folder (`omarchy plugin validate` refuses
-them). Build artifacts are gitignored; user builds write to
-`$XDG_CACHE_HOME/omarchy-border-fx`, not the checkout.
+them). Build artifacts are gitignored; user builds (the `.so` and the CLI)
+write to `$XDG_CACHE_HOME/omarchy-border-fx`, not the checkout.
 
 ## Dev copy
 
@@ -107,9 +167,13 @@ mise run reinstall   # purge the live .so, restart shell, add this folder; keeps
 ```sh
 mise run bake        # shaders/*.frag → .qsb + inline GLES into hypr/src/shaders.hpp
 mise run reflect     # bake, then dump qsb reflection (UBO layout)
-mise run test        # shimmer + gradient + look adapter + session install (no compositor)
-mise run lint        # qmllint ShinyBorder.qml
+mise run cli-build   # debug build of cli/ (border-fx)
+mise run cli-test    # Rust unit tests: look schema, ensure/teardown flows, ABI, shell.json
+mise run cli-lint    # rustfmt --check + clippy -D warnings
+mise run test        # cli-test, then shimmer + gradient + look adapter + session tests (no compositor)
+mise run lint        # qmllint ShinyBorder.qml + cli-lint
 mise run check       # bake + lint + test
+mise run status      # border-fx status: paths, compositor state, ABI identity, theme
 mise run preview     # standalone qs window; does not touch omarchy-shell
 mise run smoke       # short-lived preview; fails only if the shader errors
 mise run test-full   # check + Hyprland logic tests
@@ -126,8 +190,9 @@ mise run reload      # rebuild + load into the nest
 Dev-copy tasks (`install` / `uninstall` / `reinstall`) are listed in the
 previous section.
 
-CI (`.github/workflows/test.yml`) runs `mise run test`, the
-compositor-free JS suite.
+CI (`.github/workflows/test.yml`) runs `mise run test`: the Rust unit
+tests, then the compositor-free JS suites (which build the debug CLI and
+drive it against a stubbed `hyprctl` / `make`).
 
 ## Hyprland side
 
