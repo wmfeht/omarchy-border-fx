@@ -10,7 +10,6 @@
 pub mod abi;
 pub mod apply;
 pub mod ctx;
-pub mod devcopy;
 pub mod ensure;
 pub mod hyprctl;
 pub mod hyprland_lua;

@@ -46,12 +46,6 @@ pub fn make_plugin(p: &Paths) -> bool {
         .unwrap_or(false)
 }
 
-/// Run a program, returning stdout on success. `None` when it is missing or fails.
-pub fn capture(program: &str, args: &[&str]) -> Option<String> {
-    let out = Command::new(program).args(args).output().ok()?;
-    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
-}
-
 /// Run a program inheriting stdio; true on exit 0.
 pub fn run(program: &str, args: &[&str]) -> bool {
     Command::new(program).args(args).status().map(|s| s.success()).unwrap_or(false)

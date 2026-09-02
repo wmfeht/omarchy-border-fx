@@ -20,8 +20,11 @@ uses [Semantic Versioning](https://semver.org).
   for the window ring; the chrome effect still works without it.
 - Removal: `scripts/border-fx teardown --purge` replaces
   `scripts/hypr-teardown.sh --purge`.
-- Developer tasks (`mise run install|uninstall|reinstall`) go through the
-  CLI (`border-fx dev …`); `jq` and `python3` are no longer required.
+- Developer tasks (`mise run install|uninstall|reinstall`) are
+  `dev/plugin.sh`: `omarchy plugin remove` any current copy, then
+  `omarchy plugin add` this folder (pre-building the CLI before enable).
+  The Rust CLI is the end-user control plane (`ensure`, `apply`, `look`,
+  `teardown`, `status`, `theme`, `shell-look`).
 
 ### Added
 

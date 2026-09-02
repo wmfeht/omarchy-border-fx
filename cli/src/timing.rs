@@ -10,10 +10,6 @@ pub const UNLOAD_TIMEOUT: Duration = Duration::from_secs(8);
 /// Poll interval while waiting for the plugin to go away.
 pub const UNLOAD_POLL: Duration = Duration::from_millis(100);
 
-/// `omarchy plugin add` discovery poll (the shell rescans asynchronously).
-pub const DISCOVERY_POLL: Duration = Duration::from_millis(50);
-pub const DISCOVERY_ATTEMPTS: u32 = 40;
-
 /// Number of polls in `timeout`, at least one.
 pub fn poll_steps(timeout: Duration, poll: Duration) -> u32 {
     let steps = timeout.as_millis() / poll.as_millis().max(1);

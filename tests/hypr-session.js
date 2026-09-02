@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Compositor-free tests for the border-fx control plane: ensure / teardown
-// against a stubbed hyprctl + make, the launcher, the dev install copy, and
-// the shell.json look snapshot. Does not talk to a live Hyprland.
+// against a stubbed hyprctl + make, the launcher, the omarchy add/remove
+// cycle, and the shell.json look snapshot. Does not talk to a live Hyprland.
 
 const fs = require("fs")
 const os = require("os")
@@ -80,72 +80,53 @@ function checkControlPlaneShape() {
   const unloadAt = ensure.indexOf("if self.unload_session_so()")
   const copyAt = ensure.indexOf("self.copy_session_so(&p.build_so())")
   check(unloadAt !== -1 && copyAt !== -1 && unloadAt < copyAt, "ensure unloads and waits before replacing the session .so")
-  const dev = read("cli/src/devcopy.rs")
-  const restartAt = dev.indexOf('["restart", "shell"]', dev.indexOf("pub fn reinstall"))
-  const addAt = dev.indexOf('["plugin", "add"')
-  check(restartAt !== -1 && addAt !== -1 && restartAt < addAt, "reinstall restarts the shell before add --enable")
-  check(dev.indexOf('["restart", "shell"]', addAt) === -1, "reinstall does not restart the shell after add --enable")
-  check(dev.indexOf("aborting before add --enable") !== -1, "reinstall aborts rather than replacing a mapped .so")
-  check(dev.indexOf("impl Drop for ReinstallGuard") !== -1, "reinstall restores the look from cleanup if add --enable does not finish")
+  check(!fs.existsSync(path.join(root, "cli/src/devcopy.rs")), "dev cycle is not in the Rust CLI")
+  const main = read("cli/src/main.rs")
+  check(main.indexOf("DevCmd") === -1 && main.indexOf("Cmd::Dev") === -1, "border-fx has no `dev` subcommand")
+  const dev = read("dev/plugin.sh")
+  const stDev = fs.statSync(path.join(root, "dev/plugin.sh"))
+  check((stDev.mode & 0o111) !== 0, "dev/plugin.sh is executable")
+  const restartAt = dev.indexOf("omarchy restart shell ||")
+  const addAt = dev.indexOf('omarchy plugin add "$add_url" --yes')
+  const bootAt = dev.indexOf("\n  bootstrap\n")
+  const enableAt = dev.indexOf('omarchy plugin enable "$plugin_id"')
+  check(restartAt !== -1 && addAt !== -1 && restartAt < addAt, "restarts the shell before omarchy plugin add")
+  check(dev.indexOf("omarchy restart shell ||", addAt) === -1, "does not restart the shell after plugin add")
+  check(addAt !== -1 && bootAt !== -1 && enableAt !== -1 && addAt < bootAt && bootAt < enableAt,
+    "omarchy plugin add, then bootstrap the CLI, then enable")
+  check(!/omarchy plugin add[^\n]*--enable/.test(dev), "omarchy plugin add is not --enable (bootstrap first)")
+  check(dev.indexOf("aborting before add") !== -1, "aborts rather than replacing a mapped .so")
+  check(dev.indexOf("trap cleanup EXIT") !== -1, "restores the look from cleanup if add does not finish")
+  check(launcher.indexOf('cd "$root/cli"') !== -1, "launcher source-id hashes relative paths under cli/")
 }
 
-function checkInstallCopiesFrag() {
-  const dest = fs.mkdtempSync(path.join(os.tmpdir(), "border-fx-install-"))
+function checkInstallRequiresOmarchy() {
   const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "border-fx-install-bin-"))
+  const script = path.join(root, "dev/plugin.sh")
   try {
-    // omarchy lives in /usr/bin on this machine. A PATH of /usr/bin:/bin
-    // still sees it and would enable/restart the live shell. Expose only
-    // bash so this is a real install-copy, not plugin add, and no cargo so
-    // the bootstrap step is skipped.
-    for (const cmd of ["bash"]) {
-      const src = ["/usr/bin/" + cmd, "/bin/" + cmd].find((p) => fs.existsSync(p))
-      check(!!src, "install-copy PATH has " + cmd)
-      if (src)
-        fs.symlinkSync(src, path.join(binDir, cmd))
+    // omarchy lives in /usr/bin on this machine. A PATH of only bash means
+    // install cannot reach it and must refuse rather than file-copy.
+    const bash = ["/usr/bin/bash", "/bin/bash"].find((p) => fs.existsSync(p))
+    check(!!bash, "install PATH has bash")
+    if (bash)
+      fs.symlinkSync(bash, path.join(binDir, "bash"))
+    check(!fs.existsSync(path.join(binDir, "omarchy")), "install PATH cannot see omarchy")
+    const env = {
+      HOME: path.join(binDir, "no-home"),
+      PATH: binDir,
+      CARGO_HOME: path.join(binDir, "no-cargo-home"),
     }
-    check(!fs.existsSync(path.join(binDir, "omarchy")), "install-copy PATH cannot see omarchy")
-    const r = cli.run(["dev", "install"], {
-      env: Object.assign({}, process.env, {
-        OMARCHY_PLUGIN_DIR: dest,
-        BORDER_FX_ROOT: root,
-        PATH: binDir,
-        CARGO_HOME: path.join(binDir, "no-cargo-home"),
-        HOME: path.join(binDir, "no-home"),
-      }),
-    })
-    check(r.status === 0, "dev install exits 0 without omarchy: " + (r.stderr || r.stdout || ""))
-    check((r.stderr || "").indexOf("cargo not found") !== -1, "dev install skips the bootstrap without cargo")
-    const srcFrag = path.join(root, "shaders/shiny.frag")
-    const destFrag = path.join(dest, "shaders/shiny.frag")
-    const destQsb = path.join(dest, "shaders/shiny.frag.qsb")
-    check(fs.existsSync(destFrag), "install dest has shaders/shiny.frag")
-    check(fs.existsSync(destQsb), "install dest still has shaders/shiny.frag.qsb")
-    check(fs.existsSync(path.join(dest, "shaders/ripple.frag")), "install dest has shaders/ripple.frag")
-    check(fs.existsSync(path.join(dest, "shaders/ripple.frag.qsb")), "install dest has shaders/ripple.frag.qsb")
-    check(fs.existsSync(path.join(dest, "scripts/border-fx")), "install dest has the launcher")
-    check((fs.statSync(path.join(dest, "scripts/border-fx")).mode & 0o111) !== 0, "installed launcher is executable")
-    check(fs.existsSync(path.join(dest, "cli/Cargo.toml")) && fs.existsSync(path.join(dest, "cli/Cargo.lock")), "install dest has the CLI crate manifest + lockfile")
-    check(fs.existsSync(path.join(dest, "cli/src/main.rs")) && fs.existsSync(path.join(dest, "cli/src/look/mod.rs")), "install dest has the CLI sources")
-    check(fs.existsSync(path.join(dest, "hypr/Makefile")) && fs.existsSync(path.join(dest, "hypr/src/main.cpp")), "install dest has the Hyprland plugin sources")
-    check(fs.existsSync(path.join(dest, "qml/Look.js")) && fs.existsSync(path.join(dest, "Service.qml")), "install dest has the QML")
-    check(!fs.existsSync(path.join(dest, "cli/target")), "install dest has no cargo target dir")
-    check(!fs.existsSync(path.join(dest, "dev")), "install dest has no dev tooling")
-    if (fs.existsSync(destFrag) && fs.existsSync(srcFrag)) {
-      check(
-        Buffer.compare(fs.readFileSync(srcFrag), fs.readFileSync(destFrag)) === 0,
-        "install dest shiny.frag matches the source file"
-      )
-    }
-    const link = spawnSync("find", [dest, "-type", "l"], { encoding: "utf8" })
-    check((link.stdout || "").trim() === "", "install dest has no symlinks (omarchy plugin validate refuses them)")
+    const r = spawnSync(bash, [script, "install"], { encoding: "utf8", env })
+    check(r.status !== 0, "dev install exits non-zero without omarchy: " + (r.stderr || r.stdout || ""))
+    check((r.stderr || "").indexOf("missing omarchy") !== -1, "dev install reports missing omarchy")
 
-    const overSelf = cli.run(["dev", "install"], {
-      env: Object.assign({}, process.env, { OMARCHY_PLUGIN_DIR: root, BORDER_FX_ROOT: root, PATH: binDir }),
-    })
-    check(overSelf.status !== 0 && (overSelf.stderr || "").indexOf("refusing to install over the source tree") !== -1,
-      "dev install refuses to install over the source tree")
+    const re = spawnSync(bash, [script, "reinstall"], { encoding: "utf8", env })
+    check(re.status !== 0 && (re.stderr || "").indexOf("missing omarchy") !== -1,
+      "dev reinstall reports missing omarchy")
+
+    const unknown = cli.run(["dev", "install"])
+    check(unknown.status !== 0, "border-fx has no `dev` subcommand (exit " + unknown.status + ")")
   } finally {
-    fs.rmSync(dest, { recursive: true, force: true })
     fs.rmSync(binDir, { recursive: true, force: true })
   }
 }
@@ -1660,7 +1641,7 @@ function writeEvidence() {
 }
 
 checkControlPlaneShape()
-checkInstallCopiesFrag()
+checkInstallRequiresOmarchy()
 checkEnsureHyprlandLua()
 checkPluginctlRuntime()
 checkTeardownPersist()

@@ -1,8 +1,8 @@
 //! Snapshot / restore the plugin's `plugins[]` look in `shell.json`.
 //!
 //! `omarchy plugin disable` / `remove` splice the whole `plugins[]` entry (look
-//! keys included), and `enable` then writes `{ "id": ... }` only. Reinstall has
-//! to keep the look itself.
+//! keys included), and `enable` then writes `{ "id": ... }` only. `dev/plugin.sh`
+//! keeps the look itself via `shell-look snapshot` / `restore`.
 
 use std::fs;
 use std::path::Path;
@@ -69,14 +69,14 @@ pub fn restore_into(config: &mut Value, saved: &Value, ids: &[&str]) {
 pub fn restore(shell_json: &Path, saved: Option<&Value>, ids: &[&str]) -> Result<bool, String> {
     let Some(saved) = saved else { return Ok(false) };
     let Some(obj) = saved.as_object() else {
-        eprintln!("reinstall: look snapshot is not an object; skipping restore");
+        eprintln!("look snapshot is not an object; skipping restore");
         return Ok(false);
     };
     if obj.is_empty() {
         return Ok(false);
     }
     if !shell_json.is_file() {
-        eprintln!("reinstall: shell.json missing; not restoring look");
+        eprintln!("shell.json missing; not restoring look");
         return Ok(false);
     }
     let text = fs::read_to_string(shell_json).map_err(|e| e.to_string())?;

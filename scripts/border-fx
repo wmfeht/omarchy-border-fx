@@ -25,10 +25,12 @@ bin="$bin_dir/border-fx"
 stamp="$bin_dir/border-fx.source-id"
 
 source_id() {
-  # Content hash of cli/ (sources + lockfile), independent of mtimes.
-  {
-    find "$root/cli" -path '*/target' -prune -o -type f -print0 | sort -z | xargs -0 sha256sum
-  } | sha256sum | cut -d' ' -f1
+  # Content hash of cli/ (sources + lockfile). Relative paths so a source-tree
+  # build and the installed clone share a stamp.
+  (
+    cd "$root/cli" || exit 1
+    find . -path './target' -prune -o -type f -print0 | sort -z | xargs -0 sha256sum
+  ) | sha256sum | cut -d' ' -f1
 }
 
 find_cargo() {

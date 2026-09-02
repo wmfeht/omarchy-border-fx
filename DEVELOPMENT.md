@@ -29,12 +29,13 @@ sudo) to build/load `~/.local/lib/hypr/hypr-shiny-border.so`.
 
 ### Control plane
 
-`cli/` is a single Rust crate, binary `border-fx`. It owns everything that
-used to be bash: paths and ids, the look schema (defaults, per-effect
+`cli/` is a single Rust crate, binary `border-fx`. It owns the end-user
+control plane: paths and ids, the look schema (defaults, per-effect
 overlay, coercion, clamps, colors), the `border-fx.lua` emitter, the
 session `.so` lifecycle (mapped-inode detection, rename-install, flock +
-generation counter, ABI identity stamp), the `hyprland.lua` require, the
-`shell.json` look snapshot, and the dev install cycle.
+generation counter, ABI identity stamp), the `hyprland.lua` require, and
+the `shell.json` look snapshot. Checkout → Omarchy plugin install is
+`dev/plugin.sh`, not this binary.
 
 ```
 border-fx ensure     [--look-json J]           # after enable: build/load + apply; STATUS= + LOOK=
@@ -44,7 +45,6 @@ border-fx teardown   [--purge]                  # on disable / remove
 border-fx status                                # diagnostics
 border-fx theme                                 # current Omarchy theme (name, colors.toml)
 border-fx shell-look snapshot | restore <json>
-border-fx dev install | uninstall | reinstall
 ```
 
 Every path is overridable through the same environment variables the bash
@@ -57,7 +57,7 @@ entry out of `~/.config/omarchy/shell.json`.
 Module map (`cli/src/`): `look/` (schema, resolve, colors), `lua.rs`,
 `json.rs` (lenient input), `paths.rs`, `hyprctl.rs` (trait + real impl +
 test fake), `session.rs`, `abi.rs`, `hyprland_lua.rs`, `ensure.rs`,
-`apply.rs`, `teardown.rs`, `shell_json.rs`, `devcopy.rs`, `theme.rs`,
+`apply.rs`, `teardown.rs`, `shell_json.rs`, `theme.rs`,
 `timing.rs` (every wait/poll constant), `ctx.rs` (injected side effects:
 hyprctl, notifier, `make`).
 
@@ -67,9 +67,10 @@ is a ~100-line bash launcher: it hashes `cli/`, runs
 when the hash changed (never into the plugin folder, which omarchy-shell
 rescans), and `exec`s the cached binary. Concurrent callers serialize on a
 flock. Without a Rust toolchain it prints `STATUS=no-cli` and notifies; the
-chrome keeps drawing from `qml/Look.js`. `mise run install` goes through
-the launcher, so the dev copy is pre-built. `BORDER_FX_BIN=…` skips the
-build (tests, `cargo run`).
+chrome keeps drawing from `qml/Look.js`. `mise run install` / `reinstall`
+pre-build from the installed clone before enable, so omarchy-shell does
+not compile on first load. `BORDER_FX_BIN=…` skips the build (tests,
+`cargo run`).
 
 **Theme following (next).** `look::Base` is the layer under the user's
 keys: `Base::shared()` is the documented defaults; `Base::with(map)` swaps
@@ -138,6 +139,7 @@ harness/                      # DemoCard.qml mock cards for preview / smoke
 dev/
   bake.sh                     # .frag → .qsb + inline GLES into hypr/src/shaders.hpp
   preview.sh                  # launch preview.qml under qs
+  plugin.sh                   # omarchy plugin add/remove this folder (mise install)
 scripts/
   border-fx                   # build-once launcher for cli/ (what Service.qml execs)
 cli/                          # Rust control plane: border-fx binary + unit tests
@@ -151,15 +153,18 @@ No symlinks inside the plugin folder (`omarchy plugin validate` refuses
 them). Build artifacts are gitignored; user builds (the `.so` and the CLI)
 write to `$XDG_CACHE_HOME/omarchy-border-fx`, not the checkout.
 
-## Dev copy
+## Dev install
 
-A dev copy is a file copy into the Omarchy plugin directory, not
-git-managed and not updated by `omarchy plugin update`:
+`mise run install` and `mise run reinstall` both run `dev/plugin.sh`,
+which talks to Omarchy: `omarchy plugin remove` any current copy, then
+`omarchy plugin add` this folder. A dirty working tree is snapshotted
+first so the clone matches the folder, not HEAD. The `shell.json` look is
+kept across remove. The CLI is pre-built from the clone before enable.
 
 ```sh
-mise run install     # copy into ~/.config/omarchy/plugins/wmfeht.border-fx, enable, restart shell
-mise run uninstall   # disable, purge the login-session .so, remove the copy
-mise run reinstall   # purge the live .so, restart shell, add this folder; keeps shell.json look
+mise run install     # omarchy plugin remove (if present), add this folder, enable
+mise run uninstall   # disable, purge the login-session .so, omarchy plugin remove
+mise run reinstall   # same as install; keeps the shell.json look
 ```
 
 ## Tasks
@@ -187,7 +192,7 @@ mise run unload      # unload from $SHINY_INSTANCE
 mise run reload      # rebuild + load into the nest
 ```
 
-Dev-copy tasks (`install` / `uninstall` / `reinstall`) are listed in the
+Dev install tasks (`install` / `uninstall` / `reinstall`) are listed in the
 previous section.
 
 CI (`.github/workflows/test.yml`) runs `mise run test`: the Rust unit

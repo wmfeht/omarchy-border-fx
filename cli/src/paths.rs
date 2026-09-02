@@ -124,14 +124,9 @@ impl Paths {
         self.hypr_src.join(SESSION_SO_NAME)
     }
 
-    /// Where `omarchy plugin add` puts this plugin (never `OMARCHY_PLUGIN_DIR`).
+    /// Where `omarchy plugin add` puts this plugin.
     pub fn installed_dir(&self, id: &str) -> PathBuf {
         self.plugins_home.join(id)
-    }
-
-    /// Dev-copy destination: `OMARCHY_PLUGIN_DIR` or the installed dir.
-    pub fn dev_copy_dir(&self) -> PathBuf {
-        env_path("OMARCHY_PLUGIN_DIR").unwrap_or_else(|| self.installed_dir(&self.plugin_id))
     }
 }
 

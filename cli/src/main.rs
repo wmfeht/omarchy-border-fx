@@ -9,7 +9,7 @@ use border_fx::ctx::{self, Ctx};
 use border_fx::hyprctl::{self, Hyprctl};
 use border_fx::look::{self, Base};
 use border_fx::paths::Paths;
-use border_fx::{abi, devcopy, ensure, json as lookjson, protocol, session, shell_json, teardown, theme};
+use border_fx::{abi, ensure, json as lookjson, protocol, session, shell_json, teardown, theme};
 
 /// Control plane for the wmfeht.border-fx Omarchy plugin.
 ///
@@ -94,12 +94,6 @@ enum Cmd {
         #[command(subcommand)]
         cmd: ShellLookCmd,
     },
-
-    /// Developer install cycle (dev copy into the Omarchy plugin directory).
-    Dev {
-        #[command(subcommand)]
-        cmd: DevCmd,
-    },
 }
 
 #[derive(Subcommand)]
@@ -111,16 +105,6 @@ enum ShellLookCmd {
         /// Saved entry JSON; empty / null / {} is a no-op.
         json: String,
     },
-}
-
-#[derive(Subcommand)]
-enum DevCmd {
-    /// Copy this tree into ~/.config/omarchy/plugins/<id>, enable it, restart the shell.
-    Install,
-    /// Disable, purge the login-session .so, remove the copy.
-    Uninstall,
-    /// Remove, then omarchy plugin add this folder; keeps the shell.json look.
-    Reinstall,
 }
 
 fn load_entry(p: &Paths, args: &LookArgs, fallback_shell_json: bool) -> Result<Value, String> {
@@ -263,15 +247,6 @@ fn run(cmd: Cmd, mut paths: Paths) -> Result<ExitCode, String> {
                     let saved = shell_json::parse_snapshot(&json)?;
                     shell_json::restore(&paths.shell_json, saved.as_ref(), &ids)?;
                 }
-            }
-            Ok(ExitCode::SUCCESS)
-        }
-        Cmd::Dev { cmd } => {
-            let ctx = Ctx { paths: &paths, hc: &hc, notify: &notify, build: &build };
-            match cmd {
-                DevCmd::Install => devcopy::install(&paths)?,
-                DevCmd::Uninstall => devcopy::uninstall(&ctx)?,
-                DevCmd::Reinstall => devcopy::reinstall(&ctx)?,
             }
             Ok(ExitCode::SUCCESS)
         }

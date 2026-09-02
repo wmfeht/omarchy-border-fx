@@ -61,18 +61,18 @@ depends = ["check"]
 run = "make -C hypr test"
 
 [tasks.install]
-description = "Dev copy into ~/.config/omarchy/plugins/wmfeht.border-fx and enable (builds the CLI into $XDG_CACHE_HOME)"
+description = "omarchy plugin remove (if present), then omarchy plugin add this folder and enable"
 depends = ["bake"]
-run = "bash scripts/border-fx dev install"
+run = "bash dev/plugin.sh install"
 
 [tasks.uninstall]
-description = "Disable wmfeht.border-fx, purge the login-session .so, remove the copy"
-run = "bash scripts/border-fx dev uninstall"
+description = "Disable wmfeht.border-fx, purge the login-session .so, omarchy plugin remove"
+run = "bash dev/plugin.sh uninstall"
 
 [tasks.reinstall]
-description = "Remove wmfeht.border-fx, then omarchy plugin add this folder, keeping the shell.json look"
+description = "Same as install: omarchy plugin remove, add this folder, keep the shell.json look"
 depends = ["bake"]
-run = "bash scripts/border-fx dev reinstall"
+run = "bash dev/plugin.sh reinstall"
 
 [tasks.status]
 description = "Control-plane diagnostics: paths, compositor state, ABI identity, current theme"
