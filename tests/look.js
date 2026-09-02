@@ -964,10 +964,10 @@ function checkTokyoNightPreset() {
     check(lua.stdout.indexOf("rgba(c0caf5ff)") !== -1, "tokyo-night lua keeps the stock ramp")
     check(/base_color\s*=\s*"rgba\(292e42dd\)"/.test(lua.stdout), "tokyo-night lua base_color")
 
-    fs.writeFileSync(path.join(current, "theme.name"), "gruvbox\n")
+    fs.writeFileSync(path.join(current, "theme.name"), "not-a-stock-theme\n")
     const other = cliLook({}, { XDG_STATE_HOME: state })
-    check(other.look && other.look.pinDeg === 120, "stock theme without a preset keeps shared pinDeg")
-    check(other.look.baseColor === "rgba(0a3f47dd)", "stock theme without a preset keeps shared baseColor")
+    check(other.look && other.look.pinDeg === 120, "theme without a preset keeps shared pinDeg")
+    check(other.look.baseColor === "rgba(0a3f47dd)", "theme without a preset keeps shared baseColor")
   } finally {
     fs.rmSync(state, { recursive: true, force: true })
   }
@@ -1015,6 +1015,101 @@ function checkOsakaJadePreset() {
   }
 }
 
+// Every stock Omarchy theme directory ships a preset. Keep in sync with
+// `STOCK` in cli/src/theme/presets.rs.
+const STOCK_THEMES = [
+  "catppuccin", "catppuccin-latte", "ethereal", "everforest", "flexoki-light",
+  "gruvbox", "hackerman", "kanagawa", "last-horizon", "lumon", "lupine",
+  "matte-black", "miasma", "nord", "osaka-jade", "retro-82", "ristretto",
+  "rose-pine", "solitude", "tokyo-night", "vantablack", "white",
+]
+
+function checkEveryStockPreset() {
+  const state = fs.mkdtempSync(path.join(os.tmpdir(), "border-fx-stock-"))
+  try {
+    const current = path.join(state, "omarchy", "current")
+    fs.mkdirSync(current, { recursive: true })
+    const shared = cliLook({}, { XDG_STATE_HOME: state }).look
+    const seen = new Set()
+
+    for (const name of STOCK_THEMES) {
+      fs.writeFileSync(path.join(current, "theme.name"), name + "\n")
+      const r = cliLook({}, { XDG_STATE_HOME: state })
+      const look = r.look
+      if (!look) continue
+      check(r.stderr.trim() === "", name + " preset resolves without warnings: " + r.stderr)
+      check(look.effect === "shiny" || look.effect === "ripple", name + " preset effect draws")
+      check(look.borderSize === 2, name + " preset keeps the shared border size")
+      check(Array.isArray(look.gradient) && look.gradient.length === 5, name + " preset 5-stop ramp")
+      check(look.gradientPositions.split(" ").length === 5, name + " preset one position per stop")
+      check(/^rgba\([0-9a-f]{6}00\)$/.test(look.gradient[4]), name + " preset ramp tail is transparent")
+      check(/^rgba\([0-9a-f]{6}dd\)$/.test(look.baseColor), name + " preset wrap stroke at dd")
+      check(look.baseColor !== shared.baseColor, name + " preset replaces the shared wrap stroke")
+      check(look.activeOnly === true, name + " preset draws on the focused window only")
+      const signature = JSON.stringify([look.gradient, look.pinDeg, look.lobe, look.mirror])
+      check(!seen.has(signature), name + " preset is not a copy of another preset")
+      seen.add(signature)
+
+      const lua = lookApply("{}", { XDG_STATE_HOME: state })
+      check(lua.status === 0, name + " apply --stdout exits 0: " + (lua.stderr || ""))
+      check(lua.stdout.indexOf(look.gradient[0]) !== -1, name + " lua carries the preset ramp head")
+      check(new RegExp('base_color\\s*=\\s*"' + look.baseColor.replace(/[()]/g, "\\$&") + '"').test(lua.stdout),
+        name + " lua base_color matches the preset")
+    }
+  } finally {
+    fs.rmSync(state, { recursive: true, force: true })
+  }
+}
+
+function checkPresetVariety() {
+  const state = fs.mkdtempSync(path.join(os.tmpdir(), "border-fx-variety-"))
+  try {
+    const current = path.join(state, "omarchy", "current")
+    fs.mkdirSync(current, { recursive: true })
+    const at = (name, entry) => {
+      fs.writeFileSync(path.join(current, "theme.name"), name + "\n")
+      return cliLook(entry || {}, { XDG_STATE_HOME: state }).look
+    }
+
+    // Light theme: single source from the upper left, accent-led ramp, grey wrap.
+    const latte = at("catppuccin-latte")
+    check(latte.pinDeg === 135 && latte.mirror === false, "catppuccin-latte single light from the upper left")
+    check(latte.gradient[0] === "rgba(1e66f5f0)", "catppuccin-latte leads with the accent blue")
+    check(latte.baseColor === "rgba(acb0bedd)", "catppuccin-latte wrap stroke is muted grey")
+
+    // Ripple preset: omitted effect follows it, an explicit effect wins.
+    const retro = at("retro-82")
+    check(retro.effect === "ripple", "retro-82 preset selects ripple")
+    check(retro.rippleFreq === 0.035 && retro.rippleGain === 0.7 && retro.ripplePower === 6, "retro-82 ripple tuning")
+    check(retro.rippleOriginX === 0.5, "retro-82 leaves unnamed ripple keys shared")
+    const retroShiny = at("retro-82", { effect: "shiny" })
+    check(retroShiny.effect === "shiny" && retroShiny.pinDeg === 135, "user effect wins, rest of retro-82 still applies")
+    const lua = lookApply("{}", { XDG_STATE_HOME: state })
+    check(/effect\s*=\s*"ripple"/.test(lua.stdout), "retro-82 lua effect ripple")
+
+    // Static and pulse presets: shimmer off, unnamed walk keys shared.
+    const vanta = at("vantablack")
+    check(vanta.shimmer === false && vanta.pulse === false, "vantablack is static")
+    check(vanta.shimmerHz === 0.28 && vanta.pulseHz === 0.4, "vantablack leaves the walk rates shared")
+    const lumon = at("lumon")
+    check(lumon.shimmer === false && lumon.pulse === true && lumon.pulseHz === 0.15, "lumon pulses slowly")
+    const flexoki = at("flexoki-light")
+    check(flexoki.shimmer === false && flexoki.pulse === true && flexoki.pinDeg === -45, "flexoki-light pulses, lit from the lower right")
+
+    // Halo and below-horizon light.
+    const ethereal = at("ethereal")
+    check(ethereal.pinDeg === 270 && ethereal.mirror === false && ethereal.specularHalo === true,
+      "ethereal glows up from below with a halo")
+
+    // User keys still win over every preset.
+    const over = at("hackerman", { specularHalo: false, shimmerHz: 0.1 })
+    check(over.specularHalo === false && over.shimmerHz === 0.1, "user keys win over the hackerman preset")
+    check(over.lobe === 0.12, "unmentioned hackerman keys still apply")
+  } finally {
+    fs.rmSync(state, { recursive: true, force: true })
+  }
+}
+
 checkDefaults()
 checkPluginInitDefaults()
 checkMerge()
@@ -1028,6 +1123,8 @@ checkLookApplyTyped()
 checkLookApplyEval()
 checkTokyoNightPreset()
 checkOsakaJadePreset()
+checkEveryStockPreset()
+checkPresetVariety()
 
 if (fails) {
   console.error(fails + " checks failed")

@@ -76,9 +76,11 @@ not compile on first load. `BORDER_FX_BIN=…` skips the build (tests,
 `Base::shared()` is the documented defaults; `Base::with(map)` swaps in
 per-key overrides that user keys still win over. `theme::look_base()`
 picks a stock preset from `theme::current_name()` (reads
-`~/.local/state/omarchy/current/theme.name`). Tokyo Night and Osaka Jade
-ship presets (`cli/src/theme/presets.rs`); other themes keep the shared
-defaults. The chrome does not need its own copy: it first-paints from
+`~/.local/state/omarchy/current/theme.name`). Every stock theme ships a
+preset (`cli/src/theme/presets.rs`, the `STOCK` table; `tests/look.js`
+mirrors the list); other themes keep the shared defaults. A preset may
+set `effect` too, which an omitted user `effect` follows. The chrome
+does not need its own copy: it first-paints from
 `qml/Look.js`, then adopts the resolved look from the CLI's `LOOK=`
 line. `Service.qml` watches `theme.name` so a theme switch re-applies
 without an edit to `shell.json`.

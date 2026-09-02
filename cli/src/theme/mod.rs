@@ -221,9 +221,56 @@ bright_blue = "#7da6ff"
     }
 
     #[test]
+    fn look_base_uses_light_theme_preset() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = paths_with_theme(dir.path(), "catppuccin-latte");
+        assert_eq!(preset_name(&p).as_deref(), Some("catppuccin-latte"));
+
+        let (look, _) = crate::look::resolve(&json!({}), &look_base(&p));
+        assert_eq!(look["effect"], "shiny");
+        assert_eq!(look["pinDeg"], 135);
+        assert_eq!(look["mirror"], false, "single light source");
+        assert_eq!(look["gradient"][0], "rgba(1e66f5f0)", "light themes lead with the saturated accent");
+        assert_eq!(look["baseColor"], "rgba(acb0bedd)");
+    }
+
+    #[test]
+    fn look_base_uses_ripple_preset() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = paths_with_theme(dir.path(), "retro-82");
+        assert_eq!(preset_name(&p).as_deref(), Some("retro-82"));
+
+        let (look, _) = crate::look::resolve(&json!({}), &look_base(&p));
+        assert_eq!(look["effect"], "ripple", "omitted effect follows the preset");
+        assert_eq!(look["rippleFreq"], json!(0.035));
+        assert_eq!(look["rippleGain"], json!(0.7));
+        assert_eq!(look["rippleOriginX"], json!(0.5), "unnamed ripple keys stay shared");
+
+        let (look, _) = crate::look::resolve(&json!({"effect": "shiny"}), &look_base(&p));
+        assert_eq!(look["effect"], "shiny", "user effect wins over the preset");
+        assert_eq!(look["pinDeg"], 135, "the rest of the preset still applies");
+    }
+
+    #[test]
+    fn look_base_uses_static_preset() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = paths_with_theme(dir.path(), "vantablack");
+        let (look, _) = crate::look::resolve(&json!({}), &look_base(&p));
+        assert_eq!(look["shimmer"], false);
+        assert_eq!(look["pulse"], false);
+        assert_eq!(look["shimmerHz"], json!(0.28), "unnamed walk keys stay shared");
+
+        let p = paths_with_theme(dir.path(), "lumon");
+        let (look, _) = crate::look::resolve(&json!({}), &look_base(&p));
+        assert_eq!(look["shimmer"], false);
+        assert_eq!(look["pulse"], true);
+        assert_eq!(look["pulseHz"], json!(0.15));
+    }
+
+    #[test]
     fn look_base_without_a_preset_is_shared() {
         let dir = tempfile::tempdir().unwrap();
-        let p = paths_with_theme(dir.path(), "gruvbox");
+        let p = paths_with_theme(dir.path(), "not-a-stock-theme");
         assert_eq!(preset_name(&p), None);
         let (look, _) = crate::look::resolve(&json!({}), &look_base(&p));
         assert_eq!(look["pinDeg"], 120);

@@ -195,11 +195,21 @@ stops are used; extra colors are dropped.
 ## Defaults
 
 Missing or `null` keys give you the current Omarchy theme's stock look
-if we ship one (Tokyo Night and Osaka Jade so far), otherwise the shared look:
-light pinned at 120°, shimmer on, a 2-stop light glint, and a wrapping
-stroke. Keys you set on the `plugins[]` entry still win, and they stay
-put when you change themes — omit a key to follow the theme. Windows
-and chrome share the resolved look, so first paint matches on both.
+(every stock theme ships one), otherwise the shared look: light pinned at
+120°, shimmer on, a 2-stop light glint, and a wrapping stroke. Keys you
+set on the `plugins[]` entry still win, and they stay put when you change
+themes — omit a key to follow the theme. Windows and chrome share the
+resolved look, so first paint matches on both.
+
+Each stock preset is a five-stop ramp from that theme's own palette with
+a wrap stroke in its `selection` color, and a light direction, mirror,
+lobe, and motion picked to suit its wallpapers. Most are `shiny`; a few
+differ on purpose: Retro-82 uses `ripple` (record grooves), Lumon and
+Flexoki Light pulse instead of shimmering, Vantablack is static, and the
+light themes (Catppuccin Latte, Flexoki Light, Lupine, Rosé Pine, White)
+lead with their accent or ink colors so the ring reads on pale windows.
+Set `effect` (or any other key) on your entry to opt out of a preset's
+choice while keeping the rest.
 An empty `gradient` array is a real override: it falls back to the
 two-stop `colA`/`colB` rather than the default ramp.
 
@@ -283,8 +293,8 @@ defaults (not the shiny defaults).
 4. If the entry has a nested object named after the effect, its look keys
    overlay the top level. Nested wins.
 5. Any still-missing key comes from the current Omarchy theme's stock
-   preset if we ship one, otherwise the shared default above. Tokyo Night
-   and Osaka Jade ship stock presets.
+   preset if we ship one, otherwise the shared default above. Every stock
+   Omarchy theme ships a preset; user-made themes get the shared default.
 6. `gradient` and `gradientCw` are normalized to arrays.
 
 `id` and `enabled` are not look keys. `omarchy plugin disable` is the only
