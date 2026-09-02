@@ -541,6 +541,27 @@ mod tests {
     }
 
     #[test]
+    fn removing_user_keys_restores_the_base_floor() {
+        let mut preset = Map::new();
+        preset.insert("pinDeg".into(), json!(110));
+        preset.insert("lobe".into(), json!(0.08));
+        preset.insert("effect".into(), json!("ripple"));
+        let base = Base::with(preset);
+
+        let (floor, _) = resolve(&json!({}), &base);
+        assert_eq!(floor.pin_deg, 110);
+        assert_eq!(floor.effect, "ripple");
+
+        let (over, _) = resolve(&json!({"pinDeg": 45, "effect": "shiny"}), &base);
+        assert_eq!(over.pin_deg, 45);
+        assert_eq!(over.effect, "shiny");
+        assert_eq!(over.lobe, floor.lobe);
+
+        let (back, _) = resolve(&json!({}), &base);
+        assert_eq!(back, floor, "omitting user keys restores the preset floor");
+    }
+
+    #[test]
     fn entry_lookup_prefers_current_id() {
         let ids = ["wmfeht.border-fx", "qs.border-fx", "qs.shiny-border"];
         let cfg = json!({"plugins": [

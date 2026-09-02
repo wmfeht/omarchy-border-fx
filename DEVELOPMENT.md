@@ -38,7 +38,7 @@ the `shell.json` look snapshot. Checkout → Omarchy plugin install is
 `dev/plugin.sh`, not this binary.
 
 ```
-border-fx ensure     [--look-json J]           # after enable: build/load + apply; STATUS= + LOOK=
+border-fx ensure     [--look-json J]           # after enable: build/load + apply; STATUS= + LOOK= + BASE=
 border-fx apply      [--eval] [--disabled] [--no-load] [--stdout] [--lua P] [--look-json J]
 border-fx look       [--look-json J] [--pretty] # the resolved look as JSON
 border-fx teardown   [--purge]                  # on disable / remove
@@ -80,10 +80,14 @@ picks a stock preset from `theme::current_name()` (reads
 preset (`cli/src/theme/presets.rs`, the `STOCK` table; `tests/look.js`
 mirrors the list); other themes keep the shared defaults. A preset may
 set `effect` too, which an omitted user `effect` follows. The chrome
-does not need its own copy: it first-paints from
-`qml/Look.js`, then adopts the resolved look from the CLI's `LOOK=`
-line. `Service.qml` watches `theme.name` so a theme switch re-applies
-without an edit to `shell.json`.
+does not need its own copy of the presets: it first-paints from
+`qml/Look.js` against the shared defaults, then adopts the CLI's `BASE=`
+line (empty-entry resolve) as the floor and re-merges the live
+`plugins[]` entry against it. Removing a user key follows the preset
+again. `LOOK=` is the same resolve with the user's keys still applied.
+`Service.qml` watches `theme.name` and `shell.json` so a theme switch or
+a deleted look key re-applies without relying on a leftover in-memory
+entry.
 
 ### Config fan-out
 
@@ -91,16 +95,17 @@ The `wmfeht.border-fx` entry in `shell.json` `plugins[]` is the only input.
 On save:
 
 - **Chrome** first paints from `qml/Look.js` (same defaults/merge as the
-  CLI; `tests/look.js` checks the two agree byte for byte), then adopts the
-  `LOOK=` the CLI printed.
-- **Windows** debounce ~150 ms on the entry (`Service.qml` `entryJson`),
-  then `border-fx apply --eval` writes `~/.config/hypr/border-fx.lua` and
-  `hyprctl eval`s it if `hypr-shiny-border` is loaded. If the `.so` is not
-  loaded, the lua is still written and eval is skipped until the next
-  ensure.
+  CLI; `tests/look.js` checks the two agree byte for byte), then re-merges
+  the live entry against the `BASE=` the CLI printed.
+- **Windows** debounce ~150 ms on the entry (`Service.qml` `entryJson` /
+  `shell.json` FileView), then `border-fx apply --eval` writes
+  `~/.config/hypr/border-fx.lua` and `hyprctl eval`s it if
+  `hypr-shiny-border` is loaded. If the `.so` is not loaded, the lua is
+  still written and eval is skipped until the next ensure.
 
 stdout protocol of `ensure` / `apply`: `KEY=value` lines. `LOOK=` is the
-resolved look as compact JSON; `STATUS=` is `ok|reuse|hyprpm` (ring ready),
+resolved look as compact JSON; `BASE=` is the empty-entry resolve (theme
+preset or shared defaults); `STATUS=` is `ok|reuse|hyprpm` (ring ready),
 `load-failed|build-failed|skipped|no-hyprctl` (fail closed), `no-cli` (the
 launcher had no toolchain), or `applied|written` for `apply`.
 
@@ -165,7 +170,7 @@ which talks to Omarchy: `omarchy plugin remove` any current copy, then
 `omarchy plugin add` this folder. A dirty working tree is snapshotted
 first so the clone matches the folder, not HEAD. The `shell.json` look is
 kept across remove. The CLI is pre-built from the clone before enable.
-After enable, the script waits up to 30s for Hyprland to list
+After enable, the script waits up to 60s for Hyprland to list
 `hypr-shiny-border` (`border-fx status`: `listed` or a mapped `.so`).
 
 ```sh

@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 uses [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [0.2.0] - 2026-09-02
 
 ### Changed
 
@@ -23,9 +23,10 @@ uses [Semantic Versioning](https://semver.org).
 - Developer tasks (`mise run install|uninstall|reinstall`) are
   `dev/plugin.sh`: `omarchy plugin remove` any current copy, then
   `omarchy plugin add` this folder (pre-building the CLI before enable).
-  After enable, the script waits up to 30s for Hyprland to list the
-  window plugin. The Rust CLI is the end-user control plane (`ensure`,
-  `apply`, `look`, `teardown`, `status`, `theme`, `shell-look`).
+  After enable, the script waits up to 60s for Hyprland to list the
+  window plugin, so first-enable compiles on slow hardware fit. The Rust
+  CLI is the end-user control plane (`ensure`, `apply`, `look`,
+  `teardown`, `status`, `theme`, `shell-look`).
 
 ### Added
 
@@ -65,4 +66,5 @@ Initial release.
   shaders ship in the repo, so no build tools are needed for the chrome
   effect.
 
+[0.2.0]: https://github.com/wmfeht/omarchy-border-fx/releases/tag/0.2.0
 [0.1.0]: https://github.com/wmfeht/omarchy-border-fx/releases/tag/0.1.0

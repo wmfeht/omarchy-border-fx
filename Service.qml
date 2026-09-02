@@ -40,17 +40,22 @@ Item {
   // QML is not enough if an old ShinyBorder is still a child of the card.
   readonly property int overlayRev: 17
 
-  // shell.json plugins[] entry is the shared look. Services are not injected
-  // a settings object — read it off shell.shellConfig ourselves.
+  // shell.json plugins[] entry is the shared look. Prefer the file parse
+  // (FileView below) so a key deleted from disk is gone here too; fall back
+  // to shell.shellConfig until that load lands. Services are not injected
+  // a settings object.
   property var shellConfig: root.shell ? root.shell.shellConfig : null
-  readonly property var entry: Look.entryFromConfig(root.shellConfig, Look.PLUGIN_ID)
+  property var fileConfig: null
+  readonly property var entry: Look.entryFromConfig(root.fileConfig ? root.fileConfig : root.shellConfig, Look.PLUGIN_ID)
   // String form so a re-read of an unchanged shell.json does not retrigger
   // the fan-out (var properties signal on every assignment).
   readonly property string entryJson: root.entryToJson(root.entry)
-  // Resolved by the control plane (scripts/border-fx). Authoritative once it
-  // arrives; Look.merge is the first-paint fallback and the no-toolchain path.
+  // Theme floor from the CLI's BASE= line (empty-entry resolve). Look.merge
+  // uses this so a key removed from the entry follows the preset again.
+  // resolvedLook is the last LOOK= (windows/chrome numbers after coerce).
+  property var lookBase: null
   property var resolvedLook: null
-  readonly property var look: root.resolvedLook ? root.resolvedLook : Look.merge(root.entry)
+  readonly property var look: Look.merge(root.entry, root.lookBase)
 
   property bool lookApplyPending: false
   property bool hyprReady: false
@@ -266,10 +271,22 @@ Item {
     }
   }
 
+  function parseShellConfig(text) {
+    try {
+      var cfg = JSON.parse(String(text || ""))
+      if (cfg && typeof cfg === "object" && !Array.isArray(cfg))
+        return cfg
+    } catch (e) {}
+    return null
+  }
+
   function adoptLook(text) {
     var resolved = EnsureStatus.parseLook(text)
     if (resolved)
       root.resolvedLook = resolved
+    var floor = EnsureStatus.parseBase(text)
+    if (floor)
+      root.lookBase = floor
   }
 
   function effectDraws() {
@@ -604,12 +621,34 @@ Item {
     return state + "/omarchy/current/theme.name"
   }
 
+  readonly property string shellJsonPath: {
+    if (root.shell && root.shell.userConfigPath)
+      return String(root.shell.userConfigPath)
+    return (Quickshell.env("HOME") || "") + "/.config/omarchy/shell.json"
+  }
+
   FileView {
     id: themeNameFile
     path: root.themeNamePath
     watchChanges: true
     printErrors: false
     onFileChanged: lookApplyTimer.restart()
+  }
+
+  // Disk is the source of truth for omitted keys. shell.shellConfig is a
+  // fresh parse on reload too, but reading the file ourselves means a
+  // deleted look key cannot stick on a leftover in-memory object.
+  FileView {
+    id: shellJsonFile
+    path: root.shellJsonPath
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      root.fileConfig = root.parseShellConfig(text())
+      lookApplyTimer.restart()
+    }
+    onLoadFailed: root.fileConfig = null
+    onFileChanged: reload()
   }
 
   Component {
@@ -656,13 +695,10 @@ Item {
 
   onShellChanged: Qt.callLater(root.syncAll)
   // Debounce the fan-out on the *entry* (what the user edited), not on the
-  // resolved look: adopting the CLI's LOOK= must not schedule another apply.
-  // Before the ring is ready (still building, build/load failed) nothing will
-  // re-resolve, so drop the stale resolved look and let Look.merge track edits.
-  onEntryJsonChanged: {
-    if (root.hyprReady) lookApplyTimer.restart()
-    else root.resolvedLook = null
-  }
+  // resolved look: adopting the CLI's LOOK=/BASE= must not schedule another
+  // apply. Always re-apply: apply still prints BASE=/LOOK= when the ring is
+  // not loaded (eval is skipped), so chrome can pick up a removed key.
+  onEntryJsonChanged: lookApplyTimer.restart()
   onLookChanged: Qt.callLater(root.syncAll)
 
   Component.onCompleted: {

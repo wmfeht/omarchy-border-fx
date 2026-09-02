@@ -34,13 +34,18 @@ function checkControlPlaneShape() {
   check(service.indexOf("hypr-ensure.sh") === -1 && service.indexOf("look-apply.sh") === -1 && service.indexOf("hypr-teardown.sh") === -1,
     "Service.qml no longer references the bash control plane")
   check(service.indexOf("EnsureStatus.parseLook") !== -1, "Service adopts the CLI's LOOK= line")
+  check(service.indexOf("EnsureStatus.parseBase") !== -1, "Service adopts the CLI's BASE= theme floor")
+  check(/property var lookBase: null/.test(service), "Service holds the theme floor")
   check(/property var resolvedLook: null/.test(service), "Service holds the resolved look")
-  check(/readonly property var look: root\.resolvedLook \? root\.resolvedLook : Look\.merge\(root\.entry\)/.test(service),
-    "chrome falls back to Look.merge until the CLI answers")
-  check(/onEntryJsonChanged:\s*\{\s*if \(root\.hyprReady\) lookApplyTimer\.restart\(\)/.test(service),
+  check(/readonly property var look: Look\.merge\(root\.entry, root\.lookBase\)/.test(service),
+    "chrome re-merges the live entry against the theme floor")
+  check(/onEntryJsonChanged:\s*lookApplyTimer\.restart\(\)/.test(service),
     "fan-out debounce keys on the entry, not the resolved look (no apply loop)")
+  check(!/resolvedLook = null/.test(service), "removing a look key does not drop the theme floor")
   check(!/onLookChanged:\s*\{[^}]*lookApplyTimer/.test(service), "onLookChanged does not restart the apply timer")
   check(service.indexOf("omarchy/current/theme.name") !== -1, "Service watches Omarchy theme.name")
+  check(service.indexOf("shell.json") !== -1 && service.indexOf("id: shellJsonFile") !== -1,
+    "Service watches shell.json so a deleted key is read off disk")
   check(/onFileChanged:\s*lookApplyTimer\.restart\(\)/.test(service),
     "theme.name changes re-apply the look (the plugins[] entry does not change)")
 
@@ -103,8 +108,8 @@ function checkControlPlaneShape() {
   const waitLoadedAt = dev.lastIndexOf("wait_plugin_loaded")
   check(dev.indexOf("plugin_loaded()") !== -1 && waitLoadedAt !== -1 && enableAt < waitLoadedAt,
     "after enable, waits for Hyprland to list or map the plugin")
-  check(/SECONDS \+ 30/.test(dev) && /wait_plugin_loaded \|\| die|if ! wait_plugin_loaded/.test(dev),
-    "load wait is 30s wall clock and install dies if the plugin never lists")
+  check(/SECONDS \+ 60/.test(dev) && /wait_plugin_loaded \|\| die|if ! wait_plugin_loaded/.test(dev),
+    "load wait is 60s wall clock and install dies if the plugin never lists")
   check(dev.indexOf("aborting before add") !== -1, "aborts rather than replacing a mapped .so")
   check(dev.indexOf("trap cleanup EXIT") !== -1, "restores the look from cleanup if add does not finish")
   check(launcher.indexOf('cd "$root/cli"') !== -1, "launcher source-id hashes relative paths under cli/")

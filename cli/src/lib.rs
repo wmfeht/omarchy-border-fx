@@ -31,6 +31,13 @@ pub mod protocol {
         format!("LOOK={}", serde_json::to_string(look).unwrap_or_else(|_| "{}".into()))
     }
 
+    /// Empty-entry resolve against the current theme floor. Chrome re-merges
+    /// the live `plugins[]` entry against this so a removed user key follows
+    /// the preset again instead of sticking at the last LOOK=.
+    pub fn base_line(look: &Value) -> String {
+        format!("BASE={}", serde_json::to_string(look).unwrap_or_else(|_| "{}".into()))
+    }
+
     pub fn status_line(status: &str) -> String {
         format!("STATUS={status}")
     }
@@ -51,6 +58,10 @@ pub mod protocol {
         text.lines().find_map(|l| l.strip_prefix("LOOK=")).and_then(|j| serde_json::from_str(j).ok())
     }
 
+    pub fn parse_base(text: &str) -> Option<Value> {
+        text.lines().find_map(|l| l.strip_prefix("BASE=")).and_then(|j| serde_json::from_str(j).ok())
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -59,10 +70,13 @@ pub mod protocol {
         #[test]
         fn round_trip() {
             let l = json!({"effect": "shiny", "pinDeg": 120});
-            let text = format!("ensure: log\n{}\n{}\n", look_line(&l), status_line("ok"));
+            let floor = json!({"effect": "shiny", "pinDeg": 110});
+            let text = format!("ensure: log\n{}\n{}\n{}\n", look_line(&l), base_line(&floor), status_line("ok"));
             assert_eq!(parse_look(&text), Some(l));
+            assert_eq!(parse_base(&text), Some(floor));
             assert!(text.contains("\nSTATUS=ok\n"));
             assert_eq!(parse_look("STATUS=ok"), None);
+            assert_eq!(parse_base("LOOK={\"effect\":\"shiny\"}"), None);
             assert_eq!(parse_status(&text), Some("ok"));
             assert!(ensure_ready(&text));
             assert!(!ensure_ready("STATUS=ok\nSTATUS=load-failed\n"));

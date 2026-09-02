@@ -42,7 +42,7 @@ struct LookArgs {
 enum Cmd {
     /// Build / install / load the window ring and persist the look (called after enable).
     ///
-    /// Prints LOOK=<resolved json> and STATUS=ok|reuse|hyprpm|load-failed|build-failed|skipped|no-hyprctl.
+    /// Prints LOOK=<resolved json>, BASE=<empty-entry resolve>, and STATUS=ok|reuse|hyprpm|load-failed|build-failed|skipped|no-hyprctl.
     Ensure(LookArgs),
 
     /// Resolve the look, write ~/.config/hypr/border-fx.lua, optionally eval it.
@@ -128,6 +128,16 @@ fn print_look(look: &look::Look) {
     println!("{}", protocol::look_line(&look.to_value()));
 }
 
+fn print_base(base: &look::Base) {
+    let (floor, _) = look::resolve(&Value::Object(Default::default()), base);
+    println!("{}", protocol::base_line(&floor.to_value()));
+}
+
+fn print_look_and_base(look: &look::Look, base: &look::Base) {
+    print_look(look);
+    print_base(base);
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -160,7 +170,7 @@ fn run(cmd: Cmd, mut paths: Paths) -> Result<ExitCode, String> {
             let entry = load_entry(&paths, &args, true)?;
             let ctx = Ctx { paths: &paths, hc: &hc, notify: &notify, build: &build };
             let out = ensure::run(&ctx, &entry, &base);
-            print_look(&out.look);
+            print_look_and_base(&out.look, &base);
             println!("{}", protocol::status_line(out.status.as_str()));
             Ok(ExitCode::SUCCESS)
         }
@@ -181,7 +191,7 @@ fn run(cmd: Cmd, mut paths: Paths) -> Result<ExitCode, String> {
             }
             let a = apply::run(&ctx, &entry, &base, o)
                 .map_err(|e| format!("could not write {}: {e}", paths.lua_file.display()))?;
-            print_look(&a.look);
+            print_look_and_base(&a.look, &base);
             println!("{}", protocol::status_line(a.status.as_str()));
             Ok(ExitCode::SUCCESS)
         }

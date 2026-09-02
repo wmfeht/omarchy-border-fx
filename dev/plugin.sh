@@ -93,10 +93,10 @@ plugin_loaded() {
 }
 
 # Enable returns as soon as shell.json flips; Service.qml then runs
-# `border-fx ensure`, which may still be compiling. Wall-clock 30s so
-# status-probe time does not stretch the cap.
+# `border-fx ensure`, which may still be compiling. Wall-clock 60s so
+# status-probe time does not stretch the cap, and slow machines fit.
 wait_plugin_loaded() {
-  local deadline=$((SECONDS + 30))
+  local deadline=$((SECONDS + 60))
   while ((SECONDS < deadline)); do
     if plugin_loaded; then
       return 0
@@ -296,9 +296,9 @@ publish() {
     git_in "$dest" remote set-url origin "$root" >/dev/null || true
   fi
 
-  echo "$label: waiting for $plugin_name to load (up to 30s)"
+  echo "$label: waiting for $plugin_name to load (up to 60s)"
   if ! wait_plugin_loaded; then
-    echo "$label: Hyprland did not list $plugin_name within 30s." >&2
+    echo "$label: Hyprland did not list $plugin_name within 60s." >&2
     echo "$label: chrome may still be up; check: mise run status" >&2
     die "plugin did not load"
   fi

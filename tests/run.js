@@ -1255,13 +1255,18 @@ function checkEnsureStatusReady() {
   check(EnsureStatus.lastStatus("a\nSTATUS=reuse\nSTATUS=ok\n") === "ok", "lastStatus is the last STATUS= value")
 
   check(typeof EnsureStatus.parseLook === "function", "EnsureStatus.parseLook is shipped")
+  check(typeof EnsureStatus.parseBase === "function", "EnsureStatus.parseBase is shipped")
   const adopted = EnsureStatus.parseLook('ensure: log line\nLOOK={"effect":"shiny","pinDeg":77}\nSTATUS=ok\n')
   check(adopted && adopted.effect === "shiny" && adopted.pinDeg === 77, "parseLook reads the LOOK= line among logs")
+  const floor = EnsureStatus.parseBase('LOOK={"effect":"shiny","pinDeg":77}\nBASE={"effect":"shiny","pinDeg":110}\nSTATUS=ok\n')
+  check(floor && floor.effect === "shiny" && floor.pinDeg === 110, "parseBase reads the BASE= line among logs")
   check(EnsureStatus.parseLook("STATUS=ok\n") === null, "parseLook without LOOK= is null")
+  check(EnsureStatus.parseBase("LOOK={\"effect\":\"shiny\"}\n") === null, "parseBase without BASE= is null")
   check(EnsureStatus.parseLook("LOOK={not json") === null, "parseLook on junk is null, not a throw")
   check(EnsureStatus.parseLook('LOOK=[1,2]') === null, "parseLook rejects a non-object look")
   check(EnsureStatus.parseLook('LOOK={"pinDeg":1}') === null, "parseLook requires an effect string")
   check(EnsureStatus.parseLook("") === null, "parseLook on empty is null")
+  check(EnsureStatus.parseBase('BASE={"pinDeg":1}') === null, "parseBase requires an effect string")
 
   const service = fs.readFileSync(path.join(root, "Service.qml"), "utf8")
   check(

@@ -208,6 +208,32 @@ function checkMerge() {
   check(rippleOrigin.rippleFade === 0.4, "nested ripple.rippleFade wins")
 
   const leftoverPin = Look.merge({ pin: false, pinDeg: 90, quantizeDeg: 15 })
+
+  const presetFloor = {
+    effect: "ripple",
+    pinDeg: 110,
+    lobe: 0.08,
+    shimmer: true,
+    borderSize: 2
+  }
+  const fromFloor = Look.merge({}, presetFloor)
+  check(fromFloor.effect === "ripple", "omitted effect follows the merge base")
+  check(fromFloor.pinDeg === 110, "omitted pinDeg follows the merge base")
+  check(fromFloor.lobe === 0.08, "omitted lobe follows the merge base")
+  check(fromFloor.shimmerHz === Look.DEFAULTS.shimmerHz, "keys the base omits stay shared")
+  const overFloor = Look.merge({ pinDeg: 45, effect: "shiny" }, presetFloor)
+  check(overFloor.pinDeg === 45, "user pinDeg wins over the merge base")
+  check(overFloor.effect === "shiny", "user effect wins over the merge base")
+  check(overFloor.lobe === 0.08, "unmentioned base keys still apply")
+  const backToFloor = Look.merge({ id: "wmfeht.border-fx" }, presetFloor)
+  check(backToFloor.pinDeg === 110, "removing a user key restores the merge base")
+  check(backToFloor.effect === "ripple", "removing effect restores the merge base")
+  check(JSON.stringify(backToFloor) === JSON.stringify(fromFloor),
+    "empty entry after an override matches the base floor")
+  const nullEffect = Look.merge({ effect: null }, presetFloor)
+  check(nullEffect.effect === "shiny", "null effect is shiny, not the merge base")
+  const emptyEffect = Look.merge({ effect: "" }, presetFloor)
+  check(emptyEffect.effect === "shiny", "empty effect is shiny, not the merge base")
   check(!Object.prototype.hasOwnProperty.call(leftoverPin, "pin"), "leftover pin:false is not a look key")
   check(leftoverPin.pin !== false, "leftover pin:false does not restore mouse follow")
   check(!Object.prototype.hasOwnProperty.call(leftoverPin, "quantizeDeg"), "leftover quantizeDeg is ignored")
@@ -401,7 +427,8 @@ function checkLookApply() {
 }
 
 // The Rust resolver and qml/Look.js must produce the same look for the same
-// entry: chrome first-paints from Look.js and then adopts the CLI's LOOK=.
+// entry against the shared defaults. Chrome re-merges the live entry against
+// the CLI's BASE= (theme floor); LOOK= is the same resolve with user keys.
 function checkLookParity() {
   const fixtures = [
     {},
@@ -929,6 +956,9 @@ function checkLookApplyEval() {
     const adopted = EnsureStatus.parseLook(r.stdout)
     check(adopted && adopted.effect === "shiny" && adopted.pinDeg === 120, "apply prints a LOOK= line the chrome can adopt")
     check(JSON.stringify(adopted) === JSON.stringify(Look.merge({})), "LOOK= equals Look.merge for the same entry")
+    const floor = EnsureStatus.parseBase(r.stdout)
+    check(floor && floor.effect === "shiny" && floor.pinDeg === 120, "apply prints a BASE= theme floor")
+    check(JSON.stringify(floor) === JSON.stringify(Look.merge({})), "BASE= equals Look.merge({}) when no theme preset")
     const payloadMatch = log.match(/^EVAL_PAYLOAD=(.*)$/m)
     const payload = payloadMatch ? payloadMatch[1] : ""
     check(payload.length > 0, "apply --eval recorded an eval payload")
@@ -937,6 +967,43 @@ function checkLookApplyEval() {
       "eval payload is not dofile([=[LUA_FILE]=]) concat: " + payload
     )
     check(payload === 'dofile("' + luaFile + '")', "eval payload is a quoted dofile of the lua file: " + payload)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+function checkPresetOverrideRemoval() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "border-fx-preset-"))
+  try {
+    const state = path.join(dir, "state")
+    fs.mkdirSync(path.join(state, "omarchy", "current"), { recursive: true })
+    fs.writeFileSync(path.join(state, "omarchy", "current", "theme.name"), "tokyo-night\n")
+    const env = lookApplyEnv({ XDG_STATE_HOME: state })
+    const floor = cliLook("{}", env)
+    check(floor.look && floor.look.pinDeg === 110, "tokyo-night floor pinDeg is 110")
+    check(floor.look.lobe === 0.08, "tokyo-night floor lobe is 0.08")
+    const over = cliLook({ pinDeg: 45, lobe: 0.3 }, env)
+    check(over.look && over.look.pinDeg === 45, "user pinDeg overrides the tokyo-night floor")
+    check(over.look.lobe === 0.3, "user lobe overrides the tokyo-night floor")
+    check(over.look.shimmerDeg === 12, "unmentioned tokyo-night keys still apply under an override")
+    const back = cliLook("{}", env)
+    check(back.look && back.look.pinDeg === 110, "removing pinDeg restores the tokyo-night floor")
+    check(JSON.stringify(back.look) === JSON.stringify(floor.look),
+      "empty entry after an override matches the tokyo-night floor")
+
+    const applied = cli.run(["apply", "--eval", "--lua", path.join(dir, "out.lua"), "--look-json", "{}"], { env: env })
+    check(applied.status === 0, "apply against a theme preset exits 0: " + (applied.stderr || ""))
+    const EnsureStatus = loadPragmaLibrary("qml/EnsureStatus.js")
+    const base = EnsureStatus.parseBase(applied.stdout)
+    check(base && base.pinDeg === 110, "apply prints BASE= with the tokyo-night floor")
+    check(JSON.stringify(base) === JSON.stringify(floor.look), "BASE= equals look {} against the same theme")
+    const adopted = EnsureStatus.parseLook(applied.stdout)
+    check(JSON.stringify(adopted) === JSON.stringify(floor.look), "LOOK= of an empty entry equals BASE=")
+    check(JSON.stringify(Look.merge({}, base)) === JSON.stringify(floor.look),
+      "Look.merge({}, BASE=) matches the CLI floor")
+    check(Look.merge({ pinDeg: 45 }, base).pinDeg === 45, "Look.merge overlay still wins over BASE=")
+    check(Look.merge({ id: "wmfeht.border-fx" }, base).pinDeg === 110,
+      "Look.merge of an entry with no look keys restores BASE=")
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }
@@ -951,6 +1018,7 @@ checkEntry()
 checkColors()
 checkLookApply()
 checkLookParity()
+checkPresetOverrideRemoval()
 checkLookApplyTyped()
 checkLookApplyEval()
 

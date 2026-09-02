@@ -5,9 +5,11 @@ draws a rounded-rect ring around Hyprland windows and Omarchy shell chrome
 (panels, notification toasts) and animates it with one of two renderers:
 `shiny`, a directional comet highlight, or `ripple`, a traveling crest of
 light. One configuration drives both surfaces: change the look once in
-`shell.json` and windows and chrome update together.
+`shell.json` and windows and chrome update together. Every stock Omarchy
+theme ships an opinionated preset, so the ring takes its colors, light
+direction, and motion from the theme until you set keys of your own.
 
-> 0.1.0. Look keys and defaults may still change. After a Hyprland upgrade,
+> 0.2.0. Look keys and defaults may still change. After a Hyprland upgrade,
 > re-enable so the window ring rebuilds against the new compositor. If you
 > remove the plugin while the shell is down, leftover files stay; see
 > [Remove](#remove).
@@ -23,8 +25,13 @@ the plugin is enabled. `--enable` starts the service, which overlays the
 shell chrome and builds and loads the Hyprland window ring. Everything
 runs at the user level; no sudo required. The baked shaders ship in the
 repo, so the chrome effect needs no build tools; the window ring and its
-small controller (`border-fx`, written in Rust) compile on your machine
-on first enable, into `~/.cache/omarchy-border-fx`.
+small controller compile on your machine on first enable, into
+`~/.cache/omarchy-border-fx`.
+
+The first enable takes 20 seconds or so while everything compiles — longer
+on slow hardware. Panels and toasts light up right away; the window ring
+appears once the build finishes. Later enables reuse the cached build and
+draw immediately.
 
 Enable also writes `~/.config/hypr/border-fx.lua` and, if it isn't already
 there, appends this to `~/.config/hypr/hyprland.lua`:
@@ -44,6 +51,22 @@ omarchy plugin disable wmfeht.border-fx   # both off; clone kept
 omarchy plugin update wmfeht.border-fx --yes
 ```
 
+### Recommended Hyprland settings
+
+The ring looks best on its own, without Hyprland's stock border painting
+under it, and with slightly rounded corners. In
+`~/.config/hypr/looknfeel.lua`:
+
+```lua
+hl.config({
+  general = { border_size = 0 },
+  decoration = { rounding = 8 }, -- anywhere in 5–10 looks right
+})
+```
+
+The plugin reserves its own padding, so `border_size = 0` does not shift
+the layout; it only turns the stock border off.
+
 ### If the window ring fails to build
 
 The window ring compiles on your machine, against the running compositor.
@@ -53,14 +76,13 @@ The build needs four packages, all in the Arch repos:
 - `pkgconf`: provides `pkg-config`, which locates the headers and libraries
 - `hyprland`: ships its headers in `/usr/include/hyprland` and pulls in
   every library the plugin links against
-- `rust`: `cargo` builds the plugin's controller (the part that reads your
-  `shell.json` look and drives Hyprland). `rustup` works too.
+- `rust`: builds the plugin's small controller. `rustup` works too.
 
 ```sh
 sudo pacman -S --needed gcc pkgconf hyprland rust
 ```
 
-Without `cargo` you get a notification and the chrome effect only; enable
+Without `rust` you get a notification and the chrome effect only; enable
 the plugin again after installing it.
 
 The headers must match the running compositor. After a Hyprland upgrade,
@@ -192,7 +214,7 @@ A color list (`gradient`, `gradientCw`) may be a JSON array of those
 strings, or a Hyprland-style object `{ "colors": [ … ] }`. At most 8
 stops are used; extra colors are dropped.
 
-## Defaults
+## Theme presets and defaults
 
 Missing or `null` keys give you the current Omarchy theme's stock look
 (every stock theme ships one), otherwise the shared look: light pinned at
