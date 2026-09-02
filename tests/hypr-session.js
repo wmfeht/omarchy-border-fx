@@ -95,6 +95,11 @@ function checkControlPlaneShape() {
   check(addAt !== -1 && bootAt !== -1 && enableAt !== -1 && addAt < bootAt && bootAt < enableAt,
     "omarchy plugin add, then bootstrap the CLI, then enable")
   check(!/omarchy plugin add[^\n]*--enable/.test(dev), "omarchy plugin add is not --enable (bootstrap first)")
+  const waitLoadedAt = dev.lastIndexOf("wait_plugin_loaded")
+  check(dev.indexOf("plugin_loaded()") !== -1 && waitLoadedAt !== -1 && enableAt < waitLoadedAt,
+    "after enable, waits for Hyprland to list or map the plugin")
+  check(/SECONDS \+ 30/.test(dev) && /wait_plugin_loaded \|\| die|if ! wait_plugin_loaded/.test(dev),
+    "load wait is 30s wall clock and install dies if the plugin never lists")
   check(dev.indexOf("aborting before add") !== -1, "aborts rather than replacing a mapped .so")
   check(dev.indexOf("trap cleanup EXIT") !== -1, "restores the look from cleanup if add does not finish")
   check(launcher.indexOf('cd "$root/cli"') !== -1, "launcher source-id hashes relative paths under cli/")

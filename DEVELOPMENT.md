@@ -160,6 +160,8 @@ which talks to Omarchy: `omarchy plugin remove` any current copy, then
 `omarchy plugin add` this folder. A dirty working tree is snapshotted
 first so the clone matches the folder, not HEAD. The `shell.json` look is
 kept across remove. The CLI is pre-built from the clone before enable.
+After enable, the script waits up to 30s for Hyprland to list
+`hypr-shiny-border` (`border-fx status`: `listed` or a mapped `.so`).
 
 ```sh
 mise run install     # omarchy plugin remove (if present), add this folder, enable

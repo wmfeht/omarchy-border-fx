@@ -23,8 +23,9 @@ uses [Semantic Versioning](https://semver.org).
 - Developer tasks (`mise run install|uninstall|reinstall`) are
   `dev/plugin.sh`: `omarchy plugin remove` any current copy, then
   `omarchy plugin add` this folder (pre-building the CLI before enable).
-  The Rust CLI is the end-user control plane (`ensure`, `apply`, `look`,
-  `teardown`, `status`, `theme`, `shell-look`).
+  After enable, the script waits up to 30s for Hyprland to list the
+  window plugin. The Rust CLI is the end-user control plane (`ensure`,
+  `apply`, `look`, `teardown`, `status`, `theme`, `shell-look`).
 
 ### Added
 
