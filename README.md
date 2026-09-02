@@ -194,14 +194,17 @@ stops are used; extra colors are dropped.
 
 ## Defaults
 
-Missing or `null` keys give you the shared look: light pinned at 120°,
-shimmer on, a 2-stop light glint, and a wrapping stroke. Windows and
-chrome share these defaults, so first paint matches on both. An empty
-`gradient` array is a real override: it falls back to the two-stop
-`colA`/`colB` rather than the default ramp.
+Missing or `null` keys give you the current Omarchy theme's stock look
+if we ship one (Tokyo Night and Osaka Jade so far), otherwise the shared look:
+light pinned at 120°, shimmer on, a 2-stop light glint, and a wrapping
+stroke. Keys you set on the `plugins[]` entry still win, and they stay
+put when you change themes — omit a key to follow the theme. Windows
+and chrome share the resolved look, so first paint matches on both.
+An empty `gradient` array is a real override: it falls back to the
+two-stop `colA`/`colB` rather than the default ramp.
 
-All keys at their shared defaults (equivalent to
-`{ "id": "wmfeht.border-fx" }`):
+All keys at their shared defaults — the floor under a theme preset, and
+what you get on a theme we have not tuned yet:
 
 ```json
 {
@@ -273,12 +276,15 @@ defaults (not the shiny defaults).
 
 1. The plugin reads the `plugins[]` entry whose `id` is
    `wmfeht.border-fx`.
-2. `effect` empty or omitted means `"shiny"`.
+2. `effect` empty means `"shiny"`. Omitted `effect` uses the theme
+   preset if we ship one, otherwise `"shiny"`.
 3. Known look keys are picked from the entry; `id` and unknown fields are
    ignored.
 4. If the entry has a nested object named after the effect, its look keys
    overlay the top level. Nested wins.
-5. Any still-missing key gets the shared default above.
+5. Any still-missing key comes from the current Omarchy theme's stock
+   preset if we ship one, otherwise the shared default above. Tokyo Night
+   and Osaka Jade ship stock presets.
 6. `gradient` and `gradientCw` are normalized to arrays.
 
 `id` and `enabled` are not look keys. `omarchy plugin disable` is the only

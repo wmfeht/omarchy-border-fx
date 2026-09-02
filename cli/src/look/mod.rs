@@ -1,7 +1,8 @@
 //! Resolve a `plugins[]` entry into a complete look.
 //!
 //! Resolution order (see README "How settings resolve"):
-//! 1. `effect` empty or omitted means `shiny`.
+//! 1. `effect` empty means `shiny`. Omitted `effect` uses the base layer
+//!    (theme preset or shared default).
 //! 2. Known look keys are picked from the entry; `id` and unknown keys are ignored.
 //! 3. A nested object named after the effect overlays the top level.
 //! 4. Still-missing keys come from the base layer: the shared defaults, or a
@@ -157,7 +158,7 @@ pub fn resolve(entry: &Value, base: &Base) -> (Look, Warnings) {
     let mut warn = Warnings::default();
     let empty = Map::new();
     let src = entry.as_object().unwrap_or(&empty);
-    let effect = normalize_effect(src.get("effect"));
+    let effect = normalize_effect(src.get("effect").or_else(|| base.overrides.as_ref().and_then(|o| o.get("effect"))));
 
     let mut merged: Map<String, Value> = src.clone();
     if let Some(Value::Object(nested)) = src.get(&effect) {
@@ -386,6 +387,15 @@ mod tests {
         assert_eq!(l["baseColor"], "junk", "colors are not validated at merge time");
         assert_eq!(l["lobe"], 0.16, "invalid user value keeps the base value");
         assert!(w.mentions("lobe"));
+
+        let mut fx = Map::new();
+        fx.insert("effect".into(), json!("ripple"));
+        fx.insert("rippleGain".into(), json!(0.5));
+        let (l, _) = resolve(&json!({}), &Base::with(fx.clone()));
+        assert_eq!(l["effect"], "ripple", "omitted effect falls through to the preset");
+        assert_eq!(l["rippleGain"], 0.5);
+        let (l, _) = resolve(&json!({"effect": "shiny"}), &Base::with(fx));
+        assert_eq!(l["effect"], "shiny", "user effect wins over the preset");
     }
 
     #[test]

@@ -1,8 +1,8 @@
-//! Read the user's current Omarchy theme. This is the input a theme-following
-//! mode will turn into a look [`crate::look::Base`] layer (opinionated presets
-//! for stock themes keyed by [`Theme::name`], derived colors for the rest).
-//! Today the CLI only exposes it (`border-fx theme`); nothing in the look
-//! pipeline consumes it yet.
+//! Read the user's current Omarchy theme and turn it into a look
+//! [`crate::look::Base`] layer: opinionated presets for stock themes keyed
+//! by [`Theme::name`], shared defaults for everything else.
+
+mod presets;
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
+use crate::look::Base;
 use crate::paths::Paths;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -79,9 +80,25 @@ pub fn current(p: &Paths) -> Result<Theme, String> {
     load(p, &name)
 }
 
+/// Look base for the current Omarchy theme: a stock preset when we ship one,
+/// otherwise the shared defaults. A missing `theme.name` is shared, not an error.
+pub fn look_base(p: &Paths) -> Base {
+    match current_name(p).as_deref().and_then(presets::for_name) {
+        Some(map) => Base::with(map),
+        None => Base::shared(),
+    }
+}
+
+/// Directory name of the current theme when a stock preset exists.
+pub fn preset_name(p: &Paths) -> Option<String> {
+    let name = current_name(p)?;
+    presets::for_name(&name).map(|_| name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     const TOKYO: &str = r##"
 mode = "dark"
@@ -139,5 +156,84 @@ bright_blue = "#7da6ff"
         p.home = dir.path().to_path_buf();
         p.state_home = dir.path().join("state");
         assert!(load(&p, "nope-not-a-theme-xyz").is_err());
+    }
+
+    fn paths_with_theme(dir: &Path, name: &str) -> Paths {
+        let mut p = Paths::from_env(dir);
+        p.home = dir.join("home");
+        p.state_home = dir.join("state");
+        let current = p.state_home.join("omarchy/current");
+        fs::create_dir_all(&current).unwrap();
+        fs::write(current.join("theme.name"), format!("{name}\n")).unwrap();
+        p
+    }
+
+    #[test]
+    fn look_base_uses_tokyo_night_preset() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = paths_with_theme(dir.path(), "tokyo-night");
+        assert_eq!(preset_name(&p).as_deref(), Some("tokyo-night"));
+
+        let (look, _) = crate::look::resolve(&json!({}), &look_base(&p));
+        assert_eq!(look["effect"], "shiny");
+        assert_eq!(look["pinDeg"], 110);
+        assert_eq!(look["lobe"], json!(0.08));
+        assert_eq!(look["shimmerHz"], json!(0.35));
+        assert_eq!(look["shimmerDeg"], 12);
+        assert_eq!(look["baseColor"], "rgba(292e42dd)");
+        assert_eq!(look["gradientPositions"], "0 10 28 60 100");
+        assert_eq!(look["gradient"].as_array().unwrap().len(), 5);
+        assert_eq!(look["pulse"], false, "keys the preset omits stay shared");
+        assert_eq!(look["rippleFreq"], json!(0.025));
+
+        let (look, _) = crate::look::resolve(&json!({"pinDeg": 90, "lobe": 0.2}), &look_base(&p));
+        assert_eq!(look["pinDeg"], 90, "user key wins over the preset");
+        assert_eq!(look["lobe"], json!(0.2));
+        assert_eq!(look["shimmerDeg"], 12, "unmentioned preset keys still apply");
+    }
+
+    #[test]
+    fn look_base_uses_osaka_jade_preset() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = paths_with_theme(dir.path(), "osaka-jade");
+        assert_eq!(preset_name(&p).as_deref(), Some("osaka-jade"));
+
+        let (look, _) = crate::look::resolve(&json!({}), &look_base(&p));
+        assert_eq!(look["effect"], "shiny");
+        assert_eq!(look["pinDeg"], 120);
+        assert_eq!(look["lobe"], json!(0.24));
+        assert_eq!(look["shimmer"], true);
+        assert_eq!(look["shimmerHz"], json!(0.35));
+        assert_eq!(look["shimmerDeg"], 12);
+        assert_eq!(look["shimmerScaleMin"], json!(0.9));
+        assert_eq!(look["shimmerScaleMax"], json!(1.15));
+        assert_eq!(look["pulse"], false, "keys the preset omits stay shared");
+        assert_eq!(look["baseColor"], "rgba(32473bdd)");
+        assert_eq!(look["gradientPositions"], "0 18 42 70 100");
+        assert_eq!(look["gradient"].as_array().unwrap().len(), 5);
+        assert_eq!(look["rippleFreq"], json!(0.025), "keys the preset omits stay shared");
+
+        let (look, _) = crate::look::resolve(&json!({"shimmer": false, "pulse": true}), &look_base(&p));
+        assert_eq!(look["shimmer"], false, "user key wins over the preset");
+        assert_eq!(look["pulse"], true);
+        assert_eq!(look["lobe"], json!(0.24), "unmentioned preset keys still apply");
+        assert_eq!(look["shimmerDeg"], 12, "unmentioned preset keys still apply");
+    }
+
+    #[test]
+    fn look_base_without_a_preset_is_shared() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = paths_with_theme(dir.path(), "gruvbox");
+        assert_eq!(preset_name(&p), None);
+        let (look, _) = crate::look::resolve(&json!({}), &look_base(&p));
+        assert_eq!(look["pinDeg"], 120);
+        assert_eq!(look["lobe"], json!(0.16));
+        assert_eq!(look["baseColor"], "rgba(0a3f47dd)");
+
+        fs::write(p.state_home.join("omarchy/current/theme.name"), "\n").unwrap();
+        assert!(current_name(&p).is_none());
+        assert_eq!(preset_name(&p), None);
+        let (look, _) = crate::look::resolve(&json!({}), &look_base(&p));
+        assert_eq!(look["pinDeg"], 120);
     }
 }

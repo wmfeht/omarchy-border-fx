@@ -57,7 +57,7 @@ entry out of `~/.config/omarchy/shell.json`.
 Module map (`cli/src/`): `look/` (schema, resolve, colors), `lua.rs`,
 `json.rs` (lenient input), `paths.rs`, `hyprctl.rs` (trait + real impl +
 test fake), `session.rs`, `abi.rs`, `hyprland_lua.rs`, `ensure.rs`,
-`apply.rs`, `teardown.rs`, `shell_json.rs`, `theme.rs`,
+`apply.rs`, `teardown.rs`, `shell_json.rs`, `theme/` (current Omarchy theme + stock look presets),
 `timing.rs` (every wait/poll constant), `ctx.rs` (injected side effects:
 hyprctl, notifier, `make`).
 
@@ -72,13 +72,16 @@ pre-build from the installed clone before enable, so omarchy-shell does
 not compile on first load. `BORDER_FX_BIN=…` skips the build (tests,
 `cargo run`).
 
-**Theme following (next).** `look::Base` is the layer under the user's
-keys: `Base::shared()` is the documented defaults; `Base::with(map)` swaps
-in per-key overrides that user keys still win over. A theme preset is such
-a map, chosen from `theme::current()` (reads
-`~/.local/state/omarchy/current/theme.name` and the theme's `colors.toml`).
-The chrome does not need its own copy: it adopts the resolved look from the
-CLI's `LOOK=` line.
+**Theme following.** `look::Base` is the layer under the user's keys:
+`Base::shared()` is the documented defaults; `Base::with(map)` swaps in
+per-key overrides that user keys still win over. `theme::look_base()`
+picks a stock preset from `theme::current_name()` (reads
+`~/.local/state/omarchy/current/theme.name`). Tokyo Night and Osaka Jade
+ship presets (`cli/src/theme/presets.rs`); other themes keep the shared
+defaults. The chrome does not need its own copy: it first-paints from
+`qml/Look.js`, then adopts the resolved look from the CLI's `LOOK=`
+line. `Service.qml` watches `theme.name` so a theme switch re-applies
+without an edit to `shell.json`.
 
 ### Config fan-out
 

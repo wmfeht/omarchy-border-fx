@@ -7,9 +7,10 @@
 // numbers so first paint matches chrome.
 //
 // The Rust control plane (cli/src/look/) is the authoritative resolver; the
-// chrome first-paints from this file, then adopts the CLI's LOOK= line.
-// tests/look.js checks both resolve identically. Keep DEFAULTS, the clamp
-// tables, and coerceKey in step with cli/src/look/schema.rs and mod.rs.
+// chrome first-paints from this file, then adopts the CLI's LOOK= line
+// (including any stock theme preset). tests/look.js checks both resolve
+// identically against the shared defaults. Keep DEFAULTS, the clamp tables,
+// and coerceKey in step with cli/src/look/schema.rs and mod.rs.
 
 var PLUGIN_ID = "wmfeht.border-fx"
 var LEGACY_PLUGIN_ID = "qs.border-fx"

@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use border_fx::apply::{self, ApplyOpts};
 use border_fx::ctx::{self, Ctx};
 use border_fx::hyprctl::{self, Hyprctl};
-use border_fx::look::{self, Base};
+use border_fx::look;
 use border_fx::paths::Paths;
 use border_fx::{abi, ensure, json as lookjson, protocol, session, shell_json, teardown, theme};
 
@@ -66,7 +66,7 @@ enum Cmd {
         lua: Option<PathBuf>,
     },
 
-    /// Print the resolved look as JSON (defaults applied, nested overlay, coerced, clamped).
+    /// Print the resolved look as JSON (theme preset, nested overlay, coerced, clamped).
     Look {
         #[command(flatten)]
         look: LookArgs,
@@ -153,7 +153,7 @@ fn run(cmd: Cmd, mut paths: Paths) -> Result<ExitCode, String> {
     let plugin_id = paths.plugin_id.clone();
     let notify = move |msg: &str| ctx::desktop_notify(&plugin_id, msg);
     let build = ctx::make_plugin;
-    let base = Base::shared();
+    let base = theme::look_base(&paths);
 
     match cmd {
         Cmd::Ensure(args) => {
@@ -226,6 +226,7 @@ fn run(cmd: Cmd, mut paths: Paths) -> Result<ExitCode, String> {
                           "hashMismatchRecorded": abi::hash_mismatch_recorded(&paths),
                           "sessionSoFresh": abi::artifact_fresh(&paths, &id, &paths.session_so) },
                 "theme": theme::current_name(&paths),
+                "themePreset": theme::preset_name(&paths),
             });
             println!("{}", serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?);
             Ok(ExitCode::SUCCESS)

@@ -35,6 +35,11 @@ uses [Semantic Versioning](https://semver.org).
 - Rust unit tests for the look schema, ensure / teardown flows, ABI
   freshness, and `shell.json` handling; the JS suites drive the built CLI
   and check Rust and `qml/Look.js` resolve identically.
+- Stock look presets for Tokyo Night and Osaka Jade. When that is the
+  current Omarchy theme, missing look keys resolve to a five-stop palette
+  ramp with a tighter shimmer (same walk on both) instead of the shared
+  defaults. Keys set on the `plugins[]` entry still win. Other stock
+  themes keep the shared defaults.
 
 ## [0.1.0] - 2026-08-30
 

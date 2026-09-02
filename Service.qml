@@ -602,6 +602,23 @@ Item {
     onTriggered: root.runLookApply()
   }
 
+  // Theme changes do not edit the plugins[] entry, so re-apply when Omarchy
+  // rewrites ~/.local/state/omarchy/current/theme.name.
+  readonly property string themeNamePath: {
+    var state = Quickshell.env("XDG_STATE_HOME")
+    if (!state)
+      state = (Quickshell.env("HOME") || "") + "/.local/state"
+    return state + "/omarchy/current/theme.name"
+  }
+
+  FileView {
+    id: themeNameFile
+    path: root.themeNamePath
+    watchChanges: true
+    printErrors: false
+    onFileChanged: lookApplyTimer.restart()
+  }
+
   Component {
     id: hostWatchComp
     Connections {

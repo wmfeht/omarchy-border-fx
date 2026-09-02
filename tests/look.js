@@ -36,23 +36,26 @@ function takeWarnings() {
   return w
 }
 
-function lookApplyEnv() {
+const isolatedState = fs.mkdtempSync(path.join(os.tmpdir(), "border-fx-look-state-"))
+
+function lookApplyEnv(extra) {
   return Object.assign({}, process.env, {
     SESSION_SO: "/tmp/omarchy-border-fx-test.so",
-    LUA_FILE: "/tmp/omarchy-border-fx-test.lua"
-  })
+    LUA_FILE: "/tmp/omarchy-border-fx-test.lua",
+    XDG_STATE_HOME: isolatedState
+  }, extra || {})
 }
 
 // `border-fx apply --stdout`: the lua the control plane would write.
-function lookApply(lookJson) {
+function lookApply(lookJson, extraEnv) {
   const raw = typeof lookJson === "string" ? lookJson : JSON.stringify(lookJson)
-  return cli.run(["apply", "--stdout", "--look-json", raw], { env: lookApplyEnv() })
+  return cli.run(["apply", "--stdout", "--look-json", raw], { env: lookApplyEnv(extraEnv) })
 }
 
 // `border-fx look`: the resolved look the control plane hands the chrome.
-function cliLook(lookJson) {
+function cliLook(lookJson, extraEnv) {
   const raw = typeof lookJson === "string" ? lookJson : JSON.stringify(lookJson)
-  const r = cli.run(["look", "--look-json", raw], { env: lookApplyEnv() })
+  const r = cli.run(["look", "--look-json", raw], { env: lookApplyEnv(extraEnv) })
   check(r.status === 0, "border-fx look exits 0 for " + raw + ": " + (r.stderr || ""))
   try {
     return { look: JSON.parse(r.stdout), stderr: r.stderr || "" }
@@ -904,6 +907,7 @@ function checkLookApplyEval() {
         PATH: binDir + ":" + (process.env.PATH || "/usr/bin:/bin"),
         HOME: home,
         XDG_CONFIG_HOME: config,
+        XDG_STATE_HOME: path.join(dir, "state"),
         SESSION_SO: path.join(dir, "dummy.so"),
       }),
     })
@@ -928,6 +932,89 @@ function checkLookApplyEval() {
   }
 }
 
+function checkTokyoNightPreset() {
+  const state = fs.mkdtempSync(path.join(os.tmpdir(), "border-fx-tokyo-"))
+  try {
+    const current = path.join(state, "omarchy", "current")
+    fs.mkdirSync(current, { recursive: true })
+    fs.writeFileSync(path.join(current, "theme.name"), "tokyo-night\n")
+
+    const tokyo = cliLook({}, { XDG_STATE_HOME: state })
+    check(tokyo.look && tokyo.look.pinDeg === 110, "tokyo-night preset pinDeg 110")
+    check(tokyo.look.lobe === 0.08, "tokyo-night preset lobe 0.08")
+    check(tokyo.look.shimmerHz === 0.35, "tokyo-night preset shimmerHz 0.35")
+    check(tokyo.look.shimmerDeg === 12, "tokyo-night preset shimmerDeg 12")
+    check(tokyo.look.shimmerScaleMin === 0.9, "tokyo-night preset shimmerScaleMin 0.9")
+    check(tokyo.look.shimmerScaleMax === 1.15, "tokyo-night preset shimmerScaleMax 1.15")
+    check(tokyo.look.baseColor === "rgba(292e42dd)", "tokyo-night preset baseColor")
+    check(tokyo.look.gradientPositions === "0 10 28 60 100", "tokyo-night preset gradientPositions")
+    check(Array.isArray(tokyo.look.gradient) && tokyo.look.gradient.length === 5, "tokyo-night preset 5-stop ramp")
+    check(tokyo.look.gradient[0] === "rgba(c0caf5ff)" && tokyo.look.gradient[4] === "rgba(1a1b2600)",
+      "tokyo-night preset ramp endpoints")
+    check(tokyo.look.pulse === false, "tokyo-night preset leaves pulse on the shared default")
+    check(tokyo.look.effect === "shiny", "tokyo-night preset effect shiny")
+
+    const over = cliLook({ pinDeg: 90 }, { XDG_STATE_HOME: state })
+    check(over.look && over.look.pinDeg === 90, "user pinDeg wins over tokyo-night preset")
+    check(over.look.lobe === 0.08, "unmentioned tokyo-night keys still apply under a user override")
+
+    const lua = lookApply("{}", { XDG_STATE_HOME: state })
+    check(lua.status === 0, "tokyo-night apply --stdout exits 0: " + (lua.stderr || ""))
+    check(/pin_deg\s*=\s*110/.test(lua.stdout), "tokyo-night lua pin_deg 110")
+    check(lua.stdout.indexOf("rgba(c0caf5ff)") !== -1, "tokyo-night lua keeps the stock ramp")
+    check(/base_color\s*=\s*"rgba\(292e42dd\)"/.test(lua.stdout), "tokyo-night lua base_color")
+
+    fs.writeFileSync(path.join(current, "theme.name"), "gruvbox\n")
+    const other = cliLook({}, { XDG_STATE_HOME: state })
+    check(other.look && other.look.pinDeg === 120, "stock theme without a preset keeps shared pinDeg")
+    check(other.look.baseColor === "rgba(0a3f47dd)", "stock theme without a preset keeps shared baseColor")
+  } finally {
+    fs.rmSync(state, { recursive: true, force: true })
+  }
+}
+
+function checkOsakaJadePreset() {
+  const state = fs.mkdtempSync(path.join(os.tmpdir(), "border-fx-osaka-"))
+  try {
+    const current = path.join(state, "omarchy", "current")
+    fs.mkdirSync(current, { recursive: true })
+    fs.writeFileSync(path.join(current, "theme.name"), "osaka-jade\n")
+
+    const osaka = cliLook({}, { XDG_STATE_HOME: state })
+    check(osaka.look && osaka.look.pinDeg === 120, "osaka-jade preset pinDeg 120")
+    check(osaka.look.lobe === 0.24, "osaka-jade preset lobe 0.24")
+    check(osaka.look.shimmer === true, "osaka-jade preset shimmer on")
+    check(osaka.look.shimmerHz === 0.35, "osaka-jade preset shimmerHz 0.35")
+    check(osaka.look.shimmerDeg === 12, "osaka-jade preset shimmerDeg 12")
+    check(osaka.look.shimmerScaleMin === 0.9, "osaka-jade preset shimmerScaleMin 0.9")
+    check(osaka.look.shimmerScaleMax === 1.15, "osaka-jade preset shimmerScaleMax 1.15")
+    check(osaka.look.pulse === false, "osaka-jade preset leaves pulse on the shared default")
+    check(osaka.look.baseColor === "rgba(32473bdd)", "osaka-jade preset baseColor")
+    check(osaka.look.gradientPositions === "0 18 42 70 100", "osaka-jade preset gradientPositions")
+    check(Array.isArray(osaka.look.gradient) && osaka.look.gradient.length === 5, "osaka-jade preset 5-stop ramp")
+    check(osaka.look.gradient[0] === "rgba(f7e8b2c8)" && osaka.look.gradient[4] === "rgba(32473b00)",
+      "osaka-jade preset ramp endpoints")
+    check(osaka.look.effect === "shiny", "osaka-jade preset effect shiny")
+    check(osaka.look.mirror === true, "osaka-jade preset mirror on")
+
+    const over = cliLook({ lobe: 0.1 }, { XDG_STATE_HOME: state })
+    check(over.look && over.look.lobe === 0.1, "user lobe wins over osaka-jade preset")
+    check(over.look.shimmer === true, "unmentioned osaka-jade keys still apply under a user override")
+    check(over.look.shimmerHz === 0.35, "osaka-jade shimmerHz stays 0.35 under a user lobe override")
+
+    const lua = lookApply("{}", { XDG_STATE_HOME: state })
+    check(lua.status === 0, "osaka-jade apply --stdout exits 0: " + (lua.stderr || ""))
+    check(/lobe\s*=\s*0\.24/.test(lua.stdout), "osaka-jade lua lobe 0.24")
+    check(/shimmer\s*=\s*true/.test(lua.stdout), "osaka-jade lua shimmer on")
+    check(/shimmer_hz\s*=\s*0\.35/.test(lua.stdout), "osaka-jade lua shimmer_hz 0.35")
+    check(/shimmer_deg\s*=\s*12/.test(lua.stdout), "osaka-jade lua shimmer_deg 12")
+    check(lua.stdout.indexOf("rgba(f7e8b2c8)") !== -1, "osaka-jade lua keeps the stock ramp")
+    check(/base_color\s*=\s*"rgba\(32473bdd\)"/.test(lua.stdout), "osaka-jade lua base_color")
+  } finally {
+    fs.rmSync(state, { recursive: true, force: true })
+  }
+}
+
 checkDefaults()
 checkPluginInitDefaults()
 checkMerge()
@@ -939,6 +1026,8 @@ checkLookApply()
 checkLookParity()
 checkLookApplyTyped()
 checkLookApplyEval()
+checkTokyoNightPreset()
+checkOsakaJadePreset()
 
 if (fails) {
   console.error(fails + " checks failed")

@@ -40,6 +40,9 @@ function checkControlPlaneShape() {
   check(/onEntryJsonChanged:\s*\{\s*if \(root\.hyprReady\) lookApplyTimer\.restart\(\)/.test(service),
     "fan-out debounce keys on the entry, not the resolved look (no apply loop)")
   check(!/onLookChanged:\s*\{[^}]*lookApplyTimer/.test(service), "onLookChanged does not restart the apply timer")
+  check(service.indexOf("omarchy/current/theme.name") !== -1, "Service watches Omarchy theme.name")
+  check(/onFileChanged:\s*lookApplyTimer\.restart\(\)/.test(service),
+    "theme.name changes re-apply the look (the plugins[] entry does not change)")
 
   const st = fs.statSync(path.join(root, "scripts/border-fx"))
   check((st.mode & 0o111) !== 0, "scripts/border-fx is executable")
@@ -416,6 +419,7 @@ function createHarness(opts) {
     HOME: home,
     XDG_CONFIG_HOME: config,
     XDG_CACHE_HOME: cache,
+    XDG_STATE_HOME: path.join(home, ".local/state"),
     XDG_RUNTIME_DIR: runDir,
     LUA_FILE: luaFile,
     SESSION_SO: sessionSo,
