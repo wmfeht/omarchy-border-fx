@@ -272,7 +272,7 @@ Item {
       root.resolvedLook = resolved
   }
 
-  function effectIsShiny() {
+  function effectDraws() {
     return Look.effectDraws(root.look && root.look.effect)
   }
 
@@ -388,7 +388,7 @@ Item {
       card: card,
       hostAlive: hostAlive,
       hostDestroyed: !hostAlive,
-      effectIsShiny: root.effectIsShiny(),
+      effectDraws: root.effectDraws(),
       attached: root.attached,
       existingOverlayRev: shiny ? shiny.overlayRev : null,
       currentOverlayRev: root.overlayRev,
@@ -563,11 +563,6 @@ Item {
     stdout: StdioCollector {
       id: ensureOut
       waitForEnd: true
-      onStreamFinished: {
-        root.adoptLook(ensureOut.text)
-        if (EnsureStatus.isEnsureSuccessStatus(ensureOut.text))
-          root.hyprReady = true
-      }
     }
     onExited: function(exitCode) {
       root.adoptLook(ensureOut.text)
@@ -575,7 +570,6 @@ Item {
         root.hyprReady = true
       if (exitCode !== 0)
         console.warn(root.tag + ": border-fx ensure exited " + exitCode)
-      Qt.callLater(root.runLookApply)
     }
   }
 
@@ -584,7 +578,6 @@ Item {
     stdout: StdioCollector {
       id: lookApplyOut
       waitForEnd: true
-      onStreamFinished: root.adoptLook(lookApplyOut.text)
     }
     onExited: function() {
       root.adoptLook(lookApplyOut.text)

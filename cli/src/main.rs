@@ -125,7 +125,7 @@ fn load_entry(p: &Paths, args: &LookArgs, fallback_shell_json: bool) -> Result<V
 }
 
 fn print_look(look: &look::Look) {
-    println!("{}", protocol::look_line(&Value::Object(look.clone())));
+    println!("{}", protocol::look_line(&look.to_value()));
 }
 
 fn main() -> ExitCode {
@@ -191,15 +191,15 @@ fn run(cmd: Cmd, mut paths: Paths) -> Result<ExitCode, String> {
             for w in &warnings.0 {
                 eprintln!("{w}");
             }
-            let v = Value::Object(resolved);
+            let v = resolved.to_value();
             let text = if pretty { serde_json::to_string_pretty(&v) } else { serde_json::to_string(&v) };
             println!("{}", text.map_err(|e| e.to_string())?);
             Ok(ExitCode::SUCCESS)
         }
         Cmd::Teardown { look: args, purge } => {
-            let entry = load_entry(&paths, &args, false)?;
+            let entry = load_entry(&paths, &args, true)?;
             let ctx = Ctx { paths: &paths, hc: &hc, notify: &notify, build: &build };
-            let status = teardown::run(&ctx, &entry, purge);
+            let status = teardown::run(&ctx, &entry, &base, purge);
             println!("{}", protocol::status_line(status.as_str()));
             Ok(ExitCode::SUCCESS)
         }

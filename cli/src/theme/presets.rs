@@ -702,7 +702,7 @@ mod tests {
 
         let (look, warn) = look::resolve_shared(&Value::Object(preset.clone()));
         assert!(warn.0.is_empty(), "{name}: {}", warn.0.join("; "));
-        assert!(!look.is_empty(), "{name}: resolve produced an empty look");
+        assert!(!look.effect.is_empty(), "{name}: resolve produced an empty look");
 
         for (key, value) in preset {
             let Some(spec) = schema::spec(key) else { continue };

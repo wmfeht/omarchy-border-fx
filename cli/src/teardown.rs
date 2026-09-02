@@ -35,15 +35,15 @@ fn log(msg: &str) {
     eprintln!("teardown: {msg}");
 }
 
-fn persist_disable(ctx: &Ctx, entry: &Value) {
+fn persist_disable(ctx: &Ctx, entry: &Value, base: &Base) {
     let p = ctx.paths;
     let eval = ctx.hc.available() && ctx.hc.plugin_listed(&p.plugin_name);
-    if let Err(e) = apply::run(ctx, entry, &Base::shared(), ApplyOpts { eval, disabled: true, no_load: false }) {
+    if let Err(e) = apply::run(ctx, entry, base, ApplyOpts { eval, disabled: true, no_load: false }) {
         log(&format!("could not write {}: {e}", p.lua_file.display()));
     }
 }
 
-pub fn run(ctx: &Ctx, entry: &Value, purge: bool) -> Status {
+pub fn run(ctx: &Ctx, entry: &Value, base: &Base, purge: bool) -> Status {
     let p = ctx.paths;
     let gen_before = session::ensure_gen(&p.session_gen);
     let lock = SessionLock::acquire(&p.session_lock);
@@ -71,7 +71,7 @@ pub fn run(ctx: &Ctx, entry: &Value, purge: bool) -> Status {
         }
     }
 
-    persist_disable(ctx, entry);
+    persist_disable(ctx, entry, base);
 
     if purge {
         let _ = std::fs::remove_file(&p.session_so);
@@ -124,7 +124,7 @@ mod tests {
         let hc = Fake::up(false);
         let n = |_: &str| {};
         let b = |_: &Paths| false;
-        let s = run(&ctx(&p, &hc, &n, &b), &json!({}), false);
+        let s = run(&ctx(&p, &hc, &n, &b), &json!({}), &Base::shared(), false);
         assert_eq!(s, Status::Disabled);
         assert!(lua_disabled(&p));
         assert!(!hc.called("eval"));
@@ -138,7 +138,7 @@ mod tests {
         let hc = Fake::up(true);
         let n = |_: &str| {};
         let b = |_: &Paths| false;
-        let s = run(&ctx(&p, &hc, &n, &b), &json!({}), false);
+        let s = run(&ctx(&p, &hc, &n, &b), &json!({}), &Base::shared(), false);
         assert_eq!(s, Status::Disabled);
         assert!(lua_disabled(&p));
         assert!(hc.called("eval"));
@@ -156,7 +156,7 @@ mod tests {
         let hc = Fake::up(false);
         let n = |_: &str| {};
         let b = |_: &Paths| false;
-        run(&ctx(&p, &hc, &n, &b), &json!({}), true);
+        run(&ctx(&p, &hc, &n, &b), &json!({}), &Base::shared(), true);
         assert!(!p.session_so.exists());
         assert!(!p.lua_file.exists());
         assert!(!p.legacy_lua_file.exists());
@@ -175,7 +175,7 @@ mod tests {
             let hc = Fake::up(false);
             let n = |_: &str| {};
             let b = |_: &Paths| false;
-            run(&ctx(&p2, &hc, &n, &b), &json!({}), false)
+            run(&ctx(&p2, &hc, &n, &b), &json!({}), &Base::shared(), false)
         });
         std::thread::sleep(std::time::Duration::from_millis(100));
         session::bump_ensure_gen(&p.session_gen).unwrap();

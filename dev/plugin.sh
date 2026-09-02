@@ -228,7 +228,7 @@ bootstrap() {
     echo "dev install: warning: pre-building the CLI failed; the launcher will retry on first use" >&2
     return 0
   fi
-  if [[ $out == STATUS=no-cli || ! -x ${out%%$'\n'*} ]]; then
+  if [[ $out == STATUS=no-cli || $out == STATUS=cli-build-failed || ! -x ${out%%$'\n'*} ]]; then
     echo "dev install: cargo not found; the launcher will build on first use" >&2
   fi
 }

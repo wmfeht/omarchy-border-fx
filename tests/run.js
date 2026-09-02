@@ -933,7 +933,7 @@ function driveSync(OA, session, host, card, opts) {
     card: opts.hostDestroyed ? OA.cardForHost(session.attached, host) || card : card,
     hostAlive: opts.hostAlive !== false && !opts.hostDestroyed,
     hostDestroyed: !!opts.hostDestroyed,
-    effectIsShiny: opts.effectIsShiny !== false,
+    effectDraws: opts.effectDraws !== false,
     attached: session.attached,
     existingOverlayRev: overlay ? overlay.overlayRev : null,
     currentOverlayRev: session.overlayRev,
@@ -1101,21 +1101,21 @@ function checkOverlayAttach() {
 
   const notShiny = { attached: [], overlayOf: new Map(), overlayRev: 12 }
   driveSync(OA, notShiny, overlay.host, overlay.card)
-  const off = driveSync(OA, notShiny, overlay.host, overlay.card, { effectIsShiny: false })
+  const off = driveSync(OA, notShiny, overlay.host, overlay.card, { effectDraws: false })
   check(off.decision.action === "detach", "non-shiny effect detaches chrome")
   check(notShiny.attached.length === 0, "non-shiny effect clears attached set")
 
   const rippleSess = { attached: [], overlayOf: new Map(), overlayRev: 12 }
-  const rippleOn = driveSync(OA, rippleSess, overlay.host, overlay.card, { effectIsShiny: Look.effectDraws("ripple") })
+  const rippleOn = driveSync(OA, rippleSess, overlay.host, overlay.card, { effectDraws: Look.effectDraws("ripple") })
   check(Look.effectDraws("ripple") === true, "ripple is a drawing effect")
   check(rippleOn.decision.action === "attach", "ripple effect attaches chrome like shiny")
   check(rippleSess.attached.length === 1, "ripple attach grows the attached set")
-  const rippleOff = driveSync(OA, rippleSess, overlay.host, overlay.card, { effectIsShiny: Look.effectDraws("other") })
+  const rippleOff = driveSync(OA, rippleSess, overlay.host, overlay.card, { effectDraws: Look.effectDraws("other") })
   check(rippleOff.decision.action === "detach", "unknown effect detaches after ripple")
   check(rippleSess.attached.length === 0, "unknown effect clears attached set")
 
   const noAttach = driveSync(OA, { attached: [], overlayOf: new Map(), overlayRev: 12 },
-    leftoverClosed, leftoverClosed, { effectIsShiny: true })
+    leftoverClosed, leftoverClosed, { effectDraws: true })
   check(noAttach.decision.action === "noop", "hidden leftover overlay duck-type does not attach")
 }
 
@@ -1246,6 +1246,13 @@ function checkEnsureStatusReady() {
     "STATUS=load-failed among logs is not ready"
   )
   check(EnsureStatus.isEnsureSuccessStatus("STATUS=no-cli") === false, "STATUS=no-cli (launcher without cargo) is not ready")
+  check(EnsureStatus.isEnsureSuccessStatus("STATUS=cli-build-failed") === false, "STATUS=cli-build-failed is not ready")
+  check(EnsureStatus.isEnsureSuccessStatus("STATUS=okay") === false, "STATUS=okay is not a success prefix match")
+  check(
+    EnsureStatus.isEnsureSuccessStatus("STATUS=ok\nSTATUS=load-failed\n") === false,
+    "last STATUS= line wins when a later failure overwrites ok"
+  )
+  check(EnsureStatus.lastStatus("a\nSTATUS=reuse\nSTATUS=ok\n") === "ok", "lastStatus is the last STATUS= value")
 
   check(typeof EnsureStatus.parseLook === "function", "EnsureStatus.parseLook is shipped")
   const adopted = EnsureStatus.parseLook('ensure: log line\nLOOK={"effect":"shiny","pinDeg":77}\nSTATUS=ok\n')
@@ -1281,10 +1288,11 @@ function checkEnsureStatusReady() {
     "ensureProc onExited still consults STATUS via EnsureStatus (fail closed)"
   )
   check(
-    ensureProc.indexOf("onStreamFinished") !== -1 &&
-      ensureProc.indexOf("EnsureStatus.isEnsureSuccessStatus") !== -1,
-    "ensureProc collector still keys ready on success STATUS= only"
+    onExited.indexOf("root.adoptLook") !== -1 &&
+      ensureProc.indexOf("onStreamFinished") === -1,
+    "ensureProc adopts LOOK= once on exit, not on the stream and the exit"
   )
+  check(onExited.indexOf("runLookApply") === -1, "ensure does not re-apply after it already persisted the look")
 }
 
 function extractPluginRootSrc() {

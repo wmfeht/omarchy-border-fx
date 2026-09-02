@@ -72,7 +72,7 @@ if [[ ! -x $bin || $have != "$want" ]]; then
         --manifest-path "$root/cli/Cargo.toml" \
         --target-dir "$build_dir/cargo-target" >&2; then
     notify "Window borders' controller failed to build. Panel and notification effects still work. See the shell log for the cargo error."
-    echo "STATUS=no-cli"
+    echo "STATUS=cli-build-failed"
     exit 0
   fi
   tmp=$(mktemp "$bin_dir/border-fx.XXXXXX")

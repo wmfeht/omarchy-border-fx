@@ -18,8 +18,143 @@ use serde_json::{Map, Value};
 
 use schema::{DEFAULT_EFFECT, KEYS, Kind};
 
-/// A resolved look: `effect` plus every key from [`schema::KEYS`], in schema order.
-pub type Look = Map<String, Value>;
+/// A resolved look: `effect` plus every key from [`schema::KEYS`].
+///
+/// JSON on the wire (`LOOK=`, `border-fx look`) is still a camelCase object
+/// with schema-ordered keys and `schema::num` integers. That map is an
+/// output of [`Look::to_map`], not the in-memory type.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Look {
+    pub effect: String,
+    pub border_size: i64,
+    pub shimmer: bool,
+    pub shimmer_hz: f64,
+    pub shimmer_deg: i64,
+    pub shimmer_scale_min: f64,
+    pub shimmer_scale_max: f64,
+    pub pin_deg: i64,
+    pub angle_offset: i64,
+    pub lobe: f64,
+    pub mirror: bool,
+    pub gradient: Vec<Value>,
+    pub gradient_positions: String,
+    pub gradient_cw: Vec<Value>,
+    pub gradient_positions_cw: String,
+    pub col_a: Value,
+    pub col_b: Value,
+    pub base_color: Value,
+    pub active_only: bool,
+    pub pulse: bool,
+    pub pulse_hz: f64,
+    pub ripple_freq: f64,
+    pub ripple_speed: f64,
+    pub ripple_gain: f64,
+    pub ripple_power: f64,
+    pub ripple_origin_x: f64,
+    pub ripple_origin_y: f64,
+    pub ripple_fade: f64,
+    pub specular_halo: bool,
+}
+
+impl Look {
+    /// Chrome overlay + window plugin load.
+    pub fn draws(&self) -> bool {
+        effect_draws(&self.effect)
+    }
+
+    pub fn to_map(&self) -> Map<String, Value> {
+        let mut out = Map::new();
+        out.insert("effect".into(), Value::String(self.effect.clone()));
+        out.insert("borderSize".into(), schema::num(self.border_size as f64));
+        out.insert("shimmer".into(), Value::Bool(self.shimmer));
+        out.insert("shimmerHz".into(), schema::num(self.shimmer_hz));
+        out.insert("shimmerDeg".into(), schema::num(self.shimmer_deg as f64));
+        out.insert("shimmerScaleMin".into(), schema::num(self.shimmer_scale_min));
+        out.insert("shimmerScaleMax".into(), schema::num(self.shimmer_scale_max));
+        out.insert("pinDeg".into(), schema::num(self.pin_deg as f64));
+        out.insert("angleOffset".into(), schema::num(self.angle_offset as f64));
+        out.insert("lobe".into(), schema::num(self.lobe));
+        out.insert("mirror".into(), Value::Bool(self.mirror));
+        out.insert("gradient".into(), Value::Array(self.gradient.clone()));
+        out.insert("gradientPositions".into(), Value::String(self.gradient_positions.clone()));
+        out.insert("gradientCw".into(), Value::Array(self.gradient_cw.clone()));
+        out.insert("gradientPositionsCw".into(), Value::String(self.gradient_positions_cw.clone()));
+        out.insert("colA".into(), self.col_a.clone());
+        out.insert("colB".into(), self.col_b.clone());
+        out.insert("baseColor".into(), self.base_color.clone());
+        out.insert("activeOnly".into(), Value::Bool(self.active_only));
+        out.insert("pulse".into(), Value::Bool(self.pulse));
+        out.insert("pulseHz".into(), schema::num(self.pulse_hz));
+        out.insert("rippleFreq".into(), schema::num(self.ripple_freq));
+        out.insert("rippleSpeed".into(), schema::num(self.ripple_speed));
+        out.insert("rippleGain".into(), schema::num(self.ripple_gain));
+        out.insert("ripplePower".into(), schema::num(self.ripple_power));
+        out.insert("rippleOriginX".into(), schema::num(self.ripple_origin_x));
+        out.insert("rippleOriginY".into(), schema::num(self.ripple_origin_y));
+        out.insert("rippleFade".into(), schema::num(self.ripple_fade));
+        out.insert("specularHalo".into(), Value::Bool(self.specular_halo));
+        out
+    }
+
+    pub fn to_value(&self) -> Value {
+        Value::Object(self.to_map())
+    }
+
+    fn from_map(m: Map<String, Value>) -> Self {
+        fn b(m: &Map<String, Value>, k: &str, d: bool) -> bool {
+            m.get(k).and_then(Value::as_bool).unwrap_or(d)
+        }
+        fn i(m: &Map<String, Value>, k: &str, d: i64) -> i64 {
+            m.get(k).and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))).unwrap_or(d)
+        }
+        fn f(m: &Map<String, Value>, k: &str, d: f64) -> f64 {
+            m.get(k).and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|n| n as f64))).unwrap_or(d)
+        }
+        fn s(m: &Map<String, Value>, k: &str, d: &str) -> String {
+            match m.get(k) {
+                Some(Value::String(v)) => v.clone(),
+                _ => d.to_string(),
+            }
+        }
+        fn list(m: &Map<String, Value>, k: &str) -> Vec<Value> {
+            m.get(k).map(color::as_list).unwrap_or_default()
+        }
+        fn val(m: &Map<String, Value>, k: &str, d: &str) -> Value {
+            m.get(k).cloned().unwrap_or_else(|| Value::String(d.into()))
+        }
+        Self {
+            effect: s(&m, "effect", schema::DEFAULT_EFFECT),
+            border_size: i(&m, "borderSize", 2),
+            shimmer: b(&m, "shimmer", true),
+            shimmer_hz: f(&m, "shimmerHz", 0.28),
+            shimmer_deg: i(&m, "shimmerDeg", 22),
+            shimmer_scale_min: f(&m, "shimmerScaleMin", 0.8),
+            shimmer_scale_max: f(&m, "shimmerScaleMax", 1.4),
+            pin_deg: i(&m, "pinDeg", 120),
+            angle_offset: i(&m, "angleOffset", 0),
+            lobe: f(&m, "lobe", 0.16),
+            mirror: b(&m, "mirror", true),
+            gradient: list(&m, "gradient"),
+            gradient_positions: s(&m, "gradientPositions", "0 99"),
+            gradient_cw: list(&m, "gradientCw"),
+            gradient_positions_cw: s(&m, "gradientPositionsCw", "0 22 50 100"),
+            col_a: val(&m, "colA", "rgba(f7ffffee)"),
+            col_b: val(&m, "colB", "rgba(0a3f4700)"),
+            base_color: val(&m, "baseColor", "rgba(0a3f47dd)"),
+            active_only: b(&m, "activeOnly", true),
+            pulse: b(&m, "pulse", false),
+            pulse_hz: f(&m, "pulseHz", 0.4),
+            ripple_freq: f(&m, "rippleFreq", 0.025),
+            ripple_speed: f(&m, "rippleSpeed", 2.0),
+            ripple_gain: f(&m, "rippleGain", 0.85),
+            ripple_power: f(&m, "ripplePower", 8.0),
+            ripple_origin_x: f(&m, "rippleOriginX", 0.5),
+            ripple_origin_y: f(&m, "rippleOriginY", 0.5),
+            ripple_fade: f(&m, "rippleFade", 0.0),
+            specular_halo: b(&m, "specularHalo", false),
+        }
+    }
+}
 
 /// Warnings from coercion, in the same words `qml/Look.js` prints:
 /// `look: <key>: <why>, keeping default`.
@@ -187,7 +322,7 @@ pub fn resolve(entry: &Value, base: &Base) -> (Look, Warnings) {
         let s = as_position_string(&out[key]);
         out.insert(key.into(), s);
     }
-    (out, warn)
+    (Look::from_map(out), warn)
 }
 
 /// Convenience: resolve against the shared defaults.
@@ -213,8 +348,8 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn merge(v: Value) -> Look {
-        resolve_shared(&v).0
+    fn merge(v: Value) -> Map<String, Value> {
+        resolve_shared(&v).0.to_map()
     }
 
     #[test]
@@ -294,34 +429,41 @@ mod tests {
 
     #[test]
     fn typed_coercion() {
-        let (l, w) = resolve_shared(&json!({"pulse": "false"}));
+        let (look, w) = resolve_shared(&json!({"pulse": "false"}));
+        let l = look.to_map();
         assert_eq!(l["pulse"], false);
         assert!(w.mentions("pulse"));
 
-        let (l, w) = resolve_shared(&json!({"mirror": "false", "shimmer": "false"}));
+        let (look, w) = resolve_shared(&json!({"mirror": "false", "shimmer": "false"}));
+        let l = look.to_map();
         assert_eq!(l["mirror"], true);
         assert_eq!(l["shimmer"], true);
         assert!(w.mentions("mirror") && w.mentions("shimmer"));
 
-        let (l, w) = resolve_shared(&json!({"shimmer": false, "pulse": false, "mirror": false, "specularHalo": false}));
+        let (look, w) =
+            resolve_shared(&json!({"shimmer": false, "pulse": false, "mirror": false, "specularHalo": false}));
+        let l = look.to_map();
         assert_eq!(l["shimmer"], false);
         assert_eq!(l["mirror"], false);
         assert!(w.0.is_empty());
 
-        let (l, _) = resolve_shared(&json!({"pulse": 1, "mirror": 0, "shimmer": 0.0, "specularHalo": 1.0}));
+        let (look, _) = resolve_shared(&json!({"pulse": 1, "mirror": 0, "shimmer": 0.0, "specularHalo": 1.0}));
+        let l = look.to_map();
         assert_eq!(l["pulse"], true);
         assert_eq!(l["mirror"], false);
         assert_eq!(l["shimmer"], false);
         assert_eq!(l["specularHalo"], true);
 
-        let (l, w) = resolve_shared(&json!({"borderSize": "inf", "lobe": [], "shimmerHz": {}, "pulseHz": ""}));
+        let (look, w) = resolve_shared(&json!({"borderSize": "inf", "lobe": [], "shimmerHz": {}, "pulseHz": ""}));
+        let l = look.to_map();
         assert_eq!(l["borderSize"], 2);
         assert_eq!(l["lobe"], 0.16);
         assert_eq!(l["shimmerHz"], 0.28);
         assert_eq!(l["pulseHz"], 0.4);
         assert!(w.mentions("borderSize") && w.mentions("lobe") && w.mentions("shimmerHz") && w.mentions("pulseHz"));
 
-        let (l, w) = resolve_shared(&json!({"lobe": true, "pulseHz": false}));
+        let (look, w) = resolve_shared(&json!({"lobe": true, "pulseHz": false}));
+        let l = look.to_map();
         assert_eq!(l["lobe"], 0.16);
         assert_eq!(l["pulseHz"], 0.4);
         assert!(w.mentions("lobe"));
@@ -338,7 +480,7 @@ mod tests {
         assert_eq!(merge(json!({"borderSize": 0}))["borderSize"], 0);
 
         let (neg, w) = resolve_shared(&json!({"borderSize": -1}));
-        assert_eq!(neg["borderSize"], 2);
+        assert_eq!(neg.border_size, 2);
         assert!(w.mentions("borderSize"));
 
         let h = merge(json!({"pinDeg": 120.7, "angleOffset": 10.7, "shimmerDeg": 20.2}));
@@ -377,25 +519,25 @@ mod tests {
         let base = Base::with(preset);
 
         let (l, _) = resolve(&json!({}), &base);
-        assert_eq!(l["baseColor"], "rgba(11223344)");
-        assert_eq!(l["pinDeg"], 45);
-        assert_eq!(l["borderSize"], 2, "null in the preset falls through to the shared default");
-        assert_eq!(l["mirror"], true);
+        assert_eq!(l.base_color, "rgba(11223344)");
+        assert_eq!(l.pin_deg, 45);
+        assert_eq!(l.border_size, 2, "null in the preset falls through to the shared default");
+        assert!(l.mirror);
 
         let (l, w) = resolve(&json!({"pinDeg": 10, "baseColor": "junk", "lobe": "bad"}), &base);
-        assert_eq!(l["pinDeg"], 10, "user key wins over preset");
-        assert_eq!(l["baseColor"], "junk", "colors are not validated at merge time");
-        assert_eq!(l["lobe"], 0.16, "invalid user value keeps the base value");
+        assert_eq!(l.pin_deg, 10, "user key wins over preset");
+        assert_eq!(l.base_color, "junk", "colors are not validated at merge time");
+        assert_eq!(l.lobe, 0.16, "invalid user value keeps the base value");
         assert!(w.mentions("lobe"));
 
         let mut fx = Map::new();
         fx.insert("effect".into(), json!("ripple"));
         fx.insert("rippleGain".into(), json!(0.5));
         let (l, _) = resolve(&json!({}), &Base::with(fx.clone()));
-        assert_eq!(l["effect"], "ripple", "omitted effect falls through to the preset");
-        assert_eq!(l["rippleGain"], 0.5);
+        assert_eq!(l.effect, "ripple", "omitted effect falls through to the preset");
+        assert_eq!(l.ripple_gain, 0.5);
         let (l, _) = resolve(&json!({"effect": "shiny"}), &Base::with(fx));
-        assert_eq!(l["effect"], "shiny", "user effect wins over the preset");
+        assert_eq!(l.effect, "shiny", "user effect wins over the preset");
     }
 
     #[test]

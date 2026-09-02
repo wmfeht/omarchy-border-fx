@@ -35,6 +35,17 @@ pub mod protocol {
         format!("STATUS={status}")
     }
 
+    /// Last `STATUS=` value in `text`. The chrome keys off this, not a substring.
+    pub fn parse_status(text: &str) -> Option<&str> {
+        text.lines().rev().find_map(|l| l.strip_prefix("STATUS=")).map(|s| s.trim_end_matches('\r'))
+    }
+
+    pub const ENSURE_READY: &[&str] = &["ok", "reuse", "hyprpm"];
+
+    pub fn ensure_ready(text: &str) -> bool {
+        parse_status(text).is_some_and(|s| ENSURE_READY.contains(&s))
+    }
+
     /// Parse a `LOOK=` line back (used by tests and `status`).
     pub fn parse_look(text: &str) -> Option<Value> {
         text.lines().find_map(|l| l.strip_prefix("LOOK=")).and_then(|j| serde_json::from_str(j).ok())
@@ -52,6 +63,11 @@ pub mod protocol {
             assert_eq!(parse_look(&text), Some(l));
             assert!(text.contains("\nSTATUS=ok\n"));
             assert_eq!(parse_look("STATUS=ok"), None);
+            assert_eq!(parse_status(&text), Some("ok"));
+            assert!(ensure_ready(&text));
+            assert!(!ensure_ready("STATUS=ok\nSTATUS=load-failed\n"));
+            assert!(!ensure_ready("STATUS=okay"));
+            assert_eq!(parse_status("STATUS=no-cli"), Some("no-cli"));
         }
     }
 }

@@ -10,11 +10,22 @@
 // clamped) as one line of compact JSON. The chrome adopts it as authoritative
 // so windows and chrome render the same numbers.
 
+function lastStatus(text) {
+  var lines = String(text || "").split("\n")
+  var last = ""
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i]
+    if (line.length && line.charAt(line.length - 1) === "\r")
+      line = line.substring(0, line.length - 1)
+    if (line.indexOf("STATUS=") === 0)
+      last = line.substring(7)
+  }
+  return last
+}
+
 function isEnsureSuccessStatus(text) {
-  var t = String(text || "")
-  return t.indexOf("STATUS=ok") !== -1
-      || t.indexOf("STATUS=hyprpm") !== -1
-      || t.indexOf("STATUS=reuse") !== -1
+  var s = lastStatus(text)
+  return s === "ok" || s === "hyprpm" || s === "reuse"
 }
 
 function parseLook(text) {

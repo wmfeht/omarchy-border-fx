@@ -212,13 +212,12 @@ function decideHostSync(s) {
   var stale = hasOverlay && overlayRevIsStale(s.existingOverlayRev, s.currentOverlayRev)
   var dead = s.hostDestroyed === true || s.hostAlive === false
   var disable = s.disable === true
-  // effectIsShiny is the "this effect draws an overlay" flag (shiny or ripple).
-  var shiny = s.effectIsShiny === true && !disable
+  var draws = s.effectDraws === true && !disable
   var showing = false
   if (!dead && !disable)
     showing = hostShowing(host)
 
-  var want = shiny && showing && !!card
+  var want = draws && showing && !!card
 
   if (!want) {
     if (already || hasOverlay)

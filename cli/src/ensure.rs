@@ -59,8 +59,6 @@ pub struct Outcome {
 
 struct Ensure<'a> {
     ctx: &'a Ctx<'a>,
-    entry: &'a Value,
-    base: &'a Base,
     id: Identity,
     look: Look,
 }
@@ -79,10 +77,22 @@ impl Ensure<'_> {
         (self.ctx.notify)(msg);
     }
 
-    fn apply(&mut self, o: ApplyOpts) {
-        match apply::run(self.ctx, self.entry, self.base, o) {
-            Ok(a) => self.look = a.look,
-            Err(e) => self.log(&format!("could not write {}: {e}", self.p().lua_file.display())),
+    fn persist(&self, o: ApplyOpts) {
+        if let Err(e) = apply::persist(self.ctx, &self.look, o) {
+            self.log(&format!("could not write {}: {e}", self.p().lua_file.display()));
+        }
+    }
+
+    fn presence(&self) -> Presence {
+        let listed = self.listed();
+        let path = self.loaded_so();
+        match (listed, path) {
+            (true, None) => Presence::ListedUnknown,
+            (true, Some(p)) if p == self.p().session_so => Presence::Session,
+            (true, Some(p)) if p.to_string_lossy().contains("hyprpm") => Presence::Hyprpm,
+            (true, Some(p)) => Presence::Other(p),
+            (false, Some(p)) => Presence::MappedNotListed(p),
+            (false, None) => Presence::Gone,
         }
     }
 
@@ -181,96 +191,103 @@ impl Ensure<'_> {
     }
 
     fn run(mut self) -> Outcome {
-        let status = self.run_inner();
-        Outcome { status, look: self.look }
+        let plan = self.plan();
+        self.persist(ApplyOpts { eval: plan.eval, disabled: plan.disabled, ..Default::default() });
+        Outcome { status: plan.status, look: self.look }
     }
 
-    fn run_inner(&mut self) -> Status {
-        let p = self.p().clone();
+    fn plan(&mut self) -> Plan {
         if !self.ctx.hc.available() {
             self.log("hyprctl not found; chrome only");
-            return Status::NoHyprctl;
+            return Plan { status: Status::NoHyprctl, disabled: false, eval: false };
         }
 
-        let effect = look::entry_effect(self.entry);
-        if !look::effect_draws(&effect) {
+        if !self.look.draws() {
             self.log("effect does not load the window plugin; writing disabled Lua, skipping compile/load");
             self.ensure_require();
-            self.apply(ApplyOpts { disabled: true, ..Default::default() });
-            if self.loaded_so().as_deref() == Some(p.session_so.as_path()) {
+            if self.loaded_so().as_deref() == Some(self.p().session_so.as_path()) {
                 self.log("unloading leftover session plugin");
                 let _ = self.unload_session_so();
             }
-            if self.listed() {
-                self.apply(ApplyOpts { disabled: true, eval: true, ..Default::default() });
-            }
-            return Status::Skipped;
+            return Plan { status: Status::Skipped, disabled: true, eval: self.listed() };
         }
 
         self.ensure_require();
-        self.apply(ApplyOpts::default());
-
-        if self.listed() {
-            let Some(path) = self.loaded_so() else {
+        match self.presence() {
+            Presence::ListedUnknown => {
                 self.notify("Window borders are already active.");
-                self.apply(ApplyOpts { eval: true, ..Default::default() });
-                return Status::Reuse;
-            };
-            if path == p.session_so {
-                if !self.fresh(&p.session_so) && self.build_so() {
-                    if self.unload_session_so() {
-                        abi::delete_session_so(self.ctx.hc, &p);
-                        self.copy_session_so(&p.build_so());
-                        if let Err(s) = self.load_or_fail() {
-                            return s;
-                        }
-                    } else {
-                        self.notify("Window borders couldn't be replaced while running, so the current version stays active. Log out and back in to finish the update.");
-                        self.apply(ApplyOpts { eval: true, ..Default::default() });
-                        return Status::Reuse;
-                    }
+                Plan { status: Status::Reuse, disabled: false, eval: true }
+            }
+            Presence::Session => self.plan_session(),
+            Presence::Hyprpm => {
+                self.notify(
+                    "Window borders are already loaded by hyprpm. To let Border FX manage them instead, run: hyprpm disable hypr-shiny-border",
+                );
+                Plan { status: Status::Hyprpm, disabled: false, eval: true }
+            }
+            Presence::Other(path) | Presence::MappedNotListed(path) => {
+                self.notify(&format!("Window borders are already loaded from {}.", path.display()));
+                Plan { status: Status::Reuse, disabled: false, eval: true }
+            }
+            Presence::Gone => self.plan_cold_load(),
+        }
+    }
+
+    fn plan_session(&self) -> Plan {
+        let p = self.p().clone();
+        if !self.fresh(&p.session_so) && self.build_so() {
+            if self.unload_session_so() {
+                abi::delete_session_so(self.ctx.hc, &p);
+                self.copy_session_so(&p.build_so());
+                if let Err(s) = self.load_or_fail() {
+                    return Plan { status: s, disabled: false, eval: false };
                 }
-                self.apply(ApplyOpts { eval: true, ..Default::default() });
-                return Status::Ok;
+            } else {
+                self.notify("Window borders couldn't be replaced while running, so the current version stays active. Log out and back in to finish the update.");
+                return Plan { status: Status::Reuse, disabled: false, eval: true };
             }
-            if path.to_string_lossy().contains("hyprpm") {
-                self.notify("Window borders are already loaded by hyprpm. To let Border FX manage them instead, run: hyprpm disable hypr-shiny-border");
-                self.apply(ApplyOpts { eval: true, ..Default::default() });
-                return Status::Hyprpm;
-            }
-            self.notify(&format!("Window borders are already loaded from {}.", path.display()));
-            self.apply(ApplyOpts { eval: true, ..Default::default() });
-            return Status::Reuse;
         }
+        Plan { status: Status::Ok, disabled: false, eval: true }
+    }
 
-        if let Some(path) = self.loaded_so() {
-            self.notify(&format!("Window borders are already loaded from {}.", path.display()));
-            self.apply(ApplyOpts { eval: true, ..Default::default() });
-            return Status::Reuse;
-        }
-
+    fn plan_cold_load(&self) -> Plan {
+        let p = self.p().clone();
         if p.session_so.is_file() && !self.fresh(&p.session_so) {
             abi::delete_session_so(self.ctx.hc, &p);
         }
 
         let candidates = [p.session_so.clone(), p.build_so(), p.tree_so()];
-        let mut built = candidates.iter().find(|so| self.fresh(so)).cloned();
-        if built.is_none() {
-            if !self.build_so() {
-                return Status::BuildFailed;
-            }
-            built = Some(p.build_so());
-        }
-        let built = built.expect("set above");
+        let built = candidates
+            .iter()
+            .find(|so| self.fresh(so))
+            .cloned()
+            .or_else(|| if self.build_so() { Some(p.build_so()) } else { None });
+        let Some(built) = built else {
+            return Plan { status: Status::BuildFailed, disabled: false, eval: false };
+        };
         if built != p.session_so {
             self.copy_session_so(&built);
         }
         if let Err(s) = self.load_or_fail() {
-            return s;
+            return Plan { status: s, disabled: false, eval: false };
         }
-        self.apply(ApplyOpts { eval: true, ..Default::default() });
-        Status::Ok
+        Plan { status: Status::Ok, disabled: false, eval: true }
     }
+}
+
+enum Presence {
+    Gone,
+    Session,
+    Hyprpm,
+    Other(PathBuf),
+    ListedUnknown,
+    MappedNotListed(PathBuf),
+}
+
+struct Plan {
+    status: Status,
+    disabled: bool,
+    eval: bool,
 }
 
 /// Bumps the ensure generation when dropped, lock or not, like the bash
@@ -292,7 +309,7 @@ pub fn run(ctx: &Ctx, entry: &Value, base: &Base) -> Outcome {
     let _bump = GenBump(&p.session_gen);
     let (look, _) = look::resolve(entry, base);
     let id = abi::identity(ctx.hc);
-    Ensure { ctx, entry, base, id, look }.run()
+    Ensure { ctx, id, look }.run()
 }
 
 #[cfg(test)]
@@ -373,7 +390,7 @@ mod tests {
         let _lock = SessionLock::acquire(&p.session_lock).unwrap();
         let _bump = GenBump(&p.session_gen);
         let (look, _) = look::resolve(entry, base);
-        Ensure { ctx, entry, base, id, look }.run()
+        Ensure { ctx, id, look }.run()
     }
 
     fn lua_disabled(t: &str) -> bool {
@@ -390,8 +407,9 @@ mod tests {
         let out = h.run(&hc, json!({}));
         assert_eq!(out.status, Status::NoHyprctl);
         assert!(!out.status.is_success());
-        assert_eq!(out.look["pinDeg"], 120, "look is still resolved for chrome");
-        assert!(!h.paths.lua_file.exists());
+        assert_eq!(out.look.pin_deg, 120, "look is still resolved for chrome");
+        assert!(lua_enabled(&h.lua()), "look is still written so a later compositor start can pick it up");
+        assert!(!hc.called("eval"));
     }
 
     #[test]

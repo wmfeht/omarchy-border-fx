@@ -50,13 +50,15 @@ function checkControlPlaneShape() {
   check(launcher.indexOf("--target-dir") !== -1 && launcher.indexOf("XDG_CACHE_HOME") !== -1, "launcher builds outside the plugin folder")
   check(launcher.indexOf("flock") !== -1, "launcher serializes concurrent builds")
   check(launcher.indexOf("STATUS=no-cli") !== -1, "launcher fails closed without a toolchain")
+  check(launcher.indexOf("STATUS=cli-build-failed") !== -1, "launcher reports cargo failure separately from a missing toolchain")
   check(launcher.indexOf("BORDER_FX_ROOT") !== -1, "launcher tells the CLI where the clone root is")
   check(launcher.indexOf("--bootstrap") !== -1, "launcher can pre-build without running a command")
 
   const leftovers = fs.readdirSync(path.join(root, "scripts")).filter((n) => n.endsWith(".sh"))
   check(leftovers.length === 0, "no bash control-plane scripts remain in scripts/: " + leftovers.join(","))
   check(fs.existsSync(path.join(root, "cli/Cargo.lock")), "cli/Cargo.lock is committed for --locked builds")
-  check(!fs.existsSync(path.join(root, "cli/target")), "cli/target is not in the tree")
+  const trackedTarget = spawnSync("git", ["-C", root, "ls-files", "cli/target"], { encoding: "utf8" })
+  check((trackedTarget.stdout || "").trim() === "", "cli/target is not tracked")
 
   const pluginctl = read("hypr/scripts/pluginctl.sh")
   check(pluginctl.indexOf('dest="/tmp/hypr-shiny-border-$$.so"') === -1, "pluginctl does not load from /tmp/hypr-shiny-border-$$.so")

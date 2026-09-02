@@ -41,45 +41,59 @@ pub struct Applied {
     pub status: ApplyStatus,
 }
 
-/// Resolve `entry` and render the lua text without touching disk.
-pub fn render(ctx: &Ctx, entry: &Value, base: &Base, o: ApplyOpts) -> (Look, Warnings, String) {
-    let (look, warnings) = look::resolve(entry, base);
+fn render_lua(ctx: &Ctx, look: &Look, o: ApplyOpts) -> String {
     let p = ctx.paths;
-    let text = lua::render(
-        &look,
+    let so = p.session_so.to_string_lossy();
+    lua::render(
+        look,
         &LuaOpts {
             plugin_id: &p.plugin_id,
             plugin_name: &p.plugin_name,
-            session_so: &p.session_so.to_string_lossy(),
+            session_so: &so,
             load: !o.disabled && !o.no_load,
             enabled: !o.disabled,
         },
-    );
+    )
+}
+
+/// Resolve `entry` and render the lua text without touching disk.
+pub fn render(ctx: &Ctx, entry: &Value, base: &Base, o: ApplyOpts) -> (Look, Warnings, String) {
+    let (look, warnings) = look::resolve(entry, base);
+    let text = render_lua(ctx, &look, o);
     (look, warnings, text)
+}
+
+/// Write already-resolved lua. Eval iff `o.eval` and the plugin is listed.
+pub fn persist(ctx: &Ctx, look: &Look, o: ApplyOpts) -> std::io::Result<ApplyStatus> {
+    let p = ctx.paths;
+    let text = render_lua(ctx, look, o);
+    session::write_atomic(&p.lua_file, text.as_bytes())?;
+    if !o.eval {
+        return Ok(ApplyStatus::Written);
+    }
+    if !ctx.hc.available() {
+        eprintln!("apply: hyprctl not found; wrote {}", p.lua_file.display());
+        return Ok(ApplyStatus::Written);
+    }
+    if !ctx.hc.plugin_listed(&p.plugin_name) {
+        eprintln!("apply: {} not loaded; skipped eval (wrote {})", p.plugin_name, p.lua_file.display());
+        return Ok(ApplyStatus::Written);
+    }
+    if ctx.hc.eval(&lua::dofile_expr(&p.lua_file.to_string_lossy())) {
+        Ok(ApplyStatus::Applied)
+    } else {
+        eprintln!("apply: hyprctl eval failed; wrote {}", p.lua_file.display());
+        Ok(ApplyStatus::Written)
+    }
 }
 
 /// Write the lua and, when asked, eval it in the running compositor.
 pub fn run(ctx: &Ctx, entry: &Value, base: &Base, o: ApplyOpts) -> std::io::Result<Applied> {
-    let (look, warnings, text) = render(ctx, entry, base, o);
+    let (look, warnings, _) = render(ctx, entry, base, o);
     for w in &warnings.0 {
         eprintln!("{w}");
     }
-    let p = ctx.paths;
-    session::write_atomic(&p.lua_file, text.as_bytes())?;
-    let mut status = ApplyStatus::Written;
-    if o.eval {
-        if !ctx.hc.available() {
-            eprintln!("apply: hyprctl not found; wrote {}", p.lua_file.display());
-        } else if ctx.hc.plugin_listed(&p.plugin_name) {
-            if ctx.hc.eval(&lua::dofile_expr(&p.lua_file.to_string_lossy())) {
-                status = ApplyStatus::Applied;
-            } else {
-                eprintln!("apply: hyprctl eval failed; wrote {}", p.lua_file.display());
-            }
-        } else {
-            eprintln!("apply: {} not loaded; skipped eval (wrote {})", p.plugin_name, p.lua_file.display());
-        }
-    }
+    let status = persist(ctx, &look, o)?;
     Ok(Applied { look, warnings, status })
 }
 
@@ -110,7 +124,7 @@ mod tests {
         let r =
             run(&ctx, &json!({"pinDeg": 77}), &Base::shared(), ApplyOpts { eval: true, ..Default::default() }).unwrap();
         assert_eq!(r.status, ApplyStatus::Applied);
-        assert_eq!(r.look["pinDeg"], 77);
+        assert_eq!(r.look.pin_deg, 77);
         let lua = fs::read_to_string(&p.lua_file).unwrap();
         assert!(lua.contains("pin_deg      = 77"));
         assert!(lua.contains("SHINY_LOAD = true"));
