@@ -5,9 +5,11 @@ draws a rounded-rect ring around Hyprland windows and Omarchy shell chrome
 (panels, notification toasts) and animates it with one of two renderers:
 `shiny`, a directional comet highlight, or `ripple`, a traveling crest of
 light. One configuration drives both surfaces: change the look once in
-`shell.json` and windows and chrome update together.
+`shell.json` and windows and chrome update together. Every stock Omarchy
+theme ships an opinionated preset, so the ring takes its colors, light
+direction, and motion from the theme until you set keys of your own.
 
-> 0.1.0. Look keys and defaults may still change. After a Hyprland upgrade,
+> 0.2.0. Look keys and defaults may still change. After a Hyprland upgrade,
 > re-enable so the window ring rebuilds against the new compositor. If you
 > remove the plugin while the shell is down, leftover files stay; see
 > [Remove](#remove).
@@ -22,8 +24,14 @@ omarchy plugin add https://github.com/wmfeht/omarchy-border-fx.git --enable --ye
 the plugin is enabled. `--enable` starts the service, which overlays the
 shell chrome and builds and loads the Hyprland window ring. Everything
 runs at the user level; no sudo required. The baked shaders ship in the
-repo, so the chrome effect needs no build tools; the window ring compiles
-on your machine against the installed Hyprland headers.
+repo, so the chrome effect needs no build tools; the window ring and its
+small controller compile on your machine on first enable, into
+`~/.cache/omarchy-border-fx`.
+
+The first enable takes 20 seconds or so while everything compiles — longer
+on slow hardware. Panels and toasts light up right away; the window ring
+appears once the build finishes. Later enables reuse the cached build and
+draw immediately.
 
 Enable also writes `~/.config/hypr/border-fx.lua` and, if it isn't already
 there, appends this to `~/.config/hypr/hyprland.lua`:
@@ -43,19 +51,39 @@ omarchy plugin disable wmfeht.border-fx   # both off; clone kept
 omarchy plugin update wmfeht.border-fx --yes
 ```
 
+### Recommended Hyprland settings
+
+The ring looks best on its own, without Hyprland's stock border painting
+under it, and with slightly rounded corners. In
+`~/.config/hypr/looknfeel.lua`:
+
+```lua
+hl.config({
+  general = { border_size = 0 },
+  decoration = { rounding = 8 }, -- anywhere in 5–10 looks right
+})
+```
+
+The plugin reserves its own padding, so `border_size = 0` does not shift
+the layout; it only turns the stock border off.
+
 ### If the window ring fails to build
 
 The window ring compiles on your machine, against the running compositor.
-The build needs three packages, all in the Arch repos:
+The build needs four packages, all in the Arch repos:
 
 - `gcc`: the C++ compiler, same toolchain that builds Hyprland itself
 - `pkgconf`: provides `pkg-config`, which locates the headers and libraries
 - `hyprland`: ships its headers in `/usr/include/hyprland` and pulls in
   every library the plugin links against
+- `rust`: builds the plugin's small controller. `rustup` works too.
 
 ```sh
-sudo pacman -S --needed gcc pkgconf hyprland
+sudo pacman -S --needed gcc pkgconf hyprland rust
 ```
+
+Without `rust` you get a notification and the chrome effect only; enable
+the plugin again after installing it.
 
 The headers must match the running compositor. After a Hyprland upgrade,
 re-enable the plugin or run `omarchy restart shell`: the build check
@@ -186,16 +214,29 @@ A color list (`gradient`, `gradientCw`) may be a JSON array of those
 strings, or a Hyprland-style object `{ "colors": [ … ] }`. At most 8
 stops are used; extra colors are dropped.
 
-## Defaults
+## Theme presets and defaults
 
-Missing or `null` keys give you the shared look: light pinned at 120°,
-shimmer on, a 2-stop light glint, and a wrapping stroke. Windows and
-chrome share these defaults, so first paint matches on both. An empty
-`gradient` array is a real override: it falls back to the two-stop
-`colA`/`colB` rather than the default ramp.
+Missing or `null` keys give you the current Omarchy theme's stock look
+(every stock theme ships one), otherwise the shared look: light pinned at
+120°, shimmer on, a 2-stop light glint, and a wrapping stroke. Keys you
+set on the `plugins[]` entry still win, and they stay put when you change
+themes — omit a key to follow the theme. Windows and chrome share the
+resolved look, so first paint matches on both.
 
-All keys at their shared defaults (equivalent to
-`{ "id": "wmfeht.border-fx" }`):
+Each stock preset is a five-stop ramp from that theme's own palette with
+a wrap stroke in its `selection` color, and a light direction, mirror,
+lobe, and motion picked to suit its wallpapers. Most are `shiny`; a few
+differ on purpose: Retro-82 uses `ripple` (record grooves), Lumon and
+Flexoki Light pulse instead of shimmering, Vantablack is static, and the
+light themes (Catppuccin Latte, Flexoki Light, Lupine, Rosé Pine, White)
+lead with their accent or ink colors so the ring reads on pale windows.
+Set `effect` (or any other key) on your entry to opt out of a preset's
+choice while keeping the rest.
+An empty `gradient` array is a real override: it falls back to the
+two-stop `colA`/`colB` rather than the default ramp.
+
+All keys at their shared defaults — the floor under a theme preset, and
+what you get on a theme we have not tuned yet:
 
 ```json
 {
@@ -267,12 +308,15 @@ defaults (not the shiny defaults).
 
 1. The plugin reads the `plugins[]` entry whose `id` is
    `wmfeht.border-fx`.
-2. `effect` empty or omitted means `"shiny"`.
+2. `effect` empty means `"shiny"`. Omitted `effect` uses the theme
+   preset if we ship one, otherwise `"shiny"`.
 3. Known look keys are picked from the entry; `id` and unknown fields are
    ignored.
 4. If the entry has a nested object named after the effect, its look keys
    overlay the top level. Nested wins.
-5. Any still-missing key gets the shared default above.
+5. Any still-missing key comes from the current Omarchy theme's stock
+   preset if we ship one, otherwise the shared default above. Every stock
+   Omarchy theme ships a preset; user-made themes get the shared default.
 6. `gradient` and `gradientCw` are normalized to arrays.
 
 `id` and `enabled` are not look keys. `omarchy plugin disable` is the only
@@ -386,9 +430,9 @@ If the shell was not running during the remove, the Hyprland copy can stay.
 Purge it:
 
 ```sh
-~/.config/omarchy/plugins/wmfeht.border-fx/scripts/hypr-teardown.sh --purge
+~/.config/omarchy/plugins/wmfeht.border-fx/scripts/border-fx teardown --purge
 # or, from a checkout of this repo:
-bash scripts/hypr-teardown.sh --purge
+bash scripts/border-fx teardown --purge
 ```
 
 `--purge` deletes the session plugin

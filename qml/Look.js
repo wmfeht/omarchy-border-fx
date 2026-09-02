@@ -2,9 +2,17 @@
 
 // Shared look: shell.json camelCase + Hyprland rgba() on the wmfeht.border-fx
 // plugins[] entry is the source of truth. `effect` selects the renderer
-// (`shiny` or `ripple`). Missing look keys mean DEFAULTS below (pinned 120°,
-// shimmer, 2-stop light glint, wrap stroke). PLUGIN_INIT registers the same
-// numbers so first paint matches chrome.
+// (`shiny` or `ripple`). Missing look keys mean the optional `base` (the
+// CLI's BASE= theme floor), else DEFAULTS below (pinned 120°, shimmer,
+// 2-stop light glint, wrap stroke). PLUGIN_INIT registers the same numbers
+// so first paint matches chrome before BASE= arrives.
+//
+// The Rust control plane (cli/src/look/) is the authoritative resolver.
+// Chrome re-merges the live plugins[] entry against BASE= so a key removed
+// from shell.json follows the theme preset again. tests/look.js checks
+// merge() against the shared defaults byte for byte with the CLI. Keep
+// DEFAULTS, the clamp tables, and coerceKey in step with
+// cli/src/look/schema.rs and mod.rs.
 
 var PLUGIN_ID = "wmfeht.border-fx"
 var LEGACY_PLUGIN_ID = "qs.border-fx"
@@ -97,8 +105,19 @@ function pickLookFields(src) {
   return out
 }
 
+// Value the preset/shared floor uses for `key`. Null / missing in `base`
+// falls through to DEFAULTS, matching cli/src/look/Base::value_for.
+function floorValue(base, key) {
+  if (isPlainObject(base)
+      && Object.prototype.hasOwnProperty.call(base, key)
+      && base[key] !== undefined
+      && base[key] !== null)
+    return cloneValue(base[key])
+  return cloneValue(DEFAULTS[key])
+}
+
 // Hyprland CIntValue / CFloatValue ranges. Applied in merge so chrome and
-// look-apply emit the same numbers. borderSize < 0 is illegal in the look
+// border-fx apply emit the same numbers. borderSize < 0 is illegal in the look
 // document (keep default) — not a chrome-hide / follow-stock sentinel.
 var BOOL_KEYS = {
   shimmer: true,
@@ -215,9 +234,15 @@ function entryFromConfig(config, id) {
   return {}
 }
 
-function merge(entry) {
+function merge(entry, base) {
   var src = isPlainObject(entry) ? entry : {}
-  var effect = normalizeEffect(src.effect)
+  // Omitted effect follows `base` (theme preset). null / "" stay shiny,
+  // matching cli/src/look/resolve.
+  var effect
+  if (!Object.prototype.hasOwnProperty.call(src, "effect") || src.effect === undefined)
+    effect = isPlainObject(base) ? normalizeEffect(base.effect) : DEFAULT_EFFECT
+  else
+    effect = normalizeEffect(src.effect)
   var picked = pickLookFields(src)
   var nested = src[effect]
   if (isPlainObject(nested)) {
@@ -233,10 +258,11 @@ function merge(entry) {
       continue
     if (k === "effect")
       continue
+    var fallback = floorValue(base, k)
     if (Object.prototype.hasOwnProperty.call(picked, k))
-      out[k] = coerceKey(k, picked[k], cloneValue(DEFAULTS[k]))
+      out[k] = coerceKey(k, picked[k], fallback)
     else
-      out[k] = cloneValue(DEFAULTS[k])
+      out[k] = fallback
   }
   out.gradient = asColorList(out.gradient)
   out.gradientCw = asColorList(out.gradientCw)

@@ -97,7 +97,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     }
 
     // First-paint defaults equal qml/Look.js DEFAULTS so chrome and windows match
-    // before look-apply --eval. ARGB packing is rgba(RRGGBBAA) → 0xAARRGGBB.
+    // before border-fx apply --eval. ARGB packing is rgba(RRGGBBAA) → 0xAARRGGBB.
     g_cfg.enabled      = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:enabled", "Master switch", true);
     g_cfg.activeOnly   = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:active_only", "Only the focused window draws the ring / pulses; unfocused keep padding", true);
     g_cfg.pulse        = makeShared<Config::Values::CBoolValue>("plugin:shiny-border:pulse", "Oscillate highlight transparency", false);

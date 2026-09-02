@@ -1,43 +1,59 @@
 # wmfeht.border-fx: Omarchy control plane for shell chrome + Hyprland window ring.
 # qsb is system Qt 6 (/usr/lib/qt6/bin/qsb); do not mise-install a second Qt.
 # Hyprland plugins must be built with the same GCC that built the compositor.
+# The control plane (cli/) is Rust; scripts/border-fx builds it on first use.
 
 min_version = "2025.8.0"
 
 [tools]
 node = "26.7.0"
+rust = "stable"
 
 [tasks.bake]
 description = "Bake every Qt shaders/*.frag into .qsb and inline GLES shiny+ripple into hypr/src/shaders.hpp"
-run = "bash scripts/bake.sh"
+run = "bash dev/bake.sh"
 
 [tasks.reflect]
 description = "Bake, then dump qsb reflection (UBO layout)"
-run = "bash scripts/bake.sh --dump"
+run = "bash dev/bake.sh --dump"
+
+[tasks.cli-build]
+description = "Debug build of the border-fx control plane (cli/)"
+run = "cargo build --manifest-path cli/Cargo.toml"
+
+[tasks.cli-test]
+description = "Rust unit tests for the control plane (look schema, ensure/teardown flows, ABI, shell.json)"
+run = "cargo test --manifest-path cli/Cargo.toml"
+
+[tasks.cli-lint]
+description = "rustfmt --check + clippy on cli/"
+run = "cargo fmt --manifest-path cli/Cargo.toml --check && cargo clippy --manifest-path cli/Cargo.toml --all-targets -- -D warnings"
 
 [tasks.test]
-description = "Compositor-free tests (shimmer, gradient, shared look adapter, session install)"
+description = "Compositor-free tests: Rust unit tests, then shimmer/gradient/look adapter/session install (JS)"
+depends = ["cli-test"]
 run = "node tests/run.js && node tests/look.js && node tests/hypr-session.js"
 
 [tasks.lint]
-description = "qmllint ShinyBorder.qml"
+description = "qmllint ShinyBorder.qml + rustfmt/clippy"
+depends = ["cli-lint"]
 run = "/usr/lib/qt6/bin/qmllint qml/ShinyBorder.qml"
 
 [tasks.check]
-description = "Bake the shader, lint QML, and run JS logic tests"
+description = "Bake the shader, lint QML + Rust, and run all compositor-free tests"
 depends = ["bake", "lint", "test"]
 run = "echo ok"
 
 [tasks.preview]
 description = "Standalone qs window with ShinyBorder on mock cards. Does not touch omarchy-shell."
 depends = ["bake"]
-run = "bash scripts/preview.sh"
+run = "bash dev/preview.sh"
 
 [tasks.smoke]
 description = "Load ShinyBorder in a short-lived qs window; fail only if the shader errors"
 depends = ["bake"]
 env = { SHINY_SMOKE = "1" }
-run = "bash scripts/preview.sh"
+run = "bash dev/preview.sh"
 
 [tasks.test-full]
 description = "JS tests, qs smoke, and Hyprland logic tests"
@@ -45,18 +61,22 @@ depends = ["check"]
 run = "make -C hypr test"
 
 [tasks.install]
-description = "Dev copy into ~/.config/omarchy/plugins/wmfeht.border-fx and enable"
+description = "omarchy plugin remove (if present), then omarchy plugin add this folder and enable"
 depends = ["bake"]
-run = "bash scripts/install.sh"
+run = "bash dev/plugin.sh install"
 
 [tasks.uninstall]
-description = "Disable wmfeht.border-fx, purge the login-session .so, remove the copy"
-run = "bash scripts/uninstall.sh"
+description = "Disable wmfeht.border-fx, purge the login-session .so, omarchy plugin remove"
+run = "bash dev/plugin.sh uninstall"
 
 [tasks.reinstall]
-description = "Remove wmfeht.border-fx, then omarchy plugin add this folder, keeping the shell.json look"
+description = "Same as install: omarchy plugin remove, add this folder, keep the shell.json look"
 depends = ["bake"]
-run = "bash scripts/reinstall.sh"
+run = "bash dev/plugin.sh reinstall"
+
+[tasks.status]
+description = "Control-plane diagnostics: paths, compositor state, ABI identity, current theme"
+run = "bash scripts/border-fx status"
 
 [tasks.hypr-build]
 description = "Compile hypr-shiny-border.so against system Hyprland headers"

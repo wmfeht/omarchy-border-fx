@@ -1,10 +1,20 @@
 #!/usr/bin/env node
-// Compositor-free tests for the shared look adapter (JSON ↔ QML ↔ Lua).
+// Cross-language look contract, compositor-free.
+//
+// This file is the glue between three copies of the shared look:
+//   qml/Look.js          chrome first-paint (merge, coerce, colors)
+//   cli/src/look/        the control-plane resolver (`border-fx look` / `apply`)
+//   hypr/src/main.cpp    PLUGIN_INIT ctor defaults
+//
+// Keep: JS-only behavior, byte-for-byte JS↔CLI parity, PLUGIN_INIT scrape,
+// and CLI lua/eval smoke. Theme presets live in cli/src/theme/presets.rs
+// and are tested there — not here.
+
 const fs = require("fs")
 const os = require("os")
 const path = require("path")
 const vm = require("vm")
-const { spawnSync } = require("child_process")
+const cli = require("./cli")
 
 const root = path.resolve(__dirname, "..")
 let fails = 0
@@ -36,20 +46,33 @@ function takeWarnings() {
   return w
 }
 
-function lookApplyEnv() {
+const isolatedState = fs.mkdtempSync(path.join(os.tmpdir(), "border-fx-look-state-"))
+
+function lookApplyEnv(extra) {
   return Object.assign({}, process.env, {
     SESSION_SO: "/tmp/omarchy-border-fx-test.so",
-    LUA_FILE: "/tmp/omarchy-border-fx-test.lua"
-  })
+    LUA_FILE: "/tmp/omarchy-border-fx-test.lua",
+    XDG_STATE_HOME: isolatedState
+  }, extra || {})
 }
 
-function lookApply(lookJson) {
-  const script = path.join(root, "scripts/look-apply.sh")
+// `border-fx apply --stdout`: the lua the control plane would write.
+function lookApply(lookJson, extraEnv) {
   const raw = typeof lookJson === "string" ? lookJson : JSON.stringify(lookJson)
-  return spawnSync("bash", [script, "--stdout", "--look-json", raw], {
-    encoding: "utf8",
-    env: lookApplyEnv()
-  })
+  return cli.run(["apply", "--stdout", "--look-json", raw], { env: lookApplyEnv(extraEnv) })
+}
+
+// `border-fx look`: the resolved look the control plane hands the chrome.
+function cliLook(lookJson, extraEnv) {
+  const raw = typeof lookJson === "string" ? lookJson : JSON.stringify(lookJson)
+  const r = cli.run(["look", "--look-json", raw], { env: lookApplyEnv(extraEnv) })
+  check(r.status === 0, "border-fx look exits 0 for " + raw + ": " + (r.stderr || ""))
+  try {
+    return { look: JSON.parse(r.stdout), stderr: r.stderr || "" }
+  } catch (e) {
+    check(false, "border-fx look prints JSON for " + raw + ": " + r.stdout)
+    return { look: null, stderr: r.stderr || "" }
+  }
 }
 
 function luaAssign(lua, key) {
@@ -185,6 +208,32 @@ function checkMerge() {
   check(rippleOrigin.rippleFade === 0.4, "nested ripple.rippleFade wins")
 
   const leftoverPin = Look.merge({ pin: false, pinDeg: 90, quantizeDeg: 15 })
+
+  const presetFloor = {
+    effect: "ripple",
+    pinDeg: 110,
+    lobe: 0.08,
+    shimmer: true,
+    borderSize: 2
+  }
+  const fromFloor = Look.merge({}, presetFloor)
+  check(fromFloor.effect === "ripple", "omitted effect follows the merge base")
+  check(fromFloor.pinDeg === 110, "omitted pinDeg follows the merge base")
+  check(fromFloor.lobe === 0.08, "omitted lobe follows the merge base")
+  check(fromFloor.shimmerHz === Look.DEFAULTS.shimmerHz, "keys the base omits stay shared")
+  const overFloor = Look.merge({ pinDeg: 45, effect: "shiny" }, presetFloor)
+  check(overFloor.pinDeg === 45, "user pinDeg wins over the merge base")
+  check(overFloor.effect === "shiny", "user effect wins over the merge base")
+  check(overFloor.lobe === 0.08, "unmentioned base keys still apply")
+  const backToFloor = Look.merge({ id: "wmfeht.border-fx" }, presetFloor)
+  check(backToFloor.pinDeg === 110, "removing a user key restores the merge base")
+  check(backToFloor.effect === "ripple", "removing effect restores the merge base")
+  check(JSON.stringify(backToFloor) === JSON.stringify(fromFloor),
+    "empty entry after an override matches the base floor")
+  const nullEffect = Look.merge({ effect: null }, presetFloor)
+  check(nullEffect.effect === "shiny", "null effect is shiny, not the merge base")
+  const emptyEffect = Look.merge({ effect: "" }, presetFloor)
+  check(emptyEffect.effect === "shiny", "empty effect is shiny, not the merge base")
   check(!Object.prototype.hasOwnProperty.call(leftoverPin, "pin"), "leftover pin:false is not a look key")
   check(leftoverPin.pin !== false, "leftover pin:false does not restore mouse follow")
   check(!Object.prototype.hasOwnProperty.call(leftoverPin, "quantizeDeg"), "leftover quantizeDeg is ignored")
@@ -248,13 +297,8 @@ function checkColors() {
 }
 
 function checkLookApply() {
-  const script = path.join(root, "scripts/look-apply.sh")
-  const env = lookApplyEnv()
-  const r = spawnSync("bash", [script, "--stdout", "--look-json", "{}"], {
-    encoding: "utf8",
-    env: env
-  })
-  check(r.status === 0, "look-apply --stdout exits 0: " + (r.stderr || ""))
+  const r = lookApply("{}")
+  check(r.status === 0, "border-fx apply --stdout exits 0: " + (r.stderr || ""))
   const lua = r.stdout || ""
   check(lua.indexOf("wmfeht.border-fx") !== -1, "lua cites wmfeht.border-fx as source of truth")
   check(lua.indexOf("shiny_border") !== -1, "emits shiny_border Hyprland adapter table")
@@ -280,144 +324,158 @@ function checkLookApply() {
   check(lua.indexOf("shinyLoaded") !== -1, "gated on loaded plugins")
   check(lua.indexOf("/tmp/omarchy-border-fx-test.so") !== -1, "session so path")
 
-  const off = spawnSync("bash", [script, "--stdout", "--disabled", "--look-json", "{}"], {
-    encoding: "utf8",
-    env: env
-  })
-  check(off.status === 0, "look-apply --disabled exits 0")
+  const off = cli.run(["apply", "--stdout", "--disabled", "--look-json", "{}"], { env: lookApplyEnv() })
+  check(off.status === 0, "apply --disabled exits 0")
   check(/SHINY_LOAD = false/.test(off.stdout), "disabled skips plugin.load")
   check(/enabled\s*=\s*false/.test(off.stdout), "disabled sets enabled = false")
 
-  const custom = spawnSync(
-    "bash",
-    [script, "--stdout", "--look-json", JSON.stringify({ pinDeg: 0, borderSize: 1, gradient: [] })],
-    { encoding: "utf8", env: env }
-  )
-  check(custom.status === 0, "custom look-apply")
+  const noLoad = cli.run(["apply", "--stdout", "--no-load", "--look-json", "{}"], { env: lookApplyEnv() })
+  check(noLoad.status === 0, "apply --no-load exits 0")
+  check(/SHINY_LOAD = false/.test(noLoad.stdout), "--no-load skips plugin.load")
+  check(/enabled\s*=\s*true/.test(noLoad.stdout), "--no-load keeps enabled = true")
+
+  const custom = lookApply({ pinDeg: 0, borderSize: 1, gradient: [] })
+  check(custom.status === 0, "custom apply")
   check(/pin_deg\s*=\s*0/.test(custom.stdout), "custom pin_deg")
   check(!/\bpin\s*=/.test(custom.stdout), "custom look still has no pin switch")
   check(/border_size\s*=\s*1/.test(custom.stdout), "custom border_size")
 
-  const leftoverLua = spawnSync(
-    "bash",
-    [script, "--stdout", "--look-json", JSON.stringify({ pin: false, quantizeDeg: 15, pinDeg: 45 })],
-    { encoding: "utf8", env: env }
-  )
-  check(leftoverLua.status === 0, "leftover pin:false look-apply")
+  const leftoverLua = lookApply({ pin: false, quantizeDeg: 15, pinDeg: 45 })
+  check(leftoverLua.status === 0, "leftover pin:false apply")
   check(/pin_deg\s*=\s*45/.test(leftoverLua.stdout), "leftover pin:false still fans out pinDeg")
   check(!/\bpin\s*=/.test(leftoverLua.stdout), "leftover pin:false does not emit pin lua")
   check(!/quantize_deg/.test(leftoverLua.stdout), "leftover quantizeDeg does not fan out")
 
-  const customBase = spawnSync(
-    "bash",
-    [script, "--stdout", "--look-json", JSON.stringify({ baseColor: "rgba(ff000080)" })],
-    { encoding: "utf8", env: env }
-  )
-  check(customBase.status === 0, "custom baseColor look-apply")
+  const customBase = lookApply({ baseColor: "rgba(ff000080)" })
+  check(customBase.status === 0, "custom baseColor apply")
   check(/base_color\s*=\s*"rgba\(ff000080\)"/.test(customBase.stdout), "custom baseColor fans out")
 
-  const transBase = spawnSync(
-    "bash",
-    [script, "--stdout", "--look-json", JSON.stringify({ baseColor: "rgba(00000000)" })],
-    { encoding: "utf8", env: env }
-  )
-  check(transBase.status === 0, "transparent baseColor look-apply")
+  const transBase = lookApply({ baseColor: "rgba(00000000)" })
+  check(transBase.status === 0, "transparent baseColor apply")
   check(/base_color\s*=\s*"rgba\(00000000\)"/.test(transBase.stdout), "transparent baseColor is accepted as off")
 
-  const nestedLua = spawnSync(
-    "bash",
-    [script, "--stdout", "--look-json", JSON.stringify({ pinDeg: 0, shiny: { pinDeg: 77 } })],
-    { encoding: "utf8", env: env }
-  )
-  check(nestedLua.status === 0, "nested look-apply")
+  const nestedLua = lookApply({ pinDeg: 0, shiny: { pinDeg: 77 } })
+  check(nestedLua.status === 0, "nested apply")
   check(/pin_deg\s*=\s*77/.test(nestedLua.stdout), "nested shiny.pinDeg fans out")
 
-  const mirrorLua = spawnSync(
-    "bash",
-    [script, "--stdout", "--look-json", JSON.stringify({ mirror: true })],
-    { encoding: "utf8", env: env }
-  )
-  check(mirrorLua.status === 0, "mirror look-apply")
+  const mirrorLua = lookApply({ mirror: true })
+  check(mirrorLua.status === 0, "mirror apply")
   check(/mirror\s*=\s*true/.test(mirrorLua.stdout), "mirror fans out true")
 
-  const nestedMirrorLua = spawnSync(
-    "bash",
-    [script, "--stdout", "--look-json", JSON.stringify({ mirror: false, shiny: { mirror: true } })],
-    { encoding: "utf8", env: env }
-  )
-  check(nestedMirrorLua.status === 0, "nested shiny.mirror look-apply")
+  const nestedMirrorLua = lookApply({ mirror: false, shiny: { mirror: true } })
+  check(nestedMirrorLua.status === 0, "nested shiny.mirror apply")
   check(/mirror\s*=\s*true/.test(nestedMirrorLua.stdout), "nested shiny.mirror fans out")
 
   const haloLua = lookApply({ specularHalo: true })
-  check(haloLua.status === 0, "specularHalo look-apply on: " + (haloLua.stderr || ""))
+  check(haloLua.status === 0, "specularHalo apply on: " + (haloLua.stderr || ""))
   check(luaAssign(haloLua.stdout, "specular_halo") === "true", "specularHalo true fans out")
   const haloOffLua = lookApply({ specularHalo: false })
-  check(haloOffLua.status === 0, "specularHalo look-apply off")
+  check(haloOffLua.status === 0, "specularHalo apply off")
   check(luaAssign(haloOffLua.stdout, "specular_halo") === "false", "specularHalo false fans out")
   const nestedHaloLua = lookApply({ specularHalo: false, shiny: { specularHalo: true } })
-  check(nestedHaloLua.status === 0, "nested shiny.specularHalo look-apply")
+  check(nestedHaloLua.status === 0, "nested shiny.specularHalo apply")
   check(luaAssign(nestedHaloLua.stdout, "specular_halo") === "true", "nested shiny.specularHalo fans out")
 
-  const otherFx = spawnSync(
-    "bash",
-    [script, "--stdout", "--look-json", JSON.stringify({ effect: "other" })],
-    { encoding: "utf8", env: env }
-  )
-  check(otherFx.status === 0, "non-shiny effect look-apply")
+  const otherFx = lookApply({ effect: "other" })
+  check(otherFx.status === 0, "non-shiny effect apply")
   check(/SHINY_LOAD = false/.test(otherFx.stdout), "non-shiny effect skips shiny plugin.load")
   check(/enabled\s*=\s*false/.test(otherFx.stdout), "non-shiny effect disables shiny adapter")
 
-  const rippleFx = spawnSync(
-    "bash",
-    [script, "--stdout", "--look-json", JSON.stringify({ effect: "ripple" })],
-    { encoding: "utf8", env: env }
-  )
-  check(rippleFx.status === 0, "ripple effect look-apply: " + (rippleFx.stderr || ""))
+  const rippleFx = lookApply({ effect: "ripple" })
+  check(rippleFx.status === 0, "ripple effect apply: " + (rippleFx.stderr || ""))
   check(/SHINY_LOAD = true/.test(rippleFx.stdout), "ripple effect loads the window plugin")
   check(/enabled\s*=\s*true/.test(rippleFx.stdout), "ripple effect enables the adapter")
   check(/effect\s*=\s*"ripple"/.test(rippleFx.stdout), "ripple effect fans out effect string")
-  check(luaAssign(rippleFx.stdout, "ripple_freq") === "0.025", "ripple look-apply dedicated freq")
-  check(luaAssign(rippleFx.stdout, "ripple_speed") === "2", "ripple look-apply dedicated speed")
-  check(luaAssign(rippleFx.stdout, "ripple_gain") === "0.85", "ripple look-apply dedicated gain")
-  check(luaAssign(rippleFx.stdout, "ripple_power") === "8", "ripple look-apply dedicated power")
-  check(luaAssign(rippleFx.stdout, "ripple_origin_x") === "0.5", "ripple look-apply dedicated origin X")
-  check(luaAssign(rippleFx.stdout, "ripple_origin_y") === "0.5", "ripple look-apply dedicated origin Y")
-  check(luaAssign(rippleFx.stdout, "ripple_fade") === "0", "ripple look-apply dedicated fade off")
+  check(luaAssign(rippleFx.stdout, "ripple_freq") === "0.025", "ripple apply dedicated freq")
+  check(luaAssign(rippleFx.stdout, "ripple_speed") === "2", "ripple apply dedicated speed")
+  check(luaAssign(rippleFx.stdout, "ripple_gain") === "0.85", "ripple apply dedicated gain")
+  check(luaAssign(rippleFx.stdout, "ripple_power") === "8", "ripple apply dedicated power")
+  check(luaAssign(rippleFx.stdout, "ripple_origin_x") === "0.5", "ripple apply dedicated origin X")
+  check(luaAssign(rippleFx.stdout, "ripple_origin_y") === "0.5", "ripple apply dedicated origin Y")
+  check(luaAssign(rippleFx.stdout, "ripple_fade") === "0", "ripple apply dedicated fade off")
 
-  const rippleNested = spawnSync(
-    "bash",
-    [script, "--stdout", "--look-json", JSON.stringify({
-      effect: "ripple",
-      rippleGain: 0.2,
-      ripple: { rippleGain: 0.5, rippleFreq: 0.04 }
-    })],
-    { encoding: "utf8", env: env }
-  )
-  check(rippleNested.status === 0, "nested ripple look-apply")
+  const rippleNested = lookApply({
+    effect: "ripple",
+    rippleGain: 0.2,
+    ripple: { rippleGain: 0.5, rippleFreq: 0.04 }
+  })
+  check(rippleNested.status === 0, "nested ripple apply")
   check(/SHINY_LOAD = true/.test(rippleNested.stdout), "nested ripple still loads")
   check(luaAssign(rippleNested.stdout, "ripple_gain") === "0.5", "nested ripple.rippleGain fans out")
   check(luaAssign(rippleNested.stdout, "ripple_freq") === "0.04", "nested ripple.rippleFreq fans out")
 
-  const originNested = spawnSync(
-    "bash",
-    [script, "--stdout", "--look-json", JSON.stringify({
-      effect: "ripple",
-      rippleOriginX: 0.1,
-      rippleFade: 0.2,
-      ripple: { rippleOriginX: 0.25, rippleOriginY: 0.75, rippleFade: 0.5 }
-    })],
-    { encoding: "utf8", env: env }
-  )
-  check(originNested.status === 0, "nested origin/fade look-apply")
+  const originNested = lookApply({
+    effect: "ripple",
+    rippleOriginX: 0.1,
+    rippleFade: 0.2,
+    ripple: { rippleOriginX: 0.25, rippleOriginY: 0.75, rippleFade: 0.5 }
+  })
+  check(originNested.status === 0, "nested origin/fade apply")
   check(luaAssign(originNested.stdout, "ripple_origin_x") === "0.25", "nested ripple.rippleOriginX fans out")
   check(luaAssign(originNested.stdout, "ripple_origin_y") === "0.75", "nested ripple.rippleOriginY fans out")
   check(luaAssign(originNested.stdout, "ripple_fade") === "0.5", "nested ripple.rippleFade fans out")
 
   const originClampLua = lookApply({ rippleOriginX: -1, rippleOriginY: 2, rippleFade: 4 })
-  check(originClampLua.status === 0, "origin/fade clamp look-apply: " + (originClampLua.stderr || ""))
+  check(originClampLua.status === 0, "origin/fade clamp apply: " + (originClampLua.stderr || ""))
   check(luaAssign(originClampLua.stdout, "ripple_origin_x") === "0", "lua origin X -1 clamps to 0")
   check(luaAssign(originClampLua.stdout, "ripple_origin_y") === "1", "lua origin Y 2 clamps to 1")
   check(luaAssign(originClampLua.stdout, "ripple_fade") === "1", "lua fade 4 clamps to 1")
+
+  const badJson = cli.run(["apply", "--stdout", "--look-json", "{"], { env: lookApplyEnv() })
+  check(badJson.status === 2, "invalid look JSON exits 2")
+  check((badJson.stderr || "").indexOf("invalid JSON") !== -1, "invalid look JSON names the problem")
+}
+
+// The Rust resolver and qml/Look.js must produce the same look for the same
+// entry against the shared defaults. Chrome re-merges the live entry against
+// the CLI's BASE= (theme floor); LOOK= is the same resolve with user keys.
+function checkLookParity() {
+  const fixtures = [
+    {},
+    { id: "wmfeht.border-fx", pinDeg: 90, borderSize: 1 },
+    { effect: "" },
+    { effect: "other", pinDeg: 10 },
+    { effect: "ripple", rippleGain: 0.2, ripple: { rippleGain: 0.9, rippleFreq: 0.04 } },
+    { pinDeg: 0, shiny: { pinDeg: 45, borderSize: 4, mirror: null } },
+    { gradient: [], colA: "rgba(33ccffee)" },
+    { gradient: { colors: ["rgba(ff0000ff)", "rgba(00ff00ff)"] }, gradientPositions: "0 50 100" },
+    { gradient: "junk", gradientCw: 5, gradientPositions: 7, gradientPositionsCw: 0 },
+    { pulse: "false", shimmer: "false", mirror: "false", specularHalo: "true" },
+    { pulse: 1, mirror: 0, shimmer: 0, specularHalo: 1 },
+    { borderSize: "inf", lobe: [], shimmerHz: {}, pulseHz: "" },
+    { lobe: true, pulseHz: false },
+    { lobe: 1, borderSize: 100, pinDeg: 400, angleOffset: -200, shimmerDeg: 200 },
+    { borderSize: -1, borderSize2: 3 },
+    { pinDeg: 120.7, angleOffset: 10.7, shimmerDeg: 20.2, pinDegX: -1.5 },
+    { pinDeg: -1.5, angleOffset: 2.5, shimmerDeg: 0.49999 },
+    { shimmerHz: 10, pulseHz: -1, shimmerScaleMin: 0.1, shimmerScaleMax: 10 },
+    { rippleFreq: 1, rippleGain: -1, ripplePower: 0, rippleSpeed: 100, rippleOriginX: -1, rippleOriginY: 4, rippleFade: 4 },
+    { pin: false, pinDeg: 90, quantizeDeg: 15 },
+    { baseColor: { r: 0.2, g: 0.8, b: 1, a: 0.9 }, colA: "#ee33ccff", colB: "rgb(007a48)" },
+  ]
+  takeWarnings()
+  fixtures.forEach(function (fx) {
+    const js = Look.merge(JSON.parse(JSON.stringify(fx)))
+    const jsWarnings = takeWarnings()
+    const rs = cliLook(fx)
+    if (!rs.look)
+      return
+    const label = JSON.stringify(fx)
+    check(JSON.stringify(rs.look) === JSON.stringify(js), "Rust look == Look.merge for " + label + "\n  rust: " + JSON.stringify(rs.look) + "\n  js:   " + JSON.stringify(js))
+    check(Object.keys(rs.look).join(",") === Object.keys(js).join(","), "Rust look key order == Look.js for " + label)
+    const rsWarned = rs.stderr.split("\n").filter(function (l) { return l.indexOf("look: ") === 0 }).map(function (l) { return l.split(":")[1].trim() }).sort()
+    const jsWarned = jsWarnings.map(function (l) { return l.split(":")[1].trim() }).sort()
+    check(rsWarned.join(",") === jsWarned.join(","), "Rust and Look.js warn on the same keys for " + label + " (rust " + rsWarned + " vs js " + jsWarned + ")")
+  })
+
+  const pyNan = cli.run(["look", "--look-json", '{"borderSize": NaN, "shimmerHz": Infinity}'], { env: lookApplyEnv() })
+  check(pyNan.status === 0, "border-fx look tolerates NaN/Infinity tokens")
+  const nanLook = JSON.parse(pyNan.stdout || "{}")
+  check(nanLook.borderSize === Look.DEFAULTS.borderSize && nanLook.shimmerHz === Look.DEFAULTS.shimmerHz,
+    "NaN/Infinity resolve to defaults")
+
+  const pretty = cli.run(["look", "--pretty", "--look-json", "{}"], { env: lookApplyEnv() })
+  check(pretty.status === 0 && /\n  "effect": "shiny",\n/.test(pretty.stdout), "border-fx look --pretty is indented JSON")
 }
 
 function pluginInitSection(src) {
@@ -841,12 +899,6 @@ function checkLookApplyTyped() {
 }
 
 function checkLookApplyEval() {
-  const script = fs.readFileSync(path.join(root, "scripts/look-apply.sh"), "utf8")
-  check(
-    script.indexOf("dofile([=[${LUA_FILE}]=])") === -1,
-    "look-apply eval is not dofile long-bracket concat of LUA_FILE"
-  )
-
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "look-eval-"))
   const binDir = path.join(dir, "bin")
   const luaDir = path.join(dir, "with]=]bracket")
@@ -887,30 +939,71 @@ function checkLookApplyEval() {
   fs.chmodSync(path.join(binDir, "hyprctl"), 0o755)
 
   try {
-    const r = spawnSync(
-      "bash",
-      [path.join(root, "scripts/look-apply.sh"), "--eval", "--lua", luaFile, "--look-json", "{}"],
-      {
-        encoding: "utf8",
-        env: Object.assign({}, process.env, {
-          PATH: binDir + ":" + (process.env.PATH || "/usr/bin:/bin"),
-          HOME: home,
-          XDG_CONFIG_HOME: config,
-          SESSION_SO: path.join(dir, "dummy.so"),
-        }),
-        timeout: 15000,
-      }
-    )
+    const r = cli.run(["apply", "--eval", "--lua", luaFile, "--look-json", "{}"], {
+      env: Object.assign({}, process.env, {
+        PATH: binDir + ":" + (process.env.PATH || "/usr/bin:/bin"),
+        HOME: home,
+        XDG_CONFIG_HOME: config,
+        XDG_STATE_HOME: path.join(dir, "state"),
+        SESSION_SO: path.join(dir, "dummy.so"),
+      }),
+    })
     const log = fs.existsSync(logPath) ? fs.readFileSync(logPath, "utf8") : ""
-    check(r.status === 0, "look-apply --eval exits 0: " + (r.stderr || r.stdout || ""))
+    check(r.status === 0, "apply --eval exits 0: " + (r.stderr || r.stdout || ""))
+    check(fs.existsSync(luaFile), "apply --eval wrote --lua PATH")
+    check((r.stdout || "").indexOf("STATUS=applied") !== -1, "apply --eval reports STATUS=applied when listed: " + r.stdout)
+    const EnsureStatus = loadPragmaLibrary("qml/EnsureStatus.js")
+    const adopted = EnsureStatus.parseLook(r.stdout)
+    check(adopted && adopted.effect === "shiny" && adopted.pinDeg === 120, "apply prints a LOOK= line the chrome can adopt")
+    check(JSON.stringify(adopted) === JSON.stringify(Look.merge({})), "LOOK= equals Look.merge for the same entry")
+    const floor = EnsureStatus.parseBase(r.stdout)
+    check(floor && floor.effect === "shiny" && floor.pinDeg === 120, "apply prints a BASE= theme floor")
+    check(JSON.stringify(floor) === JSON.stringify(Look.merge({})), "BASE= equals Look.merge({}) when no theme preset")
     const payloadMatch = log.match(/^EVAL_PAYLOAD=(.*)$/m)
     const payload = payloadMatch ? payloadMatch[1] : ""
-    check(payload.length > 0, "look-apply --eval recorded an eval payload")
+    check(payload.length > 0, "apply --eval recorded an eval payload")
     check(
       payload.indexOf("dofile([=[" + luaFile + "]=])") === -1,
       "eval payload is not dofile([=[LUA_FILE]=]) concat: " + payload
     )
-    check(payload.indexOf(luaFile) !== -1, "eval payload still names the lua file: " + payload)
+    check(payload === 'dofile("' + luaFile + '")', "eval payload is a quoted dofile of the lua file: " + payload)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+function checkPresetOverrideRemoval() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "border-fx-preset-"))
+  try {
+    const state = path.join(dir, "state")
+    fs.mkdirSync(path.join(state, "omarchy", "current"), { recursive: true })
+    fs.writeFileSync(path.join(state, "omarchy", "current", "theme.name"), "tokyo-night\n")
+    const env = lookApplyEnv({ XDG_STATE_HOME: state })
+    const floor = cliLook("{}", env)
+    check(floor.look && floor.look.pinDeg === 110, "tokyo-night floor pinDeg is 110")
+    check(floor.look.lobe === 0.08, "tokyo-night floor lobe is 0.08")
+    const over = cliLook({ pinDeg: 45, lobe: 0.3 }, env)
+    check(over.look && over.look.pinDeg === 45, "user pinDeg overrides the tokyo-night floor")
+    check(over.look.lobe === 0.3, "user lobe overrides the tokyo-night floor")
+    check(over.look.shimmerDeg === 12, "unmentioned tokyo-night keys still apply under an override")
+    const back = cliLook("{}", env)
+    check(back.look && back.look.pinDeg === 110, "removing pinDeg restores the tokyo-night floor")
+    check(JSON.stringify(back.look) === JSON.stringify(floor.look),
+      "empty entry after an override matches the tokyo-night floor")
+
+    const applied = cli.run(["apply", "--eval", "--lua", path.join(dir, "out.lua"), "--look-json", "{}"], { env: env })
+    check(applied.status === 0, "apply against a theme preset exits 0: " + (applied.stderr || ""))
+    const EnsureStatus = loadPragmaLibrary("qml/EnsureStatus.js")
+    const base = EnsureStatus.parseBase(applied.stdout)
+    check(base && base.pinDeg === 110, "apply prints BASE= with the tokyo-night floor")
+    check(JSON.stringify(base) === JSON.stringify(floor.look), "BASE= equals look {} against the same theme")
+    const adopted = EnsureStatus.parseLook(applied.stdout)
+    check(JSON.stringify(adopted) === JSON.stringify(floor.look), "LOOK= of an empty entry equals BASE=")
+    check(JSON.stringify(Look.merge({}, base)) === JSON.stringify(floor.look),
+      "Look.merge({}, BASE=) matches the CLI floor")
+    check(Look.merge({ pinDeg: 45 }, base).pinDeg === 45, "Look.merge overlay still wins over BASE=")
+    check(Look.merge({ id: "wmfeht.border-fx" }, base).pinDeg === 110,
+      "Look.merge of an entry with no look keys restores BASE=")
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }
@@ -924,6 +1017,8 @@ checkClamps()
 checkEntry()
 checkColors()
 checkLookApply()
+checkLookParity()
+checkPresetOverrideRemoval()
 checkLookApplyTyped()
 checkLookApplyEval()
 

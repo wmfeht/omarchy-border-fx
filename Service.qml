@@ -1,6 +1,8 @@
 // omarchy-shell service: put ShinyBorder on every showing panel card and
-// notification toast, load the Hyprland window ring, and fan the shared look
-// out to both. This is the control plane; Omarchy itself has no install hooks.
+// notification toast, and drive the control plane (scripts/border-fx, the
+// Rust CLI in cli/) that resolves the shared look, loads the Hyprland window
+// ring, and fans the look out to both. Omarchy itself has no install hooks,
+// so the launcher builds the CLI on first use.
 //
 // Hosts:
 //   KeyboardPanel / PopupCard — bar popouts (audio, clock, network, …)
@@ -38,10 +40,22 @@ Item {
   // QML is not enough if an old ShinyBorder is still a child of the card.
   readonly property int overlayRev: 17
 
-  // shell.json plugins[] entry is the shared look. Services are not injected
-  // a settings object — read it off shell.shellConfig ourselves.
+  // shell.json plugins[] entry is the shared look. Prefer the file parse
+  // (FileView below) so a key deleted from disk is gone here too; fall back
+  // to shell.shellConfig until that load lands. Services are not injected
+  // a settings object.
   property var shellConfig: root.shell ? root.shell.shellConfig : null
-  readonly property var look: Look.merge(Look.entryFromConfig(root.shellConfig, Look.PLUGIN_ID))
+  property var fileConfig: null
+  readonly property var entry: Look.entryFromConfig(root.fileConfig ? root.fileConfig : root.shellConfig, Look.PLUGIN_ID)
+  // String form so a re-read of an unchanged shell.json does not retrigger
+  // the fan-out (var properties signal on every assignment).
+  readonly property string entryJson: root.entryToJson(root.entry)
+  // Theme floor from the CLI's BASE= line (empty-entry resolve). Look.merge
+  // uses this so a key removed from the entry follows the preset again.
+  // resolvedLook is the last LOOK= (windows/chrome numbers after coerce).
+  property var lookBase: null
+  property var resolvedLook: null
+  readonly property var look: Look.merge(root.entry, root.lookBase)
 
   property bool lookApplyPending: false
   property bool hyprReady: false
@@ -242,26 +256,47 @@ Item {
     return u.replace(/\/$/, "")
   }
 
-  function scriptPath(name) {
-    return pluginRoot() + "/scripts/" + name
+  // Build-once launcher for the Rust control plane (cli/). Compiles into
+  // $XDG_CACHE_HOME on first use, then execs the cached binary.
+  function launcher() {
+    return pluginRoot() + "/scripts/border-fx"
   }
 
-  function lookJson() {
+  function entryToJson(entry) {
     try {
-      return JSON.stringify(root.look)
+      var s = JSON.stringify(entry)
+      return typeof s === "string" ? s : "{}"
     } catch (e) {
       return "{}"
     }
   }
 
-  function effectIsShiny() {
+  function parseShellConfig(text) {
+    try {
+      var cfg = JSON.parse(String(text || ""))
+      if (cfg && typeof cfg === "object" && !Array.isArray(cfg))
+        return cfg
+    } catch (e) {}
+    return null
+  }
+
+  function adoptLook(text) {
+    var resolved = EnsureStatus.parseLook(text)
+    if (resolved)
+      root.resolvedLook = resolved
+    var floor = EnsureStatus.parseBase(text)
+    if (floor)
+      root.lookBase = floor
+  }
+
+  function effectDraws() {
     return Look.effectDraws(root.look && root.look.effect)
   }
 
   function runHyprEnsure() {
     if (ensureProc.running)
       return
-    ensureProc.command = ["bash", scriptPath("hypr-ensure.sh"), "--look-json", lookJson()]
+    ensureProc.command = ["bash", launcher(), "ensure", "--look-json", root.entryJson]
     ensureProc.running = true
   }
 
@@ -270,13 +305,13 @@ Item {
       root.lookApplyPending = true
       return
     }
-    lookApplyProc.command = ["bash", scriptPath("look-apply.sh"), "--eval", "--look-json", lookJson()]
+    lookApplyProc.command = ["bash", launcher(), "apply", "--eval", "--look-json", root.entryJson]
     lookApplyProc.running = true
   }
 
   function runHyprTeardown() {
     // Detached: this service is being destroyed, so a child Process would die.
-    Quickshell.execDetached(["bash", scriptPath("hypr-teardown.sh")])
+    Quickshell.execDetached(["bash", launcher(), "teardown"])
   }
 
   function watchEntry(host) {
@@ -370,7 +405,7 @@ Item {
       card: card,
       hostAlive: hostAlive,
       hostDestroyed: !hostAlive,
-      effectIsShiny: root.effectIsShiny(),
+      effectDraws: root.effectDraws(),
       attached: root.attached,
       existingOverlayRev: shiny ? shiny.overlayRev : null,
       currentOverlayRev: root.overlayRev,
@@ -545,23 +580,24 @@ Item {
     stdout: StdioCollector {
       id: ensureOut
       waitForEnd: true
-      onStreamFinished: {
-        if (EnsureStatus.isEnsureSuccessStatus(ensureOut.text))
-          root.hyprReady = true
-      }
     }
     onExited: function(exitCode) {
+      root.adoptLook(ensureOut.text)
       if (EnsureStatus.isEnsureSuccessStatus(ensureOut.text))
         root.hyprReady = true
       if (exitCode !== 0)
-        console.warn(root.tag + ": hypr-ensure exited " + exitCode)
-      Qt.callLater(root.runLookApply)
+        console.warn(root.tag + ": border-fx ensure exited " + exitCode)
     }
   }
 
   Process {
     id: lookApplyProc
+    stdout: StdioCollector {
+      id: lookApplyOut
+      waitForEnd: true
+    }
     onExited: function() {
+      root.adoptLook(lookApplyOut.text)
       if (root.lookApplyPending) {
         root.lookApplyPending = false
         root.runLookApply()
@@ -574,6 +610,45 @@ Item {
     interval: 150
     repeat: false
     onTriggered: root.runLookApply()
+  }
+
+  // Theme changes do not edit the plugins[] entry, so re-apply when Omarchy
+  // rewrites ~/.local/state/omarchy/current/theme.name.
+  readonly property string themeNamePath: {
+    var state = Quickshell.env("XDG_STATE_HOME")
+    if (!state)
+      state = (Quickshell.env("HOME") || "") + "/.local/state"
+    return state + "/omarchy/current/theme.name"
+  }
+
+  readonly property string shellJsonPath: {
+    if (root.shell && root.shell.userConfigPath)
+      return String(root.shell.userConfigPath)
+    return (Quickshell.env("HOME") || "") + "/.config/omarchy/shell.json"
+  }
+
+  FileView {
+    id: themeNameFile
+    path: root.themeNamePath
+    watchChanges: true
+    printErrors: false
+    onFileChanged: lookApplyTimer.restart()
+  }
+
+  // Disk is the source of truth for omitted keys. shell.shellConfig is a
+  // fresh parse on reload too, but reading the file ourselves means a
+  // deleted look key cannot stick on a leftover in-memory object.
+  FileView {
+    id: shellJsonFile
+    path: root.shellJsonPath
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      root.fileConfig = root.parseShellConfig(text())
+      lookApplyTimer.restart()
+    }
+    onLoadFailed: root.fileConfig = null
+    onFileChanged: reload()
   }
 
   Component {
@@ -619,10 +694,12 @@ Item {
   }
 
   onShellChanged: Qt.callLater(root.syncAll)
-  onLookChanged: {
-    if (root.hyprReady) lookApplyTimer.restart()
-    Qt.callLater(root.syncAll)
-  }
+  // Debounce the fan-out on the *entry* (what the user edited), not on the
+  // resolved look: adopting the CLI's LOOK=/BASE= must not schedule another
+  // apply. Always re-apply: apply still prints BASE=/LOOK= when the ring is
+  // not loaded (eval is skipped), so chrome can pick up a removed key.
+  onEntryJsonChanged: lookApplyTimer.restart()
+  onLookChanged: Qt.callLater(root.syncAll)
 
   Component.onCompleted: {
     Qt.callLater(root.syncAll)

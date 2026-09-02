@@ -4,6 +4,47 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 uses [Semantic Versioning](https://semver.org).
 
+## [0.2.0] - 2026-09-02
+
+### Changed
+
+- The control plane is now a Rust CLI (`border-fx`, in `cli/`) instead of
+  bash + inline Python. It resolves the `shell.json` look (defaults,
+  per-effect overlay, coercion, clamps), writes `border-fx.lua`, and
+  builds / loads / unloads the Hyprland plugin. `Service.qml` adopts the
+  resolved look the CLI prints, so windows and chrome render the same
+  numbers from one implementation.
+- The CLI is built on first enable by `scripts/border-fx`, a small
+  launcher that compiles into `~/.cache/omarchy-border-fx` and reuses the
+  binary until `cli/` changes. `cargo` (the `rust` package) is now needed
+  for the window ring; the chrome effect still works without it.
+- Removal: `scripts/border-fx teardown --purge` replaces
+  `scripts/hypr-teardown.sh --purge`.
+- Developer tasks (`mise run install|uninstall|reinstall`) are
+  `dev/plugin.sh`: `omarchy plugin remove` any current copy, then
+  `omarchy plugin add` this folder (pre-building the CLI before enable).
+  After enable, the script waits up to 60s for Hyprland to list the
+  window plugin, so first-enable compiles on slow hardware fit. The Rust
+  CLI is the end-user control plane (`ensure`, `apply`, `look`,
+  `teardown`, `status`, `theme`, `shell-look`).
+
+### Added
+
+- `border-fx look`, `status`, `theme`, and `shell-look` subcommands for
+  inspecting the resolved look, the compositor/ABI state, the current
+  Omarchy theme, and the saved `shell.json` entry.
+- Rust unit tests for the look schema, ensure / teardown flows, ABI
+  freshness, and `shell.json` handling; the JS suites drive the built CLI
+  and check Rust and `qml/Look.js` resolve identically.
+- Stock look presets for every stock Omarchy theme. When one is the
+  current theme, missing look keys resolve to a five-stop ramp from that
+  theme's palette, a wrap stroke in its `selection` color, and a light
+  direction, mirror, lobe, and motion chosen for its wallpapers, instead
+  of the shared defaults. Retro-82 defaults to `ripple`; Lumon and
+  Flexoki Light pulse; Vantablack is static; the light themes lead with
+  accent or ink colors. Keys set on the `plugins[]` entry still win, and
+  user-made themes keep the shared defaults.
+
 ## [0.1.0] - 2026-08-30
 
 Initial release.
@@ -25,4 +66,5 @@ Initial release.
   shaders ship in the repo, so no build tools are needed for the chrome
   effect.
 
+[0.2.0]: https://github.com/wmfeht/omarchy-border-fx/releases/tag/0.2.0
 [0.1.0]: https://github.com/wmfeht/omarchy-border-fx/releases/tag/0.1.0

@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// Compositor-free tests for hypr-session.sh / reinstall order / hypr-ensure
-// install path. Does not talk to a live Hyprland.
+// Compositor-free tests for the border-fx control plane: ensure / teardown
+// against a stubbed hyprctl + make, the launcher, the omarchy add/remove
+// cycle, and the shell.json look snapshot. Does not talk to a live Hyprland.
 
 const fs = require("fs")
 const os = require("os")
 const path = require("path")
 const { spawn, spawnSync } = require("child_process")
+const cli = require("./cli")
 
 const root = path.resolve(__dirname, "..")
 let fails = 0
@@ -21,30 +23,47 @@ function read(rel) {
   return fs.readFileSync(path.join(root, rel), "utf8")
 }
 
-function bash(script, env) {
-  return spawnSync("bash", ["-c", script], {
-    encoding: "utf8",
-    env: Object.assign({}, process.env, env || {}),
-  })
-}
+function checkControlPlaneShape() {
+  const service = read("Service.qml")
+  const launcher = read("scripts/border-fx")
 
-function checkScriptShape() {
-  const ensure = read("scripts/hypr-ensure.sh")
-  const session = read("scripts/hypr-session.sh")
-  const reinstall = read("scripts/reinstall.sh")
-  const teardown = read("scripts/hypr-teardown.sh")
-  const install = read("scripts/install.sh")
+  check(service.indexOf('"/scripts/border-fx"') !== -1, "Service.qml execs the scripts/border-fx launcher")
+  check(/\["bash", launcher\(\), "ensure", "--look-json", root\.entryJson\]/.test(service), "Service runs `border-fx ensure` with the raw entry")
+  check(/\["bash", launcher\(\), "apply", "--eval", "--look-json", root\.entryJson\]/.test(service), "Service runs `border-fx apply --eval` with the raw entry")
+  check(/execDetached\(\["bash", launcher\(\), "teardown"\]\)/.test(service), "Service detaches `border-fx teardown` on destruction")
+  check(service.indexOf("hypr-ensure.sh") === -1 && service.indexOf("look-apply.sh") === -1 && service.indexOf("hypr-teardown.sh") === -1,
+    "Service.qml no longer references the bash control plane")
+  check(service.indexOf("EnsureStatus.parseLook") !== -1, "Service adopts the CLI's LOOK= line")
+  check(service.indexOf("EnsureStatus.parseBase") !== -1, "Service adopts the CLI's BASE= theme floor")
+  check(/property var lookBase: null/.test(service), "Service holds the theme floor")
+  check(/property var resolvedLook: null/.test(service), "Service holds the resolved look")
+  check(/readonly property var look: Look\.merge\(root\.entry, root\.lookBase\)/.test(service),
+    "chrome re-merges the live entry against the theme floor")
+  check(/onEntryJsonChanged:\s*lookApplyTimer\.restart\(\)/.test(service),
+    "fan-out debounce keys on the entry, not the resolved look (no apply loop)")
+  check(!/resolvedLook = null/.test(service), "removing a look key does not drop the theme floor")
+  check(!/onLookChanged:\s*\{[^}]*lookApplyTimer/.test(service), "onLookChanged does not restart the apply timer")
+  check(service.indexOf("omarchy/current/theme.name") !== -1, "Service watches Omarchy theme.name")
+  check(service.indexOf("shell.json") !== -1 && service.indexOf("id: shellJsonFile") !== -1,
+    "Service watches shell.json so a deleted key is read off disk")
+  check(/onFileChanged:\s*lookApplyTimer\.restart\(\)/.test(service),
+    "theme.name changes re-apply the look (the plugins[] entry does not change)")
 
-  check(session.indexOf("install_session_so") !== -1, "hypr-session defines install_session_so")
-  check(session.indexOf("wait_plugin_gone") !== -1, "hypr-session defines wait_plugin_gone")
-  check(session.indexOf("O_TRUNC") !== -1, "hypr-session comments the SIGBUS / O_TRUNC hazard")
-  check(/mktemp .*hypr-shiny-border\.XXXXXX/.test(session), "install writes a sibling temp")
-  check(session.indexOf('mv -f "$tmp" "$SESSION_SO"') !== -1, "install renames over SESSION_SO")
+  const st = fs.statSync(path.join(root, "scripts/border-fx"))
+  check((st.mode & 0o111) !== 0, "scripts/border-fx is executable")
+  check(launcher.indexOf("cargo") !== -1 && launcher.indexOf("--locked") !== -1, "launcher builds with cargo --locked")
+  check(launcher.indexOf("--target-dir") !== -1 && launcher.indexOf("XDG_CACHE_HOME") !== -1, "launcher builds outside the plugin folder")
+  check(launcher.indexOf("flock") !== -1, "launcher serializes concurrent builds")
+  check(launcher.indexOf("STATUS=no-cli") !== -1, "launcher fails closed without a toolchain")
+  check(launcher.indexOf("STATUS=cli-build-failed") !== -1, "launcher reports cargo failure separately from a missing toolchain")
+  check(launcher.indexOf("BORDER_FX_ROOT") !== -1, "launcher tells the CLI where the clone root is")
+  check(launcher.indexOf("--bootstrap") !== -1, "launcher can pre-build without running a command")
 
-  check(
-    !/grep\s+-v\s+['"]hypr\.shiny-border['"]/.test(ensure),
-    "ensure_hyprland_require does not rewrite hyprland.lua with grep -v hypr.shiny-border"
-  )
+  const leftovers = fs.readdirSync(path.join(root, "scripts")).filter((n) => n.endsWith(".sh"))
+  check(leftovers.length === 0, "no bash control-plane scripts remain in scripts/: " + leftovers.join(","))
+  check(fs.existsSync(path.join(root, "cli/Cargo.lock")), "cli/Cargo.lock is committed for --locked builds")
+  const trackedTarget = spawnSync("git", ["-C", root, "ls-files", "cli/target"], { encoding: "utf8" })
+  check((trackedTarget.stdout || "").trim() === "", "cli/target is not tracked")
 
   const pluginctl = read("hypr/scripts/pluginctl.sh")
   check(pluginctl.indexOf('dest="/tmp/hypr-shiny-border-$$.so"') === -1, "pluginctl does not load from /tmp/hypr-shiny-border-$$.so")
@@ -58,171 +77,72 @@ function checkScriptShape() {
   check(pluginctl.indexOf("XDG_RUNTIME_DIR") !== -1, "pluginctl load dest is under XDG_RUNTIME_DIR")
   check(pluginctl.indexOf("chmod 0700") !== -1, "pluginctl sets runtime dir mode 0700")
 
-  check(ensure.indexOf("hypr-session.sh") !== -1, "hypr-ensure sources hypr-session.sh")
-  check(ensure.indexOf("unload_session_so") !== -1, "hypr-ensure waits for unload")
-  check(ensure.indexOf("plugin_mapped") !== -1, "hypr-ensure refuses a second mapped copy")
-  check(
-    !/\bload_session_so \|\| true/.test(ensure),
-    "hypr-ensure does not swallow a failed plugin load"
-  )
-  check(ensure.indexOf("status load-failed") !== -1, "hypr-ensure emits STATUS=load-failed")
-  check(
-    ensure.indexOf("load_session_so_or_fail") !== -1,
-    "hypr-ensure shares one fail-closed load path"
-  )
-  check(
-    !/cp -f "\$src" "\$SESSION_SO"/.test(ensure),
-    "hypr-ensure does not cp -f onto the live session .so"
-  )
-  const unloadCall = ensure.indexOf("if unload_session_so")
-  const copyCall = ensure.indexOf("copy_session_so \"$BUILD_DIR")
-  check(
-    unloadCall !== -1 && copyCall !== -1 && unloadCall < copyCall,
-    "hypr-ensure unloads and waits before replacing the session .so"
-  )
-
-  check(session.indexOf("hypr_session_lock") !== -1, "hypr-session defines hypr_session_lock")
-  check(session.indexOf("look_effect_is_shiny") !== -1, "hypr-session defines look_effect_is_shiny")
-  check(session.indexOf("hypr_session_bump_ensure_gen") !== -1, "hypr-session defines ensure generation")
-  check(session.indexOf("hypr_abi_artifact_fresh") !== -1, "hypr-session defines hypr_abi_artifact_fresh")
-  check(session.indexOf("hypr_abi_delete_session_so") !== -1, "hypr-session defines hypr_abi_delete_session_so")
-  check(session.indexOf("hypr_abi_need_force_rebuild") !== -1, "hypr-session defines hypr_abi_need_force_rebuild")
-  check(session.indexOf("sources_newer_than") !== -1, "hypr-session defines sources_newer_than")
-  check(ensure.indexOf("hypr_abi_artifact_fresh") !== -1, "hypr-ensure uses ABI freshness")
-  check(ensure.indexOf("hypr_abi_delete_session_so") !== -1, "hypr-ensure deletes the stale session .so")
-  check(ensure.indexOf("hypr_abi_invalidate_objects") !== -1, "hypr-ensure wipes objects on ABI mismatch")
-  check(ensure.indexOf("function sources_newer_than") === -1, "hypr-ensure does not keep a private sources_newer_than")
   const makefile = read("hypr/Makefile")
   check(makefile.indexOf("-MD") !== -1, "Makefile records header dependencies (-MD)")
   check(makefile.indexOf("COMPILER_STAMP") !== -1, "Makefile stamps compiler id")
   check(makefile.indexOf("-include") !== -1, "Makefile includes generated header deps")
 
-  check(teardown.indexOf("hypr-session.sh") !== -1, "hypr-teardown sources hypr-session.sh")
-  check(teardown.indexOf("wait_plugin_gone") !== -1, "hypr-teardown waits for unmap")
-  check(teardown.indexOf("hypr_session_lock") !== -1, "hypr-teardown takes the session lock")
-  check(teardown.indexOf("persist_disable") !== -1, "hypr-teardown persist-disables the window ring")
-
-  check(ensure.indexOf("hypr_session_lock") !== -1, "hypr-ensure takes the session lock")
-  check(ensure.indexOf("look_effect_is_shiny") !== -1, "hypr-ensure reads look JSON effect")
-
-  check(reinstall.indexOf("hypr-session.sh") !== -1, "reinstall sources hypr-session.sh")
-  check(reinstall.indexOf("shell-look.sh") !== -1, "reinstall sources shell-look.sh")
-  check(reinstall.indexOf("wait_plugin_gone") !== -1, "reinstall waits until the plugin is gone")
-  const restartAt = reinstall.indexOf("\nomarchy restart shell")
-  const addAt = reinstall.indexOf("\nomarchy plugin add \"$add_url\"")
-  check(restartAt !== -1 && addAt !== -1, "reinstall still restarts the shell and adds the plugin")
-  check(restartAt < addAt, "reinstall restarts the shell before add --enable")
-  check(
-    reinstall.indexOf("aborting before add --enable") !== -1,
-    "reinstall aborts rather than replacing a mapped .so"
-  )
-  check(
-    reinstall.indexOf("\nomarchy restart shell", addAt) === -1,
-    "reinstall does not restart the shell after add --enable"
-  )
-  const snapshotAt = reinstall.indexOf("saved_look=$(shell_look_snapshot)")
-  const disableAt = reinstall.indexOf('omarchy plugin disable "$PLUGIN_ID"')
-  const restoreBeforeAdd = reinstall.indexOf("shell_look_restore \"$saved_look\"", restartAt)
-  const restoreAfterAdd = reinstall.indexOf("shell_look_restore \"$saved_look\"", addAt)
-  check(snapshotAt !== -1 && disableAt !== -1 && snapshotAt < disableAt, "reinstall snapshots look before disable")
-  check(
-    restoreBeforeAdd !== -1 && restoreBeforeAdd < addAt,
-    "reinstall restores look before add --enable"
-  )
-  check(restoreAfterAdd !== -1, "reinstall restores look after add --enable")
-  check(reinstall.indexOf("shell_look_reload_shell") !== -1, "reinstall reloads shell.json after restoring look")
-  check(
-    reinstall.indexOf("reinstall_finished") !== -1,
-    "reinstall restores look from cleanup if add --enable does not finish"
-  )
-
-  check(install.indexOf("hypr-session.sh") !== -1, "mise install copies hypr-session.sh")
-  check(
-    /shaders\/shiny\.frag"/.test(install) && /shaders\/shiny\.frag\.qsb"/.test(install),
-    "install copies shaders/shiny.frag and shaders/shiny.frag.qsb"
-  )
-  check(
-    /shaders\/ripple\.frag"/.test(install) && /shaders\/ripple\.frag\.qsb"/.test(install),
-    "install copies shaders/ripple.frag and shaders/ripple.frag.qsb"
-  )
+  const session = read("cli/src/session.rs")
+  check(session.indexOf("O_TRUNC") !== -1, "session.rs documents the SIGBUS / O_TRUNC hazard")
+  check(session.indexOf("fs::rename(&tmp, dest)") !== -1, "install_session_so renames a sibling temp over the session .so")
+  const ensure = read("cli/src/ensure.rs")
+  check(ensure.indexOf("LoadFailed") !== -1 && ensure.indexOf("is_success") !== -1, "ensure fails closed with a non-success status")
+  const unloadAt = ensure.indexOf("if self.unload_session_so()")
+  const copyAt = ensure.indexOf("self.copy_session_so(&p.build_so())")
+  check(unloadAt !== -1 && copyAt !== -1 && unloadAt < copyAt, "ensure unloads and waits before replacing the session .so")
+  check(!fs.existsSync(path.join(root, "cli/src/devcopy.rs")), "dev cycle is not in the Rust CLI")
+  const main = read("cli/src/main.rs")
+  check(main.indexOf("DevCmd") === -1 && main.indexOf("Cmd::Dev") === -1, "border-fx has no `dev` subcommand")
+  const dev = read("dev/plugin.sh")
+  const stDev = fs.statSync(path.join(root, "dev/plugin.sh"))
+  check((stDev.mode & 0o111) !== 0, "dev/plugin.sh is executable")
+  const restartAt = dev.indexOf("omarchy restart shell ||")
+  const addAt = dev.indexOf('omarchy plugin add "$add_url" --yes')
+  const bootAt = dev.indexOf("\n  bootstrap\n")
+  const enableAt = dev.indexOf('omarchy plugin enable "$plugin_id"')
+  check(restartAt !== -1 && addAt !== -1 && restartAt < addAt, "restarts the shell before omarchy plugin add")
+  check(dev.indexOf("omarchy restart shell ||", addAt) === -1, "does not restart the shell after plugin add")
+  check(addAt !== -1 && bootAt !== -1 && enableAt !== -1 && addAt < bootAt && bootAt < enableAt,
+    "omarchy plugin add, then bootstrap the CLI, then enable")
+  check(!/omarchy plugin add[^\n]*--enable/.test(dev), "omarchy plugin add is not --enable (bootstrap first)")
+  const waitLoadedAt = dev.lastIndexOf("wait_plugin_loaded")
+  check(dev.indexOf("plugin_loaded()") !== -1 && waitLoadedAt !== -1 && enableAt < waitLoadedAt,
+    "after enable, waits for Hyprland to list or map the plugin")
+  check(/SECONDS \+ 60/.test(dev) && /wait_plugin_loaded \|\| die|if ! wait_plugin_loaded/.test(dev),
+    "load wait is 60s wall clock and install dies if the plugin never lists")
+  check(dev.indexOf("aborting before add") !== -1, "aborts rather than replacing a mapped .so")
+  check(dev.indexOf("trap cleanup EXIT") !== -1, "restores the look from cleanup if add does not finish")
+  check(launcher.indexOf('cd "$root/cli"') !== -1, "launcher source-id hashes relative paths under cli/")
 }
 
-function checkInstallCopiesFrag() {
-  const dest = fs.mkdtempSync(path.join(os.tmpdir(), "border-fx-install-"))
+function checkInstallRequiresOmarchy() {
   const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "border-fx-install-bin-"))
+  const script = path.join(root, "dev/plugin.sh")
   try {
-    // omarchy lives in /usr/bin on this machine. A PATH of /usr/bin:/bin
-    // still sees it and would enable/restart the live shell. Expose only
-    // the copy tools so this is a real install-copy, not plugin add.
-    const tools = ["bash", "cp", "mkdir", "chmod", "realpath", "dirname", "id"]
-    for (const cmd of tools) {
-      const src = ["/usr/bin/" + cmd, "/bin/" + cmd].find((p) => fs.existsSync(p))
-      check(!!src, "install-copy PATH has " + cmd)
-      if (src)
-        fs.symlinkSync(src, path.join(binDir, cmd))
+    // omarchy lives in /usr/bin on this machine. A PATH of only bash means
+    // install cannot reach it and must refuse rather than file-copy.
+    const bash = ["/usr/bin/bash", "/bin/bash"].find((p) => fs.existsSync(p))
+    check(!!bash, "install PATH has bash")
+    if (bash)
+      fs.symlinkSync(bash, path.join(binDir, "bash"))
+    check(!fs.existsSync(path.join(binDir, "omarchy")), "install PATH cannot see omarchy")
+    const env = {
+      HOME: path.join(binDir, "no-home"),
+      PATH: binDir,
+      CARGO_HOME: path.join(binDir, "no-cargo-home"),
     }
-    check(!fs.existsSync(path.join(binDir, "omarchy")), "install-copy PATH cannot see omarchy")
-    const r = spawnSync(path.join(binDir, "bash"), [path.join(root, "scripts/install.sh")], {
-      encoding: "utf8",
-      env: Object.assign({}, process.env, {
-        OMARCHY_PLUGIN_DIR: dest,
-        PATH: binDir,
-      }),
-    })
-    check(r.status === 0, "install.sh exits 0 without omarchy: " + (r.stderr || r.stdout || ""))
-    const srcFrag = path.join(root, "shaders/shiny.frag")
-    const destFrag = path.join(dest, "shaders/shiny.frag")
-    const destQsb = path.join(dest, "shaders/shiny.frag.qsb")
-    check(fs.existsSync(destFrag), "install dest has shaders/shiny.frag")
-    check(fs.existsSync(destQsb), "install dest still has shaders/shiny.frag.qsb")
-    const destRipple = path.join(dest, "shaders/ripple.frag")
-    const destRippleQsb = path.join(dest, "shaders/ripple.frag.qsb")
-    check(fs.existsSync(destRipple), "install dest has shaders/ripple.frag")
-    check(fs.existsSync(destRippleQsb), "install dest has shaders/ripple.frag.qsb")
-    if (fs.existsSync(destFrag) && fs.existsSync(srcFrag)) {
-      check(
-        Buffer.compare(fs.readFileSync(srcFrag), fs.readFileSync(destFrag)) === 0,
-        "install dest shiny.frag matches the source file"
-      )
-    }
+    const r = spawnSync(bash, [script, "install"], { encoding: "utf8", env })
+    check(r.status !== 0, "dev install exits non-zero without omarchy: " + (r.stderr || r.stdout || ""))
+    check((r.stderr || "").indexOf("missing omarchy") !== -1, "dev install reports missing omarchy")
+
+    const re = spawnSync(bash, [script, "reinstall"], { encoding: "utf8", env })
+    check(re.status !== 0 && (re.stderr || "").indexOf("missing omarchy") !== -1,
+      "dev reinstall reports missing omarchy")
+
+    const unknown = cli.run(["dev", "install"])
+    check(unknown.status !== 0, "border-fx has no `dev` subcommand (exit " + unknown.status + ")")
   } finally {
-    fs.rmSync(dest, { recursive: true, force: true })
     fs.rmSync(binDir, { recursive: true, force: true })
-  }
-}
-
-function checkInstallSessionSo() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hypr-session-"))
-  const dest = path.join(dir, "hypr-shiny-border.so")
-  const src = path.join(dir, "new.so")
-  try {
-    fs.writeFileSync(dest, "OLDINODE")
-    fs.writeFileSync(src, "NEWINODE-CONTENT")
-    const oldStat = fs.statSync(dest)
-    const fd = fs.openSync(dest, "r")
-    const beforeFd = Buffer.alloc(8)
-    fs.readSync(fd, beforeFd, 0, 8, 0)
-
-    const r = bash(
-      'source "$ROOT/scripts/paths.sh"; source "$ROOT/scripts/hypr-session.sh"; SESSION_SO="$DEST"; install_session_so "$SRC"',
-      { ROOT: root, DEST: dest, SRC: src }
-    )
-    check(r.status === 0, "install_session_so exits 0: " + (r.stderr || r.stdout || ""))
-
-    const newStat = fs.statSync(dest)
-    check(newStat.ino !== oldStat.ino, "install_session_so uses a new inode (no O_TRUNC)")
-    check(fs.readFileSync(dest, "utf8") === "NEWINODE-CONTENT", "path sees the new bytes")
-
-    const afterFd = Buffer.alloc(8)
-    fs.readSync(fd, afterFd, 0, 8, 0)
-    check(afterFd.toString("utf8") === "OLDINODE", "open fd still has the old inode after rename")
-    check(beforeFd.toString("utf8") === "OLDINODE", "pre-install fd read was the old file")
-    fs.closeSync(fd)
-
-    const leftovers = fs.readdirSync(dir).filter((n) => n.startsWith("hypr-shiny-border.") && n !== "hypr-shiny-border.so")
-    check(leftovers.length === 0, "no leftover temp installs: " + leftovers.join(","))
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true })
   }
 }
 
@@ -230,41 +150,6 @@ function writeHyprctlStub(dir, body) {
   const stub = path.join(dir, "hyprctl")
   fs.writeFileSync(stub, "#!/usr/bin/env bash\n" + body)
   fs.chmodSync(stub, 0o755)
-}
-
-function checkWaitPluginGone() {
-  const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), "hyprctl-empty-"))
-  const listedDir = fs.mkdtempSync(path.join(os.tmpdir(), "hyprctl-listed-"))
-  try {
-    writeHyprctlStub(
-      emptyDir,
-      `if [[ "$*" == *instances* ]]; then echo '[]'; exit 0; fi
-if [[ "$*" == *plugin*list* ]]; then echo '[]'; exit 0; fi
-exit 0
-`
-    )
-    const gone = bash(
-      'source "$ROOT/scripts/paths.sh"; source "$ROOT/scripts/hypr-session.sh"; wait_plugin_gone 0.3',
-      { ROOT: root, PATH: emptyDir + ":/usr/bin:/bin" }
-    )
-    check(gone.status === 0, "wait_plugin_gone succeeds when nothing is listed: " + (gone.stderr || ""))
-
-    writeHyprctlStub(
-      listedDir,
-      `if [[ "$*" == *instances* ]]; then echo '[]'; exit 0; fi
-if [[ "$*" == *plugin*list* ]]; then echo '[{"name":"hypr-shiny-border"}]'; exit 0; fi
-exit 0
-`
-    )
-    const stuck = bash(
-      'source "$ROOT/scripts/paths.sh"; source "$ROOT/scripts/hypr-session.sh"; wait_plugin_gone 0.3',
-      { ROOT: root, PATH: listedDir + ":/usr/bin:/bin" }
-    )
-    check(stuck.status !== 0, "wait_plugin_gone fails while the plugin is still listed")
-  } finally {
-    fs.rmSync(emptyDir, { recursive: true, force: true })
-    fs.rmSync(listedDir, { recursive: true, force: true })
-  }
 }
 
 function sleepMs(ms) {
@@ -541,6 +426,7 @@ function createHarness(opts) {
     HOME: home,
     XDG_CONFIG_HOME: config,
     XDG_CACHE_HOME: cache,
+    XDG_STATE_HOME: path.join(home, ".local/state"),
     XDG_RUNTIME_DIR: runDir,
     LUA_FILE: luaFile,
     SESSION_SO: sessionSo,
@@ -550,6 +436,7 @@ function createHarness(opts) {
     HYPR_ABI_COMPOSITOR_HASH: abiHash,
     HYPR_ABI_HEADER_MTIME: abiHeaderMtime,
     HYPR_ABI_COMPILER_ID: abiCompiler,
+    BORDER_FX_ROOT: root,
     PATH: binDir + ":" + (process.env.PATH || "/usr/bin:/bin"),
   })
   if (opts.hyprSrc) {
@@ -579,19 +466,11 @@ function stopHarness(harness) {
 }
 
 function runTeardown(harness) {
-  return spawnSync("bash", [path.join(root, "scripts/hypr-teardown.sh")], {
-    encoding: "utf8",
-    env: harness.env,
-    timeout: 20000,
-  })
+  return cli.run(["teardown"], { env: harness.env, timeout: 20000 })
 }
 
 function runEnsure(harness, lookJson) {
-  return spawnSync("bash", [path.join(root, "scripts/hypr-ensure.sh"), "--look-json", lookJson], {
-    encoding: "utf8",
-    env: harness.env,
-    timeout: 20000,
-  })
+  return cli.run(["ensure", "--look-json", lookJson], { env: harness.env, timeout: 20000 })
 }
 
 function eventTimes(logText, needle) {
@@ -948,7 +827,7 @@ function runOverlapOnce() {
   let td
   let ensure
   try {
-    td = spawn("bash", [path.join(root, "scripts/hypr-teardown.sh")], {
+    td = spawn(cli.bin(), ["teardown"], {
       env: h.env,
       stdio: ["ignore", outFd, errFd],
     })
@@ -1132,61 +1011,6 @@ function applyAbiKind(h, kind) {
     fs.writeFileSync(h.abiMismatch, "1\n")
   else
     throw new Error("unknown abi kind " + kind)
-}
-
-function checkAbiHelperPredicate() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hypr-abi-helper-"))
-  const so = path.join(dir, "hypr-shiny-border.so")
-  const stamp = path.join(dir, "abi-identity")
-  const flag = path.join(dir, "hash-mismatch")
-  const srcDir = path.join(dir, "src")
-  fs.mkdirSync(srcDir)
-  fs.writeFileSync(path.join(srcDir, "main.cpp"), "// old\n")
-  const past = new Date(Date.now() - 86400000)
-  fs.utimesSync(path.join(srcDir, "main.cpp"), past, past)
-  touchFuture(so)
-  fs.writeFileSync(stamp, "hash=aaa\nheader_mtime=10\ncompiler=gcc-1\n")
-  const env = {
-    ROOT: root,
-    SESSION_SO: so,
-    HYPR_SRC: dir,
-    HYPR_ABI_STAMP: stamp,
-    HYPR_ABI_HASH_MISMATCH: flag,
-    HYPR_ABI_COMPOSITOR_HASH: "aaa",
-    HYPR_ABI_HEADER_MTIME: "10",
-    HYPR_ABI_COMPILER_ID: "gcc-1",
-  }
-
-  function probe(extraEnv) {
-    const r = bash(
-      'source "$ROOT/scripts/paths.sh"; source "$ROOT/scripts/hypr-session.sh"; if hypr_abi_artifact_fresh "$SESSION_SO"; then echo FRESH; else echo STALE; fi',
-      Object.assign({}, env, extraEnv || {})
-    )
-    check(r.status === 0, "artifact_fresh probe exits 0: " + (r.stderr || r.stdout || ""))
-    return String(r.stdout || "").trim()
-  }
-
-  check(probe() === "FRESH", "matching identity is fresh")
-  check(probe({ HYPR_ABI_COMPOSITOR_HASH: "bbb" }) === "STALE", "compositor hash mismatch is stale")
-  check(probe({ HYPR_ABI_HEADER_MTIME: "99" }) === "STALE", "header mtime mismatch is stale")
-  check(probe({ HYPR_ABI_COMPILER_ID: "gcc-2" }) === "STALE", "compiler id mismatch is stale")
-  fs.writeFileSync(flag, "1\n")
-  check(probe() === "STALE", "recorded hash-mismatch flag is stale")
-  fs.rmSync(flag, { force: true })
-  check(probe() === "FRESH", "cleared hash-mismatch flag is fresh again")
-
-  const force = bash(
-    'source "$ROOT/scripts/paths.sh"; source "$ROOT/scripts/hypr-session.sh"; if hypr_abi_need_force_rebuild; then echo FORCE; else echo NOFORCE; fi',
-    Object.assign({}, env, { HYPR_ABI_COMPOSITOR_HASH: "bbb" })
-  )
-  check(force.status === 0 && String(force.stdout || "").trim() === "FORCE", "hash mismatch needs force rebuild")
-
-  const del = bash(
-    'source "$ROOT/scripts/paths.sh"; source "$ROOT/scripts/hypr-session.sh"; hypr_abi_delete_session_so; test ! -e "$SESSION_SO"',
-    env
-  )
-  check(del.status === 0, "hypr_abi_delete_session_so unlinks SESSION_SO")
-  fs.rmSync(dir, { recursive: true, force: true })
 }
 
 function runAbiEnsureMismatchOnce(kind) {
@@ -1548,7 +1372,6 @@ function checkEnsureHyprlandLua() {
 
     const r = runEnsure(h, JSON.stringify({ effect: "other" }))
     const rewritten = fs.existsSync(luaPath) ? fs.readFileSync(luaPath, "utf8") : ""
-    const ensureSrc = read("scripts/hypr-ensure.sh")
 
     check(r.status === 0, "ensure hyprland.lua rewrite exits 0: " + (r.stderr || r.stdout || ""))
     check(rewritten.indexOf('require("hypr.binds")') !== -1, "unrelated require survives hyprland.lua rewrite")
@@ -1560,10 +1383,6 @@ function checkEnsureHyprlandLua() {
     check(
       /pcall\(require, "hypr\.border-fx"\)/.test(rewritten),
       "hypr.border-fx pcall is present after rewrite"
-    )
-    check(
-      !/grep\s+-v\s+['"]hypr\.shiny-border['"]/.test(ensureSrc),
-      "shipped rewrite is not grep -v 'hypr.shiny-border'"
     )
     note(
       "ensure",
@@ -1712,14 +1531,11 @@ function readShellJson(dir) {
   return JSON.parse(fs.readFileSync(path.join(dir, ".config", "omarchy", "shell.json"), "utf8"))
 }
 
+// `body` is `snapshot` or `restore <json>`; LOOK_SAVED in extraEnv feeds restore.
 function runShellLook(body, dir, extraEnv) {
-  const script = [
-    "set -euo pipefail",
-    'source "' + path.join(root, "scripts/paths.sh") + '"',
-    'source "' + path.join(root, "scripts/shell-look.sh") + '"',
-    body,
-  ].join("\n")
-  return bash(script, Object.assign(shellLookEnv(dir), extraEnv || {}))
+  const env = Object.assign({}, process.env, shellLookEnv(dir), extraEnv || {})
+  const args = body === "shell_look_snapshot" ? ["shell-look", "snapshot"] : ["shell-look", "restore", env.LOOK_SAVED || ""]
+  return cli.run(args, { env: env })
 }
 
 function pluginEntry(cfg, id) {
@@ -1814,7 +1630,7 @@ function checkReinstallPreservesLook() {
     }
 
     writeShellJson(dir, { version: 1, plugins: [{ id: "wmfeht.border-fx" }] })
-    const noop = runShellLook("shell_look_restore ''", dir)
+    const noop = runShellLook("shell_look_restore", dir, { LOOK_SAVED: "" })
     check(noop.status === 0, "restore empty snapshot exits 0")
     cfg = readShellJson(dir)
     check(Object.keys(pluginEntry(cfg, "wmfeht.border-fx")).length === 1, "empty restore does not invent look keys")
@@ -1840,17 +1656,14 @@ function writeEvidence() {
   fs.writeFileSync(path.join(dir, "ensure-abi-freshness.log"), evidenceChunks.abi.join("\n") + "\n")
 }
 
-checkScriptShape()
-checkInstallCopiesFrag()
-checkInstallSessionSo()
-checkWaitPluginGone()
+checkControlPlaneShape()
+checkInstallRequiresOmarchy()
 checkEnsureHyprlandLua()
 checkPluginctlRuntime()
 checkTeardownPersist()
 checkEnsureTree()
 checkEnsureHotReloadLoadFailed()
 checkTeardownEnsureLock()
-checkAbiHelperPredicate()
 checkAbiEnsureMismatch()
 checkAbiLoadHashMismatch()
 checkMakefileCompilerRebuild()
