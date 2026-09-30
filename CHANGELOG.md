@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 uses [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+
+- The window ring no longer leaves a faint copy of itself behind on a monitor
+  that has just lost its last window. The halo draws past both the extents the
+  decoration reserves (`getPositioningInfo`) and the window box Hyprland
+  damages, and a window flying to the next monitor has the ring drawn on both
+  outputs, so slivers of it survived wherever the workspace behind them had
+  nothing left to repaint. `damageEntire` now damages the box the renderer
+  actually draws into (assigned box plus `m_floatingOffset`), `updateWindow`
+  damages the ring it abandons, and an output is repainted outright once the
+  window has left it.
+
 ## [0.2.1] - 2026-09-07
 
 ### Fixed

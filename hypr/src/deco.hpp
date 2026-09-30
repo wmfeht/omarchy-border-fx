@@ -43,6 +43,8 @@ class CShinyBorder : public IHyprWindowDecoration {
     int                 borderSize() const;
     int                 effectiveBorderSize() const;
     CBox                assignedBoxGlobal();
+    void                damageRingBox(const CBox& outerBox);
+    int                 damageExpandPx() const;
     ShinyEffect         effectMode() const;
     ShinyShimmerParams  shimmerParams() const;
     bool                rippleOn() const;

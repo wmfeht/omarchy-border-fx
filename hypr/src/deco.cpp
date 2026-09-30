@@ -18,6 +18,7 @@
 #include <hyprland/src/helpers/memory/Memory.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
+#include <hyprland/src/state/MonitorState.hpp>
 #include "pass.hpp"
 
 using namespace Hyprutils::Memory;
@@ -25,6 +26,19 @@ using namespace Desktop::View;
 
 // Positions / CW resolve on spec change, not every deco draw().
 static ShinyGradientCache g_gradCache;
+
+// The box the shader draws the ring into: the window box grown by the border
+// size. draw() shrinks the pass element's box by exactly that much to find the
+// window again, so this is the same box assignedBoxGlobal() returns. Global
+// layout space, like every CBox handed to the renderer.
+static CBox shinyRingBoxGlobal(const Vector2D& pos, const Vector2D& size, int borderPx) {
+    return CBox{pos.x, pos.y, size.x, size.y}.expand(std::max(borderPx, 0));
+}
+
+// Output rectangle in global layout space, for overlap tests.
+static CBox shinyMonitorBox(PHLMONITOR monitor) {
+    return CBox{monitor->m_position.x, monitor->m_position.y, monitor->m_size.x, monitor->m_size.y};
+}
 
 CShinyBorder::CShinyBorder(PHLWINDOW window) : IHyprWindowDecoration(window), m_window(window) {
     m_lastPos  = window->position(IGeometric::GEOMETRIC_CURRENT);
@@ -348,6 +362,33 @@ void CShinyBorder::updateWindow(PHLWINDOW pWindow) {
         ShinyGeoLatch{pos.x, pos.y, size.x, size.y}, bs,
         ShinyGeoLatch{m_lastPos.x, m_lastPos.y, m_lastSize.x, m_lastSize.y}, m_lastEffectiveB);
 
+    if (actions.damage) {
+        // Halo bleed draws past both the extents this deco reserves
+        // (getPositioningInfo) and the window box Hyprland damages, so a window
+        // that leaves a spot leaves slivers of ring behind. Clear the ring it is
+        // abandoning, and when it has left an output entirely, repaint that
+        // output: while it flies to the next monitor the ring is drawn on both
+        // of them, and no band around one box covers that path. The latches
+        // hold the box the shader last drew from and the reserved extent in
+        // force then.
+        if (g_pHyprRenderer && m_lastSize.x > 0 && m_lastSize.y > 0) {
+            const int  lastBorder = m_lastEffectiveB >= 0 ? m_lastEffectiveB : borderSize();
+            const CBox lastBox    = shinyRingBoxGlobal(m_lastPos, m_lastSize, lastBorder);
+            const CBox nowBox     = shinyRingBoxGlobal(pos, size, bs);
+
+            damageRingBox(lastBox);
+
+            const int  pad       = damageExpandPx();
+            const CBox lastDrawn = lastBox.copy().expand(pad);
+            const CBox nowDrawn  = nowBox.copy().expand(pad);
+            for (auto const& monitor : State::monitorState()->monitors()) {
+                const CBox monitorBox = shinyMonitorBox(monitor);
+                if (lastDrawn.overlaps(monitorBox) && !nowDrawn.overlaps(monitorBox))
+                    g_pHyprRenderer->damageMonitor(monitor);
+            }
+        }
+    }
+
     syncExtents();
 
     m_lastPos  = pos;
@@ -378,14 +419,32 @@ void CShinyBorder::damageEntire() {
     if (!shinyCanDamage(mapped, renderer, exclusiveFs))
         return;
 
+    // Same box draw() renders into: assignedBoxGlobal() plus the animation
+    // offset it adds on top (a window being dragged moves through
+    // m_floatingOffset). Damage both the same way, or the ring keeps a sliver
+    // of itself outside every region that does get damaged.
     CBox dm = assignedBoxGlobal();
+    dm.translate(PWINDOW->m_floatingOffset);
     if (dm.w <= 0 || dm.h <= 0)
         return;
 
-    const int pad = std::max(borderSize() + 6, 8);
+    damageRingBox(dm);
+}
+
+int CShinyBorder::damageExpandPx() const {
     const float halo = g_cfg.specularHalo && g_cfg.specularHalo->value() ? 1.f : 0.f;
-    CRegion   rg{dm.copy().expand(shinyDamageExpandPx(sc<float>(borderSize()), halo))};
-    CBox      hole = dm.copy().expand(-pad);
+    return shinyDamageExpandPx(sc<float>(borderSize()), halo);
+}
+
+void CShinyBorder::damageRingBox(const CBox& outerBox) {
+    if (!g_pHyprRenderer || outerBox.w <= 0 || outerBox.h <= 0)
+        return;
+
+    // Ring band plus whatever the halo bleeds past it, minus the middle: the
+    // window itself repaints on its own damage and does not need the churn.
+    const int pad  = std::max(borderSize() + 6, 8);
+    CRegion   rg{outerBox.copy().expand(damageExpandPx())};
+    CBox      hole = outerBox.copy().expand(-pad);
     if (hole.w > 1 && hole.h > 1)
         rg.subtract(hole);
     g_pHyprRenderer->damageRegion(rg);
