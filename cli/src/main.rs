@@ -237,6 +237,7 @@ fn run(cmd: Cmd, mut paths: Paths) -> Result<ExitCode, String> {
                           "sessionSoFresh": abi::artifact_fresh(&paths, &id, &paths.session_so) },
                 "theme": theme::current_name(&paths),
                 "themePreset": theme::preset_name(&paths),
+                "themeDerived": theme::derived_name(&paths),
             });
             println!("{}", serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?);
             Ok(ExitCode::SUCCESS)

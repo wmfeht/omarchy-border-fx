@@ -2,6 +2,7 @@
 //! [`crate::look::Base`] layer: opinionated presets for stock themes keyed
 //! by [`Theme::name`], shared defaults for everything else.
 
+mod derived;
 mod presets;
 
 use std::collections::BTreeMap;
@@ -81,9 +82,16 @@ pub fn current(p: &Paths) -> Result<Theme, String> {
 }
 
 /// Look base for the current Omarchy theme: a stock preset when we ship one,
-/// otherwise the shared defaults. A missing `theme.name` is shared, not an error.
+/// otherwise a look derived from the theme's own `colors.toml`, otherwise the
+/// shared defaults. A missing `theme.name` is shared, not an error.
 pub fn look_base(p: &Paths) -> Base {
-    match current_name(p).as_deref().and_then(presets::for_name) {
+    let Some(name) = current_name(p) else {
+        return Base::shared();
+    };
+    if let Some(map) = presets::for_name(&name) {
+        return Base::with(map);
+    }
+    match load(p, &name).ok().as_ref().and_then(derived::derive) {
         Some(map) => Base::with(map),
         None => Base::shared(),
     }
@@ -93,6 +101,17 @@ pub fn look_base(p: &Paths) -> Base {
 pub fn preset_name(p: &Paths) -> Option<String> {
     let name = current_name(p)?;
     presets::for_name(&name).map(|_| name)
+}
+
+/// Directory name of the current theme when its look is derived from
+/// `colors.toml` because no stock preset covers it. Mutually exclusive with
+/// [`preset_name`]; both `None` means the shared defaults are in force.
+pub fn derived_name(p: &Paths) -> Option<String> {
+    let name = current_name(p)?;
+    if presets::for_name(&name).is_some() {
+        return None;
+    }
+    load(p, &name).ok().as_ref().and_then(derived::derive).map(|_| name)
 }
 
 #[cfg(test)]
