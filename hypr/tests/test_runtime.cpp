@@ -13,6 +13,17 @@ static int g_fails = 0;
         }                                                                                                              \
     } while (0)
 
+static void checkFocusSyncGuard() {
+    // window.active fires on the CLayerSurface::onDestroy -> onUnmap ->
+    // refocusLastWindow path, where the window list can still hold a window on
+    // its way out. syncExtents() repositions unconditionally, so the caller is
+    // the only gate.
+    CHECK(shinyShouldSyncOnFocus(true, true));
+    CHECK(!shinyShouldSyncOnFocus(true, false));
+    CHECK(!shinyShouldSyncOnFocus(false, true));
+    CHECK(!shinyShouldSyncOnFocus(false, false));
+}
+
 static void checkShippedDecisions() {
     // Unmapped → no-op (do not touch positioner / renderer).
     CHECK(!shinyCanUseMappedGeometry(false, true));
@@ -821,6 +832,7 @@ static void checkRippleOriginFade() {
 
 int main() {
     checkShippedDecisions();
+    checkFocusSyncGuard();
     checkPulseDecisions();
     checkEffectExclusivity();
     checkRippleCrest();

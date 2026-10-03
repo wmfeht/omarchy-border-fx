@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <unordered_map>
 #include <vector>
 
 #include <hyprland/src/Compositor.hpp>
@@ -26,15 +27,50 @@ using namespace Desktop::View;
 // Positions / CW resolve on spec change, not every deco draw().
 static ShinyGradientCache g_gradCache;
 
+// Every CShinyBorder this .so instance created, keyed by the raw window it was
+// attached to. Maintained by the ctor/dtor below, so it stays correct across
+// window death, removeWindowDecoration, and plugin unload alike. Raw keys are
+// lookup-only and never dereferenced. See deco.hpp for why this exists.
+static std::unordered_map<CWindow*, CShinyBorder*> g_decos;
+
+CShinyBorder* shinyDecoFor(const PHLWINDOW& window) {
+    if (!window)
+        return nullptr;
+    const auto it = g_decos.find(window.get());
+    return it == g_decos.end() ? nullptr : it->second;
+}
+
+void shinyRemoveAllDecorations() {
+    // Snapshot first: removeWindowDecoration destroys the decoration, whose
+    // dtor erases from g_decos, which would invalidate an in-flight iterator.
+    std::vector<CShinyBorder*> mine;
+    mine.reserve(g_decos.size());
+    for (const auto& [window, deco] : g_decos)
+        mine.push_back(deco);
+
+    for (auto* deco : mine)
+        HyprlandAPI::removeWindowDecoration(PHANDLE, deco);
+
+    g_decos.clear();
+}
+
 CShinyBorder::CShinyBorder(PHLWINDOW window) : IHyprWindowDecoration(window), m_window(window) {
     m_lastPos  = window->position(IGeometric::GEOMETRIC_CURRENT);
     m_lastSize = window->size(IGeometric::GEOMETRIC_CURRENT);
     // Per-deco stream so overlapping windows do not shimmer in unison.
     shinyShimmerSeed(m_shimmer, sc<uint32_t>(reinterpret_cast<uintptr_t>(this) >> 4));
+    g_decos[window.get()] = this;
     syncPulse();
 }
 
 CShinyBorder::~CShinyBorder() {
+    // Before the m_pulseTimer early-out: a decoration must never stay reachable
+    // through g_decos after it is gone.
+    if (const auto window = m_window.lock(); window && g_decos[window.get()] == this)
+        g_decos.erase(window.get());
+    else
+        std::erase_if(g_decos, [this](const auto& kv) { return kv.second == this; });
+
     if (!m_pulseTimer)
         return;
     m_pulseTimer->cancel();

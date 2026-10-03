@@ -27,6 +27,13 @@ bool shinyCanDamage(bool mapped, bool rendererAlive, bool exclusiveFullscreen);
 // GL_INVALID_OPERATION and a compositor kill on NVIDIA.
 bool shinyCanBindVao(int vao);
 
+// window.active fan-out: skip a window that is gone or no longer mapped before
+// touching its decoration. CLayerSurface::onDestroy -> onUnmap ->
+// refocusLastWindow emits window.active while the window list can still hold a
+// window on its way out, and syncExtents() repositions unconditionally -- it
+// has no internal guard of its own, unlike syncPulse() and damageEntire().
+bool shinyShouldSyncOnFocus(bool windowValid, bool windowMapped);
+
 // plugin:shiny-border:border_size vs general:border_size.
 // configured >= 0 wins (including 0 = no ring); -1 follows general.
 int shinyResolvedBorderSize(int configured, int generalBorderSize);
