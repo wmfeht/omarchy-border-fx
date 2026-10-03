@@ -20,6 +20,10 @@ bool shinyCanBindVao(int vao) {
     return vao > 0;
 }
 
+bool shinyShouldSyncOnFocus(bool windowValid, bool windowMapped) {
+    return windowValid && windowMapped;
+}
+
 int shinyResolvedBorderSize(int configured, int generalBorderSize) {
     if (configured >= 0)
         return configured;

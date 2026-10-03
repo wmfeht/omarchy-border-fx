@@ -17,12 +17,11 @@
 using namespace Hyprutils::Memory;
 using namespace Desktop::View;
 
-static CShinyBorder* shinyOn(PHLWINDOW window) {
-    for (auto& d : window->m_windowDecorations) {
-        if (auto* shiny = dynamic_cast<CShinyBorder*>(d.get()))
-            return shiny;
-    }
-    return nullptr;
+// Registry lookup, not a dynamic_cast scan of m_windowDecorations -- see
+// deco.hpp. Casting a decoration left behind by a previous, dlclose()d
+// instance of this .so reads a vtable that is no longer mapped.
+static CShinyBorder* shinyOn(const PHLWINDOW& window) {
+    return shinyDecoFor(window);
 }
 
 static void attach(PHLWINDOW window) {
@@ -208,6 +207,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     g_onWindowOpen = Event::bus()->m_events.window.open.listen([](PHLWINDOW w) { attach(w); });
     g_onFocus      = Event::bus()->m_events.window.active.listen([](PHLWINDOW, Desktop::eFocusReason) {
         for (auto& w : Desktop::windowState()->windows()) {
+            if (!shinyShouldSyncOnFocus(valid(w), validMapped(w)))
+                continue;
             if (auto* d = shinyOn(w)) {
                 d->syncExtents();
                 d->syncPulse();
@@ -235,6 +236,13 @@ APICALL EXPORT void PLUGIN_EXIT() {
     g_onWindowOpen.reset();
     g_onFocus.reset();
     g_onConfigReloaded.reset();
+
+    // Detach the decorations before dlclose. Hyprland tracks them per plugin
+    // (CPlugin::m_registeredDecorations) and normally drops them in
+    // unloadPlugin(), but a decoration that survives that path keeps a vtable
+    // into unmapped .so text and kills the compositor the next time anything
+    // walks m_windowDecorations.
+    shinyRemoveAllDecorations();
 
     // Leftover draw() must not compile a new program into a dying .so.
     // Recurse-remove this plugin's pass elements (including nested transformer

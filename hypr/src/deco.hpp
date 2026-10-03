@@ -51,3 +51,19 @@ class CShinyBorder : public IHyprWindowDecoration {
     void                stopPulse();
     void                onPulseTick(SP<CEventLoopTimer> self);
 };
+
+// Plugin-owned decoration registry, maintained by the ctor/dtor.
+//
+// shinyDecoFor() replaces a dynamic_cast scan of m_windowDecorations. A
+// decoration created by a previous, already dlclose()d instance of this .so
+// stays in that vector with its vtable in a region that is no longer mapped;
+// dynamic_cast on it dereferences that vtable and takes the compositor down.
+// A lookup can only ever return a pointer this instance created, so a stale
+// decoration becomes unreachable instead of fatal. It also makes attach()'s
+// "already decorated?" check honest again.
+CShinyBorder* shinyDecoFor(const PHLWINDOW& window);
+
+// PLUGIN_EXIT: detach every decoration this instance created, so none can
+// outlive the .so even if the compositor's own per-plugin decoration cleanup
+// does not run.
+void shinyRemoveAllDecorations();
