@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 uses [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+
+- Unloading the Hyprland plugin no longer leaves borders on unmapped or
+  hidden windows (an X11 app's withdrawn windows, inactive group members).
+  Hyprland's own cleanup skips those windows, so destroying one later ran
+  the border's destructor in the unloaded `.so` and crashed the compositor.
+  `PLUGIN_EXIT` now strips every border while the plugin is still loaded.
+
 ## [0.2.1] - 2026-09-07
 
 ### Fixed
