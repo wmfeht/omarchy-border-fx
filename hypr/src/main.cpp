@@ -3,7 +3,9 @@
 #include "pass.hpp"
 #include "runtime.hpp"
 
+#include <algorithm>
 #include <cstddef>
+#include <vector>
 
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/ConfigManager.hpp>
@@ -12,7 +14,9 @@
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/helpers/memory/Memory.hpp>
+#include <hyprland/src/layout/target/Target.hpp>
 #include <hyprland/src/render/Renderer.hpp>
+#include <hyprland/src/render/decorations/DecorationPositioner.hpp>
 
 using namespace Hyprutils::Memory;
 using namespace Desktop::View;
@@ -29,6 +33,35 @@ static void attach(PHLWINDOW window) {
     if (!validMapped(window) || shinyOn(window))
         return;
     HyprlandAPI::addWindowDecoration(PHANDLE, window, makeUnique<CShinyBorder>(window));
+}
+
+// Hyprland's unload hands each decoration to removeWindowDecoration, which only
+// queues it: CWindow::updateWindowDecos() does the erase and returns early for
+// unmapped or hidden windows (an X11 app's withdrawn windows, inactive group
+// members). Those keep our UP past dlclose, and destroying the window later
+// runs its deleter in unmapped .so text (SIGSEGV in ~CWindow). Erase every
+// CShinyBorder here while this code is still mapped.
+static void detachAll() {
+    for (auto& w : Desktop::windowState()->windows()) {
+        std::vector<IHyprWindowDecoration*> ours;
+        for (auto& d : w->m_windowDecorations) {
+            if (dynamic_cast<CShinyBorder*>(d.get()))
+                ours.push_back(d.get());
+        }
+        if (ours.empty())
+            continue;
+
+        std::erase_if(w->m_decosToRemove, [&](auto* d) { return std::ranges::contains(ours, d); });
+        for (auto* d : ours)
+            g_pDecorationPositioner->uncacheDecoration(d);
+        std::erase_if(w->m_windowDecorations, [&](const auto& d) { return std::ranges::contains(ours, d.get()); });
+
+        // The rest of CWindow::removeWindowDeco.
+        g_pDecorationPositioner->forceRecalcFor(w);
+        w->updateWindowDecos();
+        if (w->layoutTarget())
+            w->layoutTarget()->recalc();
+    }
 }
 
 APICALL EXPORT std::string PLUGIN_API_VERSION() {
@@ -241,6 +274,9 @@ APICALL EXPORT void PLUGIN_EXIT() {
     // children) via the owner-pass registry — do not wipe the compositor's
     // whole pass, which drops stock borders and windows already queued.
     shinyOnPluginExit();
+
+    // Hyprland strips decorations only from mapped, visible windows.
+    detachAll();
 
     // Destroy before dlclose so a later config reload cannot flushCaches()
     // through a pointer into unmapped plugin text.
